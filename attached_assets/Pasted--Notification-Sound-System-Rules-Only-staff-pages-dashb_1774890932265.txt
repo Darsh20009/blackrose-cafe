@@ -1,16 +1,11 @@
-/**
- * Notification Sound System — BLACK ROSE CAFE
+ * Notification Sound System
  *
  * Rules:
  * - Only staff pages (dashboard, POS, kitchen, cashier) call playNotificationSound
  * - websocket.ts NEVER plays sounds
- * - Deduplication via localStorage prevents multi-tab double-plays (3s window)
- * - onlineOrderVoice: plays the real MP4 alert sound twice
- * - newOrder: double ascending 3-note beep
- * - cashierOrder: short double-beep
- * - statusChange: single pulse
- * - success: short 2-note rise
- * - alert: descending 2-note
+ * - Deduplication via localStorage prevents multi-tab double-plays
+ * - Online orders: play the real MP4 alert sound twice
+ * - POS/cashier orders: play a short double-beep
  */
 
 export type NotificationSoundType =
@@ -21,8 +16,7 @@ export type NotificationSoundType =
   | 'success'
   | 'alert';
 
-// ─── AudioContext singleton ───────────────────────────────────────────────────
-
+// --- AudioContext singleton ---
 let sharedCtx: AudioContext | null = null;
 
 function getCtx(): AudioContext | null {
@@ -51,59 +45,16 @@ if (typeof window !== 'undefined') {
   );
 }
 
-// ─── Audio unlock state (for backward compat with audio-unlock-banner) ────────
-
-let audioUnlocked = false;
-
-export function isAudioUnlocked(): boolean {
-  return audioUnlocked || (sharedCtx?.state === 'running');
-}
-
-export async function initAudioUnlock(): Promise<void> {
-  try {
-    const ctx = getCtx();
-    if (ctx) {
-      await ctx.resume();
-      audioUnlocked = ctx.state === 'running';
-    }
-  } catch {}
-}
-
-// ─── Sound preference persistence ────────────────────────────────────────────
-
-const SOUND_PREF_KEY = 'qirox_sound_enabled';
-
-export function getSoundEnabled(pageKey = 'default'): boolean {
-  try {
-    const raw = localStorage.getItem(SOUND_PREF_KEY);
-    if (!raw) return true;
-    const map = JSON.parse(raw) as Record<string, boolean>;
-    return map[pageKey] !== false;
-  } catch {
-    return true;
-  }
-}
-
-export function setSoundEnabled(pageKey: string, enabled: boolean): void {
-  try {
-    const raw = localStorage.getItem(SOUND_PREF_KEY);
-    const map = raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
-    map[pageKey] = enabled;
-    localStorage.setItem(SOUND_PREF_KEY, JSON.stringify(map));
-  } catch {}
-}
-
-// ─── Deduplication: per-type, 3 second window ────────────────────────────────
-
-const DEDUP_KEY = 'qirox_sound_dedup';
+// --- Deduplication: one tab plays, others skip (3s window) ---
+const DEDUP_KEY = 'sound_last_played';
 const DEDUP_WINDOW_MS = 3000;
 
 function isDuplicate(type: NotificationSoundType): boolean {
   try {
     const raw = localStorage.getItem(DEDUP_KEY);
     if (!raw) return false;
-    const map = JSON.parse(raw) as Record<string, number>;
-    return !!map[type] && Date.now() - map[type] < DEDUP_WINDOW_MS;
+    const { t, soundType } = JSON.parse(raw);
+    return soundType === type && Date.now() - t < DEDUP_WINDOW_MS;
   } catch {
     return false;
   }
@@ -111,26 +62,30 @@ function isDuplicate(type: NotificationSoundType): boolean {
 
 function markPlayed(type: NotificationSoundType): void {
   try {
-    const raw = localStorage.getItem(DEDUP_KEY);
-    const map = raw ? (JSON.parse(raw) as Record<string, number>) : {};
-    map[type] = Date.now();
-    localStorage.setItem(DEDUP_KEY, JSON.stringify(map));
+    localStorage.setItem(DEDUP_KEY, JSON.stringify({ t: Date.now(), soundType: type }));
   } catch {}
 }
 
-// ─── Play the real MP4 alert file (online orders) ────────────────────────────
-
+// --- Play the real MP4 alert file (online orders only) ---
 async function playFileSound(volume = 1.0): Promise<void> {
   return new Promise<void>((resolve) => {
     try {
-      const audio = new Audio('/notification-sound.mp4');
+      const audio = new Audio('/online-order-alert.mp4');
       audio.volume = Math.max(0, Math.min(1, volume));
-      const timer = setTimeout(resolve, 8000);
+      const cleanup = () => resolve();
+      audio.onended = cleanup;
+      audio.onerror = cleanup;
+      // Safety timeout — resolve after max 8 seconds
+      const timer = setTimeout(cleanup, 8000);
       audio.onended = () => { clearTimeout(timer); resolve(); };
       audio.onerror = () => { clearTimeout(timer); resolve(); };
-      const p = audio.play();
-      if (p && typeof p.catch === 'function') {
-        p.catch(() => { clearTimeout(timer); resolve(); });
+
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {
+          clearTimeout(timer);
+          resolve();
+        });
       }
     } catch {
       resolve();
@@ -138,15 +93,16 @@ async function playFileSound(volume = 1.0): Promise<void> {
   });
 }
 
-// ─── WAV Beep Generator ───────────────────────────────────────────────────────
-
+// --- WAV Beep Generator (used for POS / non-online orders) ---
 function generateBeepWav(frequencies: number[], durationMs: number, sampleRate = 22050): string {
   const numSamples = Math.floor((sampleRate * durationMs) / 1000);
   const buffer = new ArrayBuffer(44 + numSamples * 2);
   const view = new DataView(buffer);
+
   const write = (offset: number, str: string) => {
     for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
   };
+
   write(0, 'RIFF');
   view.setUint32(4, 36 + numSamples * 2, true);
   write(8, 'WAVE');
@@ -160,6 +116,7 @@ function generateBeepWav(frequencies: number[], durationMs: number, sampleRate =
   view.setUint16(34, 16, true);
   write(36, 'data');
   view.setUint32(40, numSamples * 2, true);
+
   for (let i = 0; i < numSamples; i++) {
     const t = i / sampleRate;
     const attack = Math.min(1, i / (sampleRate * 0.01));
@@ -171,6 +128,7 @@ function generateBeepWav(frequencies: number[], durationMs: number, sampleRate =
     }
     view.setInt16(44 + i * 2, Math.round(sample * env * 28000), true);
   }
+
   const bytes = new Uint8Array(buffer);
   let binary = '';
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
@@ -204,8 +162,6 @@ function getAudioDataUrl(type: NotificationSoundType): string {
   return audioCache[type]!;
 }
 
-// ─── Web Audio API beep (primary for non-online orders) ──────────────────────
-
 function playBeepWebAudio(type: NotificationSoundType, volume: number): boolean {
   try {
     const ctx = getCtx();
@@ -238,7 +194,6 @@ function playBeepWebAudio(type: NotificationSoundType, volume: number): boolean 
       osc.stop(start + 0.3);
     });
 
-    audioUnlocked = true;
     return true;
   } catch {
     return false;
@@ -257,23 +212,12 @@ async function playBeep(type: NotificationSoundType, volume: number): Promise<vo
       audio.onerror = () => resolve();
       setTimeout(resolve, 800);
     });
-  } catch {}
-}
-
-// ─── Test sound (bypasses dedup, forces unlock) ───────────────────────────────
-
-export async function testSound(type: NotificationSoundType = 'success', volume = 0.8): Promise<boolean> {
-  try {
-    await initAudioUnlock();
-    await playBeep(type, volume);
-    return true;
   } catch {
-    return false;
+    // Browser blocked audio
   }
 }
 
-// ─── Main export: playNotificationSound ──────────────────────────────────────
-
+// --- Main export: playNotificationSound ---
 export async function playNotificationSound(
   type: NotificationSoundType = 'newOrder',
   volume: number = 0.85
