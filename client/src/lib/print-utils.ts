@@ -371,10 +371,11 @@ function renderItemName(nameAr: string, nameEn?: string): string {
 export async function printUnifiedReceipt(data: TaxInvoiceData): Promise<void> {
   const totalAmount = parseNumber(data.total);
   const { date: formattedDate, time: formattedTime } = formatDate(data.date);
-  
+  const orderTypeLabel = data.orderTypeName || (data.orderType === 'dine_in' ? 'محلي' : data.orderType === 'takeaway' ? 'سفري' : data.orderType === 'delivery' ? 'توصيل' : '');
+
   const subtotalBeforeTax = totalAmount / (1 + VAT_RATE);
   const vatAmount = totalAmount - subtotalBeforeTax;
-  
+
   const invoiceTimestamp = data.date ? new Date(data.date).toISOString() : new Date().toISOString();
   const zatcaData = generateZATCAQRCode({
     sellerName: COMPANY_NAME,
@@ -396,122 +397,121 @@ export async function printUnifiedReceipt(data: TaxInvoiceData): Promise<void> {
     console.error("Error generating QR code:", error);
   }
 
-  const itemsHtml = data.items.map(item => `
-    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #eee; align-items: flex-start;">
-      <div style="flex: 1; padding-left: 4px;">
+  const customerItemsHtml = data.items.map(item => {
+    const lineTotal = parseNumber(item.coffeeItem.price) * item.quantity;
+    const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
+    return `
+    <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #eee;align-items:flex-start;font-size:12px;">
+      <div style="flex:1;padding-left:4px;">
         ${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}
+        ${addons ? `<div style="font-size:10px;color:#666;margin-top:1px;">+ ${addons}</div>` : ''}
       </div>
-      <div style="width: 40px; text-align: center; flex-shrink: 0;">x${item.quantity}</div>
-      <div style="width: 70px; text-align: left; flex-shrink: 0;">${(parseNumber(item.coffeeItem.price) * item.quantity).toFixed(2)}</div>
-    </div>
-  `).join('');
+      <div style="width:32px;text-align:center;flex-shrink:0;">x${item.quantity}</div>
+      <div style="width:60px;text-align:left;flex-shrink:0;">${lineTotal.toFixed(2)}</div>
+    </div>`;
+  }).join('');
 
-  const sharedStyles = `
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
-    body { font-family: 'Cairo', sans-serif; direction: rtl; width: 80mm; margin: 0; padding: 10px; color: #000; }
-    .receipt-section { padding: 10px; }
-    .header { text-align: center; border-bottom: 1px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
-    .label { background: #000; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 14px; font-weight: bold; margin-bottom: 10px; display: inline-block; }
-    .row { display: flex; justify-content: space-between; margin: 4px 0; font-size: 13px; }
-    .total { font-weight: bold; font-size: 16px; border-top: 2px solid #000; padding-top: 5px; margin-top: 10px; }
-    .footer { text-align: center; margin-top: 15px; font-size: 11px; color: #666; }
-    .qr-container { text-align: center; margin-top: 10px; }
-    .qr-container img { width: 120px; height: 120px; }
-  `;
+  const kitchenItemsHtml = data.items.map(item => {
+    const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
+    return `
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #ddd;align-items:flex-start;">
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:13px;">${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}</div>
+        ${addons ? `<div style="font-size:10px;color:#555;margin-top:2px;">+ ${addons}</div>` : ''}
+      </div>
+      <span style="font-size:18px;font-weight:700;background:#000;color:#fff;padding:2px 12px;border-radius:4px;min-width:44px;text-align:center;flex-shrink:0;margin-right:4px;">x${item.quantity}</span>
+    </div>`;
+  }).join('');
 
-  // نسخة العميل — تُطبع أولاً، الطابعة تقطع بعد الانتهاء منها تلقائياً
-  const customerHtml = `
+  // ملف HTML واحد — نسختان مفصولتان بـ page-break-after
+  const unifiedHtml = `
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>إيصال العميل - ${data.orderNumber}</title>
-  <style>${sharedStyles}</style>
+  <title>فاتورة - ${data.orderNumber}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Cairo', sans-serif; direction: rtl; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { max-width: 80mm; margin: 0 auto; padding: 8px; }
+    /* ↓ هذا هو السر: قطع الورق بعد نسخة العميل */
+    .customer-copy { page-break-after: always; break-after: page; }
+    .hdr { text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 8px; }
+    .company { font-size: 18px; font-weight: 700; }
+    .vat-num { font-size: 10px; font-family: monospace; direction: ltr; color: #333; }
+    .info { font-size: 11px; margin-bottom: 6px; padding-bottom: 5px; border-bottom: 1px dashed #ccc; }
+    .info-row { display: flex; justify-content: space-between; padding: 2px 0; }
+    .totals { border-top: 1.5px solid #000; padding-top: 5px; margin-top: 6px; font-size: 11px; }
+    .t-row { display: flex; justify-content: space-between; padding: 2px 0; }
+    .t-row.grand { font-size: 14px; font-weight: 700; background: #f0f0f0; padding: 5px 8px; border-radius: 4px; margin-top: 4px; }
+    .payment { display:flex;justify-content:space-between;font-size:11px;background:#f5f5f5;padding:4px 8px;border-radius:4px;margin:5px 0; }
+    .qr { text-align: center; margin: 6px 0; }
+    .qr img { width: 110px; height: 110px; }
+    .footer { text-align: center; font-size: 10px; color: #666; border-top: 1px dashed #ccc; padding-top: 5px; margin-top: 5px; }
+    /* نسخة الموظف */
+    .k-header { text-align: center; font-size: 13px; font-weight: 700; background: #000; color: #fff; padding: 4px; border-radius: 4px; margin-bottom: 8px; }
+    .k-order { font-size: 28px; font-weight: 700; text-align: center; margin: 6px 0; letter-spacing: 2px; }
+    .k-table { text-align: center; }
+    .k-table span { font-size: 18px; font-weight: 700; border: 2px solid #b45309; color: #b45309; padding: 3px 12px; border-radius: 6px; display: inline-block; margin: 3px 0; }
+    .k-type { text-align: center; font-size: 12px; font-weight: 600; background: #f0f0f0; padding: 3px; border-radius: 4px; margin-bottom: 6px; }
+    .k-info { font-size: 10px; color: #666; text-align: center; margin-top: 8px; border-top: 1px dashed #ccc; padding-top: 6px; }
+    @media print { body { margin: 0; } .no-print { display: none !important; } }
+  </style>
 </head>
 <body>
-  <div class="receipt-section">
-    <div class="header">
-      <div class="label">إيصال العميل (فاتورة ضريبية)</div>
-      <h2 style="margin: 5px 0;">${COMPANY_NAME}</h2>
-      <div style="font-size: 14px; font-weight: bold; color: #b45309; margin-bottom: 5px;">www.blackrose.com.sa</div>
-      <div style="font-size: 12px;">الرقم الضريبي: ${data.vatNumber || VAT_NUMBER}</div>
-      ${(data.crNumber || COMPANY_CR) ? `<div style="font-size: 12px;">السجل التجاري: ${data.crNumber || COMPANY_CR}</div>` : ''}
-      <div style="font-size: 12px;">رقم الطلب: ${data.orderNumber}</div>
-      <div style="font-size: 11px;">التاريخ: ${formattedDate} ${formattedTime}</div>
+  <!-- ════ صفحة 1: نسخة العميل (فاتورة ضريبية) ════ -->
+  <div class="customer-copy page">
+    <div class="hdr">
+      <div class="company">${COMPANY_NAME}</div>
+      <div style="font-size:10px;color:#555;">فاتورة ضريبية مبسطة</div>
+      <div class="vat-num">VAT: ${data.vatNumber || VAT_NUMBER}</div>
+      ${(data.crNumber || COMPANY_CR) ? `<div class="vat-num">CR: ${data.crNumber || COMPANY_CR}</div>` : ''}
     </div>
-    <div style="margin-bottom: 10px; font-size: 12px; border-bottom: 1px dashed #ccc; padding-bottom: 5px;">
-      <div>العميل: ${data.customerName || 'عميل نقدي'}</div>
-      ${data.customerPhone ? `<div>الجوال: ${data.customerPhone}</div>` : ''}
-      ${data.tableNumber ? `<div>طاولة: ${data.tableNumber}</div>` : ''}
-      <div>الموظف: ${data.employeeName}</div>
+
+    <div style="text-align:center;margin:6px 0;padding:6px;background:#f0f0f0;border-radius:6px;border:1.5px solid #ccc;">
+      <div style="font-size:9px;color:#666;">رقم الطلب</div>
+      <div style="font-size:20px;font-weight:700;font-family:monospace;direction:ltr;">${data.orderNumber}</div>
     </div>
-    <div class="items">${itemsHtml}</div>
-    <div class="totals" style="margin-top: 10px;">
-      <div class="row">
-        <span>المجموع (غير شامل الضريبة):</span>
-        <span>${subtotalBeforeTax.toFixed(2)} ر.س</span>
-      </div>
-      <div class="row">
-        <span>ضريبة القيمة المضافة (15%):</span>
-        <span>${vatAmount.toFixed(2)} ر.س</span>
-      </div>
-      <div class="row total">
-        <span>الإجمالي شامل الضريبة:</span>
-        <span>${totalAmount.toFixed(2)} ر.س</span>
-      </div>
-      <div class="row" style="margin-top: 5px; font-size: 11px;">
-        <span>طريقة الدفع:</span>
-        <span>${data.paymentMethod}</span>
-      </div>
+
+    <div class="info">
+      <div class="info-row"><span style="color:#666;">التاريخ:</span><span style="font-weight:600;">${formattedDate} ${formattedTime}</span></div>
+      ${data.customerName && data.customerName !== 'عميل نقدي' ? `<div class="info-row"><span style="color:#666;">العميل:</span><span style="font-weight:600;">${data.customerName}</span></div>` : ''}
+      ${data.tableNumber ? `<div class="info-row"><span style="color:#666;">طاولة:</span><span style="font-weight:600;">${data.tableNumber}</span></div>` : ''}
+      ${orderTypeLabel ? `<div class="info-row"><span style="color:#666;">نوع الطلب:</span><span style="font-weight:600;">${orderTypeLabel}</span></div>` : ''}
     </div>
-    ${qrCodeUrl ? `
-    <div class="qr-container">
-      <img src="${qrCodeUrl}" alt="ZATCA QR" />
-      <div style="font-size: 10px;">امسح للتحقق من الفاتورة</div>
+
+    <div>${customerItemsHtml}</div>
+
+    <div class="totals">
+      <div class="t-row"><span>قبل الضريبة:</span><span>${subtotalBeforeTax.toFixed(2)} ر.س</span></div>
+      <div class="t-row"><span>ضريبة القيمة المضافة 15%:</span><span>${vatAmount.toFixed(2)} ر.س</span></div>
+      <div class="t-row grand"><span>الإجمالي:</span><span>${totalAmount.toFixed(2)} ر.س</span></div>
     </div>
-    ` : ''}
+
+    <div class="payment"><span>الدفع:</span><span style="font-weight:700;">${data.paymentMethod}</span></div>
+
+    ${qrCodeUrl ? `<div class="qr"><img src="${qrCodeUrl}" alt="ZATCA QR" /><div style="font-size:9px;color:#888;margin-top:2px;">رمز التحقق - ZATCA</div></div>` : ''}
+
     <div class="footer">
-      <div style="font-weight: bold; margin-bottom: 4px;">www.blackrose.com.sa</div>
-      شكراً لزيارتكم!
+      <div><b>شكراً لزيارتكم</b></div>
+      <div>الأسعار شاملة ضريبة القيمة المضافة 15%</div>
     </div>
+  </div>
+
+  <!-- ════ صفحة 2: نسخة الموظف (بدون أسعار) ════ -->
+  <div class="page">
+    <div class="k-header">نسخة الموظف - ملخص الطلب</div>
+    <div class="k-order">${data.orderNumber}</div>
+    ${data.tableNumber ? `<div class="k-table"><span>طاولة ${data.tableNumber}</span></div>` : ''}
+    ${orderTypeLabel ? `<div class="k-type">${orderTypeLabel}</div>` : ''}
+    <div>${kitchenItemsHtml}</div>
+    <div class="k-info">الكاشير: ${data.employeeName} | ${formattedTime}</div>
   </div>
 </body>
 </html>`;
 
-  // نسخة الموظف — تُطبع تلقائياً بعد قطع نسخة العميل
-  const staffHtml = `
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <title>إيصال التحضير - ${data.orderNumber}</title>
-  <style>${sharedStyles}</style>
-</head>
-<body>
-  <div class="receipt-section" style="border: 2px dashed #000; border-radius: 8px;">
-    <div class="header">
-      <div class="label" style="background: #444;">إيصال الموظف (التحضير)</div>
-      <h3 style="margin: 5px 0;">تفاصيل التحضير</h3>
-      <div style="font-size: 12px;">رقم الطلب: ${data.orderNumber}</div>
-      ${data.tableNumber ? `<div style="font-size: 16px; font-weight: bold; color: #b45309; border: 1px solid #b45309; padding: 2px; margin-top: 5px;">طاولة: ${data.tableNumber}</div>` : ''}
-    </div>
-    <div class="items">
-      ${data.items.map(item => `
-        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; align-items: flex-start;">
-          <div style="flex: 1; padding-left: 8px;">${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}</div>
-          <div style="font-size: 24px; font-weight: bold; border: 2px solid #000; padding: 2px 10px; border-radius: 4px; flex-shrink: 0;">x${item.quantity}</div>
-        </div>
-      `).join('')}
-    </div>
-    <div class="footer" style="margin-top: 10px; font-weight: bold; color: #000;">يرجى التحقق من الأصناف قبل التسليم</div>
-  </div>
-</body>
-</html>`;
-
-  // إرسال نسختين إلى قائمة الطباعة: العميل أولاً ثم الموظف
-  // الطابعة تقطع الورق تلقائياً بعد كل مهمة طباعة منفصلة
-  openPrintWindow(customerHtml, `Customer Receipt - ${data.orderNumber}`, { paperWidth: '80mm', autoPrint: true });
-  openPrintWindow(staffHtml, `Staff Receipt - ${data.orderNumber}`, { paperWidth: '80mm', autoPrint: true });
+  openPrintWindow(unifiedHtml, `فاتورة - ${data.orderNumber}`, { paperWidth: '80mm', autoPrint: true });
 }
 
 export async function printBulkEmployeeInvoices(orders: any[]): Promise<void> {
@@ -701,24 +701,26 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     .qr-note { font-size: 9px; color: #888; margin-top: 2px; }
     .footer { text-align: center; font-size: 10px; color: #666; border-top: 1px dashed #ccc; padding-top: 6px; margin-top: 6px; }
     .footer b { color: #000; }
-    .cut-line { border: none; border-top: 2px dashed #000; margin: 12px 0; position: relative; }
-    .cut-line::after { content: '✂'; position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #fff; padding: 0 4px; font-size: 12px; }
     .emp-section { padding: 8px; }
     .emp-header { text-align: center; font-size: 13px; font-weight: 700; background: #000; color: #fff; padding: 4px; border-radius: 4px; margin-bottom: 8px; }
-    .emp-order { font-size: 20px; font-weight: 700; text-align: center; margin: 6px 0; }
+    .emp-order { font-size: 28px; font-weight: 700; text-align: center; margin: 6px 0; letter-spacing: 2px; }
+    .emp-table { text-align: center; font-size: 18px; font-weight: 700; border: 2px solid #b45309; color: #b45309; padding: 4px 12px; border-radius: 6px; display: inline-block; margin: 4px auto; }
     .emp-type { text-align: center; font-size: 12px; font-weight: 600; background: #f0f0f0; padding: 3px; border-radius: 4px; margin-bottom: 6px; }
     .emp-items { font-size: 12px; }
-    .emp-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #ddd; align-items: center; }
-    .emp-item-name { font-weight: 600; flex: 1; }
-    .emp-item-qty { font-size: 16px; font-weight: 700; background: #000; color: #fff; padding: 2px 10px; border-radius: 4px; min-width: 40px; text-align: center; }
+    .emp-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #ddd; align-items: flex-start; }
+    .emp-item-name { font-weight: 600; flex: 1; font-size: 13px; }
+    .emp-item-addons { font-size: 10px; color: #555; margin-top: 2px; }
+    .emp-item-qty { font-size: 18px; font-weight: 700; background: #000; color: #fff; padding: 2px 12px; border-radius: 4px; min-width: 44px; text-align: center; flex-shrink: 0; margin-right: 4px; }
     .emp-total { display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; margin-top: 6px; padding-top: 6px; border-top: 1.5px solid #000; }
     .emp-info { font-size: 10px; color: #666; text-align: center; margin-top: 8px; }
+    .customer-copy { page-break-after: always; break-after: page; }
     @media print { body { margin: 0; } .no-print { display: none !important; } .receipt { padding: 4px; } }
   </style>
 </head>
 <body>
   <div class="receipt">
-    <!-- Customer Tax Invoice Section -->
+    <!-- صفحة 1: نسخة العميل — الطابعة تقطع بعدها تلقائياً -->
+    <div class="customer-copy">
     <div class="header">
       <div class="company">${COMPANY_NAME}</div>
       <div class="subtitle">فاتورة ضريبية مبسطة</div>
@@ -764,15 +766,14 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
       <div>الأسعار شاملة ضريبة القيمة المضافة 15%</div>
       <div>فاتورة إلكترونية</div>
     </div>
+    </div><!-- end customer-copy — الطابعة تقطع هنا ✂️ -->
 
-    <!-- Cut Line -->
-    <hr class="cut-line" />
-
-    <!-- Employee Tear-Off Section -->
+    <!-- صفحة 2: نسخة الموظف/المطبخ — بدون أسعار -->
     <div class="emp-section">
       <div class="emp-header">نسخة الموظف - ملخص الطلب</div>
       <div class="emp-order">${data.orderNumber}</div>
-      ${orderTypeLabel ? `<div class="emp-type">${orderTypeLabel}${data.tableNumber ? ' - طاولة ' + data.tableNumber : ''}</div>` : (data.tableNumber ? `<div class="emp-type">طاولة ${data.tableNumber}</div>` : '')}
+      ${data.tableNumber ? `<div style="text-align:center;"><span class="emp-table">طاولة ${data.tableNumber}</span></div>` : ''}
+      ${orderTypeLabel ? `<div class="emp-type">${orderTypeLabel}</div>` : ''}
       
       <div class="emp-items">
         ${data.items.map(item => {
@@ -781,14 +782,12 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
           <div class="emp-item">
             <div style="flex:1;">
               <div class="emp-item-name">${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}</div>
-              ${addons ? `<div style="font-size:10px;color:#555;margin-top:2px;">+ ${addons}</div>` : ''}
+              ${addons ? `<div class="emp-item-addons">+ ${addons}</div>` : ''}
             </div>
             <span class="emp-item-qty">x${item.quantity}</span>
           </div>`;
         }).join('')}
       </div>
-      
-      <div class="emp-total"><span>الإجمالي:</span><span>${totalAmount.toFixed(2)} ر.س</span></div>
       
       <div class="emp-info">
         <div>الكاشير: ${data.employeeName} | ${formattedTime}</div>
