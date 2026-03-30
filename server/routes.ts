@@ -126,9 +126,10 @@ async function getCachedCoffeeItems(tenantId: string): Promise<any[]> {
 }
 
 function invalidateCoffeeItemsCache(tenantId: string) {
-  cache.invalidateKey(cacheKey('coffee-items', tenantId));
-  cache.invalidateKey(cacheKey('coffee-items-map', tenantId));
+  cache.invalidate('coffee-items:' + tenantId);
+  cache.invalidate('coffee-items-map:' + tenantId);
   cache.invalidate('menu-items');
+  cache.invalidate('product-addons:' + tenantId);
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -6318,13 +6319,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // For managers: shows all items with full branch availability data
   app.get("/api/coffee-items", async (req: any, res) => {
     try {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-      
       const requestedBranchId = (req.query.branchId as string);
       const isEmployee = !!req.session?.employee;
       const tenantId = getTenantIdFromRequest(req) || "demo-tenant";
+
+      // Serve from in-memory cache when possible (60 second TTL)
+      const ck = cacheKey('coffee-items', tenantId, requestedBranchId || 'all', isEmployee ? 'emp' : 'cust');
+      const cached = cache.get<any[]>(ck);
+      if (cached) return res.json(cached);
       
       const query: any = { tenantId };
       if (requestedBranchId && requestedBranchId !== 'all' && requestedBranchId !== 'undefined' && requestedBranchId !== 'null') {
@@ -6441,7 +6443,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return publishedBranches.includes('*') || publishedBranches.length === 0 || publishedBranches.includes(requestedBranchId);
         });
       }
-      
+
+      // Store in memory cache for next requests (60 seconds)
+      cache.set(ck, finalItems, CACHE_TTL.COFFEE_ITEMS);
       res.json(finalItems);
     } catch (error) {
       console.error("Error fetching coffee items:", error);
@@ -14491,9 +14495,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all product addons
   app.get("/api/product-addons", async (req, res) => {
     try {
+      const tenantId = getTenantIdFromRequest(req) || "demo-tenant";
+      const ck = cacheKey('product-addons', tenantId);
+      const cached = cache.get<any[]>(ck);
+      if (cached) return res.json(cached);
+
       const { ProductAddonModel } = await import("@shared/schema");
       const addons = await ProductAddonModel.find({ isAvailable: 1 }).sort({ orderIndex: 1, category: 1, nameAr: 1 });
-      res.json(addons.map(a => ({ ...a.toObject(), id: a.id })));
+      const result = addons.map(a => ({ ...a.toObject(), id: a.id }));
+      cache.set(ck, result, CACHE_TTL.ADDONS);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: "فشل في جلب الإضافات" });
     }
@@ -14534,7 +14545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const addon = new ProductAddonModel(validatedData);
       await addon.save();
-      
+      cache.invalidate('product-addons:');
       res.status(201).json({ ...addon.toObject(), id: addon.id });
     } catch (error: any) {
       if (error?.name === 'ZodError') {
@@ -14560,7 +14571,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!addon) {
         return res.status(404).json({ error: "الإضافة غير موجودة" });
       }
-      
+      cache.invalidate('product-addons:');
       res.json({ ...addon.toObject(), id: addon.id });
     } catch (error: any) {
       res.status(500).json({ error: "فشل في تحديث الإضافة" });
@@ -14574,7 +14585,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await ProductAddonModel.deleteOne({ id: req.params.id });
       await CoffeeItemAddonModel.deleteMany({ addonId: req.params.id });
-      
+      cache.invalidate('product-addons:');
       res.json({ success: true, message: "تم حذف الإضافة بنجاح" });
     } catch (error) {
       res.status(500).json({ error: "فشل في حذف الإضافة" });
