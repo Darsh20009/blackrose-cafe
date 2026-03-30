@@ -89,7 +89,7 @@ export default function OrderTrackingPage() {
  }
  }, [location]);
 
- const { data: order, isLoading } = useQuery<Order>({
+ const { data: order, isLoading, refetch } = useQuery<Order>({
  queryKey: ["/api/orders/number", trackingOrderNumber],
  queryFn: async () => {
  if (!trackingOrderNumber) return null;
@@ -98,8 +98,27 @@ export default function OrderTrackingPage() {
  return res.json();
  },
  enabled: !!trackingOrderNumber,
- refetchInterval: 10000,
+ refetchInterval: 15000,
  });
+
+ // WebSocket: instant order status updates without waiting for poll
+ useEffect(() => {
+   if (!trackingOrderNumber) return;
+   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+   const ws = new WebSocket(`${protocol}//${window.location.host}/ws/orders`);
+   ws.onmessage = (e) => {
+     try {
+       const msg = JSON.parse(e.data);
+       if (
+         (msg.type === 'order_status_update' || msg.type === 'new_order' || msg.type === 'order_update') &&
+         (msg.orderNumber === trackingOrderNumber || msg.data?.orderNumber === trackingOrderNumber || msg.order?.orderNumber === trackingOrderNumber)
+       ) {
+         refetch();
+       }
+     } catch {}
+   };
+   return () => { try { ws.close(); } catch {} };
+ }, [trackingOrderNumber, refetch]);
  
  const { data: branch } = useQuery<any>({
  queryKey: ["/api/branches", order?.branchId],
@@ -135,6 +154,8 @@ export default function OrderTrackingPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
+      case 'awaiting_payment':
+        return <Clock className="w-8 h-8 text-orange-500" />;
       case 'pending':
       case 'payment_confirmed':
         return <Clock className="w-8 h-8 text-yellow-500" />;

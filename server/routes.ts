@@ -15192,12 +15192,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!userId || !title || !body) return res.status(400).json({ error: "بيانات ناقصة" });
 
       const { fireNotify } = await import("./notification-engine");
-      await fireNotify(userId, title, body, {
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+
+      let resolvedId = userId;
+
+      // If userType is customer and userId looks like a phone number, look up customer
+      if (userType === 'customer' && /^\+?[\d\s\-()]{7,15}$/.test(userId)) {
+        try {
+          const cleanPhone = userId.replace(/\D/g, '').replace(/^966/, '0').replace(/^9665/, '05');
+          const customer = await storage.getCustomerByPhone(cleanPhone);
+          if (customer) {
+            resolvedId = (customer as any)._id?.toString() || (customer as any).id || userId;
+          }
+        } catch {}
+      }
+
+      await fireNotify(resolvedId, title, body, {
         type: type || "info",
         link: link || "/",
         userType: userType || "customer",
+        tenantId,
         icon: "🔔",
       });
+
+      // Also send push directly to all subscriptions matching this userId (covers both id and phone)
+      if (userType === 'customer' && resolvedId !== userId) {
+        const { sendPushToCustomer } = await import("./push-service");
+        sendPushToCustomer(userId, {
+          title, body, url: link || '/', tag: `admin-notif-${Date.now()}`, type: 'general',
+        }).catch(() => {});
+      }
 
       res.json({ success: true });
     } catch (error) {

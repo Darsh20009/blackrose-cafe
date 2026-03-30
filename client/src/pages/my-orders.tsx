@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useTranslate, tc } from "@/lib/useTranslate";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowRight, Coffee, Star, CheckCircle } from "lucide-react";
+import { ArrowRight, Coffee, Star, CheckCircle, Bell, BellRing, Smartphone } from "lucide-react";
 import { motion } from "framer-motion";
 import OrderTracker from "@/components/order-tracker";
 import { ReceiptInvoice } from "@/components/receipt-invoice";
@@ -33,6 +33,97 @@ function StarRatingInput({ value, onChange }: { value: number; onChange: (v: num
           <Star className={`w-7 h-7 ${s <= (hover || value) ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} />
         </button>
       ))}
+    </div>
+  );
+}
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+function MiniPushBanner({ customerId, t }: { customerId: string; t: any }) {
+  const [permission, setPermission] = useState<NotificationPermission>(
+    'Notification' in window ? Notification.permission : 'default'
+  );
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const standalone = (window.navigator as any).standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+  useEffect(() => {
+    if (!supported) return;
+    navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription()).then(sub => {
+      if (sub) setIsSubscribed(true);
+    }).catch(() => {});
+  }, [supported]);
+
+  const subscribe = useCallback(async () => {
+    if (!supported || !customerId) return;
+    setLoading(true);
+    try {
+      const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        const res = await fetch('/api/push/vapid-key');
+        const { publicKey } = await res.json();
+        if (!publicKey) return;
+        const perm = await Notification.requestPermission();
+        setPermission(perm);
+        if (perm !== 'granted') return;
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+      }
+      await fetch('/api/push/subscribe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: sub.toJSON(), userType: 'customer', userId: customerId }),
+      });
+      setIsSubscribed(true);
+      setPermission('granted');
+    } catch (err) {
+      console.error('[Push]', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [supported, customerId]);
+
+  if (isSubscribed && permission === 'granted') {
+    return (
+      <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-xs mb-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
+        <BellRing className="w-3.5 h-3.5 flex-shrink-0" />
+        <span>{tc('إشعارات الطلبات مفعّلة', 'Order notifications enabled')}</span>
+      </div>
+    );
+  }
+
+  if (permission === 'denied') return null;
+
+  if (ios && !standalone) {
+    return (
+      <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 text-xs mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+        <Smartphone className="w-3.5 h-3.5 flex-shrink-0" />
+        <span>{tc('أضف التطبيق لشاشتك الرئيسية لتلقي إشعارات الطلبات على الآيفون', 'Add app to Home Screen to receive order notifications on iPhone')}</span>
+      </div>
+    );
+  }
+
+  if (!supported) return null;
+
+  return (
+    <div className="flex items-center justify-between gap-3 mb-4 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
+      <div className="flex items-center gap-2">
+        <Bell className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+        <span className="text-xs">{tc('فعّل الإشعارات ليصلك تنبيه عند تغيير حالة طلبك', 'Enable notifications to get alerts when your order status changes')}</span>
+      </div>
+      <Button size="sm" variant="outline" className="h-6 text-xs px-2 flex-shrink-0" onClick={subscribe} disabled={loading} data-testid="button-enable-push-orders">
+        {loading ? '...' : tc('تفعيل', 'Enable')}
+      </Button>
     </div>
   );
 }
@@ -165,6 +256,8 @@ export default function MyOrders() {
               {t("orders.subtitle")}
             </p>
           </motion.div>
+
+          {customerId && <MiniPushBanner customerId={customerId} t={t} />}
 
           {!isAuthenticated ? (
             <Card className="p-8 bg-card backdrop-blur-lg shadow-2xl border-2 border-primary/50 text-center">

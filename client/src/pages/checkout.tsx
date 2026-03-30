@@ -798,12 +798,62 @@ export default function CheckoutPage() {
   }
 
   if (showSuccessPage) {
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isStandalone = (window.navigator as any).standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+    const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+    const notifPermission = 'Notification' in window ? Notification.permission : 'denied';
+    const successCustomerId = customer?.id || (customer as any)?._id;
+
     return (
       <div className="min-h-screen flex items-center justify-center p-8 bg-background" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-2xl text-center space-y-6">
           <CheckCircle className="w-16 h-16 text-green-600 mx-auto" />
           <h2 className="text-3xl font-bold text-accent">{t("nav.thank_you")}</h2>
           <p>{t("checkout.order_desc")} <span className="font-bold text-primary">{orderDetails?.orderNumber}</span></p>
+
+          {/* Push Notification Prompt after order success */}
+          {successCustomerId && notifPermission !== 'granted' && notifPermission !== 'denied' && (
+            isIOS && !isStandalone ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-right space-y-2">
+                <p className="font-bold text-amber-900 text-sm">📲 تلقّ إشعاراً عندما يصبح طلبك جاهزاً!</p>
+                <p className="text-xs text-amber-700">أضف التطبيق لشاشتك الرئيسية عبر زر المشاركة ☐ في Safari لتفعيل الإشعارات.</p>
+              </div>
+            ) : pushSupported ? (
+              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 text-right space-y-3">
+                <p className="font-bold text-sm">🔔 تلقّ إشعاراً عندما يصبح طلبك جاهزاً</p>
+                <Button
+                  onClick={async () => {
+                    try {
+                      const urlB64 = (b64: string) => {
+                        const pad = '='.repeat((4 - b64.length % 4) % 4);
+                        const base = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+                        const raw = window.atob(base);
+                        const out = new Uint8Array(raw.length);
+                        for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+                        return out;
+                      };
+                      const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+                      await navigator.serviceWorker.ready;
+                      const perm = await Notification.requestPermission();
+                      if (perm !== 'granted') return;
+                      const r = await fetch('/api/push/vapid-key');
+                      const { publicKey } = await r.json();
+                      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(publicKey) });
+                      await fetch('/api/push/subscribe', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ subscription: sub.toJSON(), userType: 'customer', userId: successCustomerId }),
+                      });
+                    } catch (e) { console.error(e); }
+                  }}
+                  variant="outline"
+                  className="w-full"
+                  data-testid="button-enable-push-success"
+                >
+                  {isAr ? "تفعيل الإشعارات" : "Enable Notifications"}
+                </Button>
+              </div>
+            ) : null
+          )}
 
           {isGuestMode && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-right space-y-3">
