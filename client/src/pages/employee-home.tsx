@@ -54,50 +54,50 @@ export default function EmployeeHome() {
   return (
     <div className="min-h-screen pb-16 sm:pb-0 bg-gray-50" dir="rtl">
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 sm:w-16 sm:h-16 flex-shrink-0">
-                <img src={blackroseLogo} alt="BLACK ROSE" className="w-full h-full object-contain rounded-2xl" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-5">
+          <div className="flex items-center justify-between mb-3 sm:mb-5">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 flex-shrink-0">
+                <img src={blackroseLogo} alt="BLACK ROSE" className="w-full h-full object-contain rounded-xl" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
               </div>
               <div>
-                <h1 className="text-xl sm:text-3xl font-bold text-primary">{tc("لوحة التحكم", "Control Panel")}</h1>
-                <p className="text-gray-500 text-sm">{tc("مرحباً", "Welcome")}, {employee.fullName}</p>
+                <h1 className="text-base sm:text-2xl font-bold text-primary">{tc("لوحة التحكم", "Control Panel")}</h1>
+                <p className="text-gray-500 text-xs sm:text-sm">{tc("مرحباً", "Welcome")}, {employee.fullName}</p>
               </div>
             </div>
-            <Button variant="outline" className="border-red-400 text-red-500 hover:bg-red-50" onClick={handleLogout} data-testid="button-logout">
-              <LogOut className="w-4 h-4 sm:ml-2" />
+            <Button variant="outline" size="sm" className="border-red-400 text-red-500 hover:bg-red-50 text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3" onClick={handleLogout} data-testid="button-logout">
+              <LogOut className="w-3 h-3 sm:w-4 sm:h-4 sm:ml-2" />
               <span className="hidden sm:inline">{tc("تسجيل الخروج", "Sign Out")}</span>
             </Button>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-4">
             <Card className="bg-white border-gray-200">
-              <CardContent className="pt-6">
+              <CardContent className="pt-3 pb-3 px-3 sm:pt-5 sm:pb-4 sm:px-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-500 text-sm">{tc("المسمى الوظيفي", "Job Title")}</p>
-                    <p className="text-gray-900 font-bold text-lg">{employee.jobTitle || employee.role}</p>
+                    <p className="text-gray-500 text-xs">{tc("المسمى الوظيفي", "Job Title")}</p>
+                    <p className="text-gray-900 font-bold text-sm sm:text-base truncate max-w-[100px] sm:max-w-none">{employee.jobTitle || employee.role}</p>
                   </div>
-                  <Badge className="bg-primary/20 text-primary">
+                  <Badge className="bg-primary/20 text-primary text-xs">
                     {employee.role === "manager" ? tc("مدير", "Manager") : tc("موظف", "Employee")}
                   </Badge>
                 </div>
               </CardContent>
             </Card>
             <Card className="bg-white border-gray-200">
-              <CardContent className="pt-6">
+              <CardContent className="pt-3 pb-3 px-3 sm:pt-5 sm:pb-4 sm:px-4">
                 <div>
-                  <p className="text-gray-500 text-sm">{tc("الفرع", "Branch")}</p>
-                  <p className="text-gray-900 font-bold text-lg">{employee.branchId || tc("جميع الفروع", "All Branches")}</p>
+                  <p className="text-gray-500 text-xs">{tc("الفرع", "Branch")}</p>
+                  <p className="text-gray-900 font-bold text-sm sm:text-base truncate">{employee.branchId || tc("جميع الفروع", "All Branches")}</p>
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-white border-gray-200">
-              <CardContent className="pt-6">
+            <Card className="bg-white border-gray-200 hidden md:block">
+              <CardContent className="pt-3 pb-3 px-3 sm:pt-5 sm:pb-4 sm:px-4">
                 <div>
-                  <p className="text-gray-500 text-sm">{tc("رقم الموظف", "Employee ID")}</p>
-                  <p className="text-gray-900 font-bold text-lg">{employee.id?.slice(0, 8)}</p>
+                  <p className="text-gray-500 text-xs">{tc("رقم الموظف", "Employee ID")}</p>
+                  <p className="text-gray-900 font-bold text-sm sm:text-base">{employee.id?.slice(0, 8)}</p>
                 </div>
               </CardContent>
             </Card>
@@ -105,23 +105,23 @@ export default function EmployeeHome() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-12">
-        <div className="mb-12">
-          <h2 className="text-2xl font-bold text-primary mb-6">{tc("الوصول السريع", "Quick Access")}</h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        <div className="mb-4 sm:mb-8">
+          <h2 className="text-base sm:text-xl font-bold text-primary mb-3 sm:mb-4">{tc("الوصول السريع", "Quick Access")}</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
             {employeeQuickAccess.map((item) => {
               const Icon = item.icon;
               return (
                 <Button key={item.path} onClick={() => setLocation(item.path)}
-                  className={`bg-gradient-to-br ${item.color} hover:opacity-90 h-auto p-6 text-left justify-start rounded-xl`}
+                  className={`bg-gradient-to-br ${item.color} hover:opacity-90 h-auto p-3 sm:p-5 text-right justify-start rounded-xl`}
                   data-testid={item.testId}
                 >
-                  <div className="text-left w-full">
-                    <div className="flex items-center gap-3 mb-2">
-                      <Icon className="w-5 h-5" />
-                      <span className="font-bold text-base">{item.title}</span>
+                  <div className="text-right w-full">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                      <span className="font-bold text-sm sm:text-base leading-tight">{item.title}</span>
                     </div>
-                    <p className="text-gray-600 text-xs ml-8">{item.description}</p>
+                    <p className="text-white/70 text-xs hidden sm:block">{item.description}</p>
                   </div>
                 </Button>
               );
@@ -131,21 +131,21 @@ export default function EmployeeHome() {
 
         {isManager && (
           <div>
-            <h2 className="text-2xl font-bold text-primary mb-6">{tc("صلاحيات المدير", "Manager Permissions")}</h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <h2 className="text-base sm:text-xl font-bold text-primary mb-3 sm:mb-4">{tc("صلاحيات المدير", "Manager Permissions")}</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
               {managerAccess.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Button key={item.path} onClick={() => setLocation(item.path)}
-                    className={`bg-gradient-to-br ${item.color} hover:opacity-90 h-auto p-6 text-left justify-start rounded-xl`}
+                    className={`bg-gradient-to-br ${item.color} hover:opacity-90 h-auto p-3 sm:p-5 text-right justify-start rounded-xl`}
                     data-testid={item.testId}
                   >
-                    <div className="text-left w-full">
-                      <div className="flex items-center gap-3 mb-2">
-                        <Icon className="w-5 h-5" />
-                        <span className="font-bold text-base">{item.title}</span>
+                    <div className="text-right w-full">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Icon className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                        <span className="font-bold text-sm sm:text-base leading-tight">{item.title}</span>
                       </div>
-                      <p className="text-gray-600 text-xs ml-8">{item.description}</p>
+                      <p className="text-white/70 text-xs hidden sm:block">{item.description}</p>
                     </div>
                   </Button>
                 );

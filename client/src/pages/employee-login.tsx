@@ -130,18 +130,18 @@ export default function EmployeeLogin() {
   return (
     <div dir="rtl" className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-40 h-28 mb-4">
+        <div className="text-center mb-4 sm:mb-6">
+          <div className="inline-flex items-center justify-center w-20 h-14 sm:w-32 sm:h-20 mb-2 sm:mb-3">
             <img src={blackroseLogoStaff} alt="BLACK ROSE SYSTEMS" className="w-full h-full object-contain" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground mb-2 font-playfair">BLACK ROSE SYSTEMS</h1>
-          <p className="text-muted-foreground font-cairo">{tc("تسجيل دخول الموظف", "Employee Login")}</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-1 font-playfair">BLACK ROSE SYSTEMS</h1>
+          <p className="text-muted-foreground text-sm font-cairo">{tc("تسجيل دخول الموظف", "Employee Login")}</p>
         </div>
 
         {showQRScanner ? (
           <Card className="bg-card border-border/50 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-2xl text-center font-playfair text-accent">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg sm:text-xl text-center font-playfair text-accent">
                 {tc("مسح بطاقة الموظف", "Scan Employee Card")}
               </CardTitle>
               <CardDescription className="text-center text-muted-foreground">
@@ -158,8 +158,8 @@ export default function EmployeeLogin() {
           </Card>
         ) : (
           <Card className="bg-card border-border/50 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-2xl text-center font-playfair text-foreground">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg sm:text-xl text-center font-playfair text-foreground">
                 {tc("تسجيل الدخول", "Sign In")}
               </CardTitle>
               <CardDescription className="text-center text-muted-foreground">

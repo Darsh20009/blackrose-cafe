@@ -628,7 +628,7 @@ export default function AdminSettings() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold font-ibm-arabic">{tc("إدارة الموقع والنظام","Site & System Management")}</h1>
+          <h1 className="text-xl sm:text-2xl font-bold font-ibm-arabic">{tc("إدارة الموقع والنظام","Site & System Management")}</h1>
           <p className="text-muted-foreground mt-1 font-ibm-arabic text-sm">{tc("تخصيص كامل للهوية، نوع النشاط، وحالة النظام","Full customization of identity, business type, and system status")}</p>
         </div>
         <div className="bg-accent/10 p-3 rounded-full">

@@ -249,9 +249,9 @@ export default function EmployeeOrders() {
                 )}
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-primary flex items-center gap-2" data-testid="text-page-title">
+                <h1 className="text-base sm:text-xl font-bold text-primary flex items-center gap-2" data-testid="text-page-title">
                   {tc("إدارة الطلبات", "Orders Management")}
-                  {newOrdersCount > 0 && <BellRing className="w-5 h-5 text-destructive animate-pulse" />}
+                  {newOrdersCount > 0 && <BellRing className="w-4 h-4 sm:w-5 sm:h-5 text-destructive animate-pulse" />}
                 </h1>
                 <p className="text-muted-foreground text-sm">{tc("الموظف:", "Staff:")} {employee.fullName}</p>
               </div>
