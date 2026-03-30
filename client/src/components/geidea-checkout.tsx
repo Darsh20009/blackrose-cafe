@@ -423,22 +423,11 @@ export default function GeideaCheckoutWidget({
 
   return (
     <div className="flex flex-col items-center justify-center gap-4 p-8 bg-primary/5 rounded-xl border border-primary/20">
-      {isTestMode && (
-        <div className="w-full flex items-center gap-2 justify-center text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2" data-testid="banner-test-mode">
-          <FlaskConical className="w-4 h-4 shrink-0" />
-          <span>وضع الاختبار مفعّل — لن يُخصم أي مبلغ حقيقي</span>
-        </div>
-      )}
+
       <CreditCard className="w-10 h-10 text-primary" />
       <div className="text-center space-y-2">
-        <p className="font-semibold text-foreground text-lg">
-          {isTestMode ? "محاكاة الدفع" : "بوابة الدفع جاهزة"}
-        </p>
-        <p className="text-sm text-muted-foreground">
-          {isTestMode
-            ? "اضغط أدناه لمحاكاة دفع ناجح (وضع الاختبار)"
-            : "اضغط الزر أدناه لفتح نموذج الدفع الآمن"}
-        </p>
+        <p className="font-semibold text-foreground text-lg">بوابة الدفع جاهزة</p>
+        <p className="text-sm text-muted-foreground">اضغط الزر أدناه لفتح نموذج الدفع الآمن</p>
       </div>
       <Button
         size="lg"
@@ -446,10 +435,10 @@ export default function GeideaCheckoutWidget({
         className="gap-2 w-full max-w-xs"
         data-testid="button-open-geidea"
       >
-        {isTestMode ? <FlaskConical className="w-4 h-4" /> : <CreditCard className="w-4 h-4" />}
-        {isTestMode ? "محاكاة الدفع الناجح" : "ادفع الآن"}
+<CreditCard className="w-4 h-4" />
+        ادفع الآن
       </Button>
-      {!isTestMode && <p className="text-xs text-muted-foreground">🔒 دفع آمن ومشفّر بواسطة Geidea</p>}
+      <p className="text-xs text-muted-foreground">🔒 دفع آمن ومشفّر بواسطة Geidea</p>
     </div>
   );
 }

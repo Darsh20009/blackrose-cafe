@@ -462,7 +462,7 @@ function getOrderStatusMessage(status: string, orderNumber: string): string {
 // Maileroo Email Configuration - DISABLED IN FAVOR OF TURBOSMTP
 /*
 const mailerooApiKey = process.env.MAILEROO_API_KEY;
-const mailerooUser = process.env.MAILEROO_USER || 'cafe@blackrose.com.sa';
+const mailerooUser = process.env.MAILEROO_USER || 'cafe@blackrose.sa';
 */
 
 // Set transporter to null to satisfy the rest of the code that might reference it
@@ -608,7 +608,7 @@ function getAppBaseUrl(): string {
   if (process.env.SITE_URL) return process.env.SITE_URL;
   const domain = process.env.REPLIT_DEV_DOMAIN;
   if (domain) return `https://${domain}`;
-  return `https://www.blackrose.com.sa`;
+  return `https://www.blackrose.sa`;
 }
 
 function generateOrderNotificationSVG(
@@ -1703,7 +1703,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const branchName = branch ? branch.nameAr : "فرع غير معروف";
 
       // Use production domain for QR codes so they work after deployment
-      const PRODUCTION_DOMAIN = "https://www.blackrose.com.sa";
+      const PRODUCTION_DOMAIN = "https://www.blackrose.sa";
       const tableUrl = `${PRODUCTION_DOMAIN}/table-menu/${table.qrToken}`;
 
       res.json({
@@ -2360,7 +2360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!pg || pg.qahwaCardEnabled !== false) {
-        allMethods.push({ id: 'qahwa-card', nameAr: 'بطاقة بلاك روز', nameEn: 'QIROX Card', details: 'ادفع ببطاقة الولاء', icon: 'fas fa-gift' });
+        allMethods.push({ id: 'qahwa-card', nameAr: 'بطاقة بلاك روز', nameEn: 'Black Rose Card', details: 'ادفع ببطاقة الولاء', icon: 'fas fa-gift' });
       }
 
       // STC Pay — only show if explicitly enabled
@@ -2773,7 +2773,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               billing_data: {
                 first_name: (customerName || 'Guest').split(' ')[0] || 'Guest',
                 last_name: (customerName || 'Guest').split(' ').slice(1).join(' ') || 'Guest',
-                email: customerEmail || 'guest@blackrose.com.sa',
+                email: customerEmail || 'guest@blackrose.sa',
                 phone_number: customerPhone || '0500000000',
                 street: 'N/A', building: 'N/A', floor: 'N/A',
                 apartment: 'N/A', city: 'Yanbu', country: 'SAU',
@@ -2782,13 +2782,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               customer: {
                 first_name: (customerName || 'Guest').split(' ')[0] || 'Guest',
                 last_name: (customerName || 'Guest').split(' ').slice(1).join(' ') || 'Guest',
-                email: customerEmail || 'guest@blackrose.com.sa',
+                email: customerEmail || 'guest@blackrose.sa',
                 phone_number: customerPhone || '0500000000',
               },
               extras: { order_ref: orderId || internalSessionId },
               special_reference: orderId || internalSessionId,
-              notification_url: `${process.env.SITE_URL || 'https://www.blackrose.com.sa'}/api/payments/paymob/webhook`,
-              redirection_url: `${process.env.SITE_URL || 'https://www.blackrose.com.sa'}/payment-return-iframe?session=${internalSessionId}`,
+              notification_url: `${process.env.SITE_URL || 'https://www.blackrose.sa'}/api/payments/paymob/webhook`,
+              redirection_url: `${process.env.SITE_URL || 'https://www.blackrose.sa'}/payment-return-iframe?session=${internalSessionId}`,
             };
 
             const intentRes = await fetch(`${baseUrl}/v1/intention/`, {
@@ -16745,7 +16745,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const BOM = '\uFEFF';
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="qirox-accounting-${period}.csv"`);
+      res.setHeader('Content-Disposition', `attachment; filename="blackrose-accounting-${period}.csv"`);
       res.send(BOM + csvRows.join('\n'));
     } catch (error) {
       console.error("[ACCOUNTING EXPORT] Error:", error);
@@ -17327,7 +17327,7 @@ ${businessContext}
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json",
           "HTTP-Referer": "https://qirox.cafe",
-          "X-Title": "QIROX Café AI Chat",
+          "X-Title": "BLACK ROSE Café AI Chat",
         },
         body: JSON.stringify({
           model: "google/gemini-2.0-flash-001",
@@ -17412,7 +17412,7 @@ ${growthPct ? `- النمو مقارنة بالأسبوع الماضي: ${growth
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json",
           "HTTP-Referer": "https://qirox.cafe",
-          "X-Title": "QIROX AI Insights",
+          "X-Title": "BLACK ROSE AI Insights",
         },
         body: JSON.stringify({
           model: "google/gemini-2.0-flash-001",
@@ -17547,7 +17547,7 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json",
           "HTTP-Referer": "https://qirox.cafe",
-          "X-Title": "QIROX Café AI Assistant",
+          "X-Title": "BLACK ROSE Café AI Assistant",
         },
         body: JSON.stringify({
           model: "google/gemini-2.0-flash-001",
@@ -17576,7 +17576,7 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
   });
 
   // ─── QIROX Studio External API Proxy ───────────────────────────────────────
-  const QIROX_STUDIO_BASE = "https://www.blackrose.com.sa/api/v1";
+  const QIROX_STUDIO_BASE = "https://www.blackrose.sa/api/v1";
   const qiroxStudioHeaders = () => ({
     Authorization: `Bearer ${process.env.QIROX_STUDIO_API_KEY || ""}`,
     "Content-Type": "application/json",
@@ -17588,13 +17588,13 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
         headers: qiroxStudioHeaders(),
       });
       if (!response.ok) {
-        return res.status(response.status).json({ error: `QIROX Studio API error: ${response.statusText}` });
+        return res.status(response.status).json({ error: `BLACK ROSE Studio API error: ${response.statusText}` });
       }
       const data = await response.json();
       res.json(data);
     } catch (error: any) {
       console.error(`QIROX Studio proxy error (${endpoint}):`, error.message);
-      res.status(500).json({ error: "فشل الاتصال بـ QIROX Studio API" });
+      res.status(500).json({ error: "فشل الاتصال بـ BLACK ROSE Studio API" });
     }
   };
 

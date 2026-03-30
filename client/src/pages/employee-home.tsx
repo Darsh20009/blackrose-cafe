@@ -7,7 +7,7 @@ import { Coffee, LogOut, ShoppingCart, ClipboardList, User, ChefHat, Warehouse, 
 import type { Employee } from "@shared/schema";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { useTranslate } from "@/lib/useTranslate";
-import qiroxLogo from "@assets/qirox-logo-staff.png";
+import blackroseLogoStaff from "@assets/blackrose-logo.png";
 
 export default function EmployeeHome() {
   const [, setLocation] = useLocation();
@@ -58,7 +58,7 @@ export default function EmployeeHome() {
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 sm:w-16 sm:h-16 flex-shrink-0">
-                <img src={qiroxLogo} alt="BLACK ROSE" className="w-full h-full object-contain rounded-2xl" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                <img src={blackroseLogo} alt="BLACK ROSE" className="w-full h-full object-contain rounded-2xl" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
               </div>
               <div>
                 <h1 className="text-xl sm:text-3xl font-bold text-primary">{tc("لوحة التحكم", "Control Panel")}</h1>

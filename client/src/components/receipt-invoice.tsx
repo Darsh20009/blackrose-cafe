@@ -3,7 +3,7 @@ import html2canvas from "html2canvas";
 import { Button } from "@/components/ui/button";
 import { Download, Printer } from "lucide-react";
 import type { Order } from "@shared/schema";
-import logoImage from "../assets/qirox-logo.png";
+import logoImage from "../assets/blackrose-logo.png";
 import { brand } from "@/lib/brand";
 import { useRef, useState, useEffect } from "react";
 import QRCode from "qrcode";

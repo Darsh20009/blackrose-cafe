@@ -346,7 +346,7 @@ export default function CopyCard() {
             ctx.fillText('اعرض الباركود أو QR كود على الكاشير للحصول على نقاطك', canvas.width / 2, 980);
             
             const link = document.createElement('a');
-            link.download = 'qirox-card-' + (customer?.phone || 'card') + '.png';
+            link.download = 'blackrose-card-' + (customer?.phone || 'card') + '.png';
             link.href = canvas.toDataURL('image/png');
             link.click();
             

@@ -213,11 +213,11 @@ const CheckoutModal = memo(() => {
  };
 
   const handlePaymentConfirmed = async (order: any) => {
+   setCurrentStep('success');
+   toast({ title: t("checkout.order_success") });
    try {
-     // Check for business config for employee invoice
      const configRes = await fetch("/api/business-config");
      const config = configRes.ok ? await configRes.json() : null;
-     
      if (config?.employeeInvoiceEnabled) {
        const { printBulkEmployeeInvoices } = await import("@/lib/print-utils");
        await printBulkEmployeeInvoices([order]);
@@ -230,17 +230,12 @@ const CheckoutModal = memo(() => {
        link.click();
        URL.revokeObjectURL(url);
      }
-     
-     setCurrentStep('success');
-     toast({ title: t("checkout.order_success") });
-     setTimeout(() => {
-       clearCart();
-       hideCheckout();
-       navigate(customer ? "/my-orders" : `/tracking?order=${order.orderNumber}`);
-     }, 2000);
-   } catch (error) {
-     toast({ variant: "destructive", title: t("checkout.order_error") });
-   }
+   } catch (_) {}
+   setTimeout(() => {
+     clearCart();
+     hideCheckout();
+     navigate(customer ? "/my-orders" : `/tracking?order=${order.orderNumber}`);
+   }, 2000);
   };
 
  const handleClose = () => {

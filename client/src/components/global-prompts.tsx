@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Bell, Download, Smartphone, Share2, PlusSquare, X, Loader2, Wifi } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import qiroxLogo from "@assets/qirox-logo-customer.png";
+import blackroseLogo from "@assets/blackrose-logo.png";
 import { brand } from "@/lib/brand";
 
 const NOTIF_DISMISSED_KEY = "qirox_notif_prompted";
@@ -177,7 +177,7 @@ export function GlobalPrompts() {
 
               <div className="flex flex-col items-center text-center mb-6">
                 <div className="relative mb-3">
-                  <img src={qiroxLogo} alt="BLACK ROSE" className="w-20 h-20 rounded-3xl shadow-xl border border-white/10" />
+                  <img src={blackroseLogo} alt="BLACK ROSE" className="w-20 h-20 rounded-3xl shadow-xl border border-white/10" />
                   <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-[#2D9B6E] rounded-full flex items-center justify-center shadow-lg border-2 border-[#111827]">
                     <Bell className="w-4 h-4 text-white" />
                   </div>
@@ -229,7 +229,7 @@ export function GlobalPrompts() {
         <div className="fixed bottom-20 left-3 right-3 z-[100] animate-in slide-in-from-bottom-6 duration-500" dir="rtl">
           <div className="bg-[#111827] text-white rounded-3xl shadow-2xl border border-white/10 overflow-hidden">
             <div className="flex items-center gap-3 p-4">
-              <img src={qiroxLogo} alt={brand.shortNameEn} className="w-12 h-12 rounded-2xl shrink-0 border border-white/10" />
+              <img src={blackroseLogo} alt={brand.shortNameEn} className="w-12 h-12 rounded-2xl shrink-0 border border-white/10" />
               <div className="flex-1 min-w-0">
                 <p className="font-black text-sm leading-tight">{brand.nameEn}</p>
                 <p className="text-[11px] text-white/60 mt-0.5">
@@ -260,7 +260,7 @@ export function GlobalPrompts() {
             </div>
             <div className="px-6 pt-2 pb-6">
               <div className="flex items-center gap-3 mb-5">
-                <img src={qiroxLogo} alt={brand.shortNameEn} className="w-14 h-14 rounded-2xl shadow-md" />
+                <img src={blackroseLogo} alt={brand.shortNameEn} className="w-14 h-14 rounded-2xl shadow-md" />
                 <div>
                   <h2 className="text-lg font-black text-gray-900">ثبّت {brand.nameEn}</h2>
                   <p className="text-xs text-gray-500">على شاشتك الرئيسية</p>

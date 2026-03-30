@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ShoppingCart, Plus, Minus, Trash2, CheckCircle, Coffee, ChevronRight, X, Loader2 } from "lucide-react";
-import qiroxLogo from "@assets/qirox-logo-customer.png";
+import blackroseLogo from "@assets/blackrose-logo.png";
 import { useTranslate } from "@/lib/useTranslate";
 import { useTranslation } from "react-i18next";
 
@@ -165,7 +165,7 @@ export default function KioskPage() {
     <div className="h-screen bg-background flex flex-col overflow-hidden" onClick={resetIdle} data-testid="kiosk-page" dir={isEn ? "ltr" : "rtl"}>
       {/* Header */}
       <div className="bg-primary text-white px-6 py-3 flex items-center justify-between shrink-0 shadow-lg">
-        <img src={qiroxLogo} alt="BLACK ROSE" className="h-10 object-contain brightness-0 invert" />
+        <img src={blackroseLogo} alt="BLACK ROSE" className="h-10 object-contain brightness-0 invert" />
         <div className="text-center">
           <p className="text-lg font-bold">{tc("نظام الطلب الذاتي", "Self-Order Kiosk")}</p>
           <p className="text-xs text-white/70">{tc("Self-Order Kiosk", "اطلب بنفسك")}</p>

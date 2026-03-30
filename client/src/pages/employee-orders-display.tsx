@@ -12,7 +12,7 @@ import {
 import { Clock, ChefHat, CheckCircle2, ArrowLeft } from "lucide-react";
 import type { Employee } from "@shared/schema";
 import SarIcon from "@/components/sar-icon";
-import qiroxLogoStaff from "@assets/qirox-logo-staff.png";
+import blackroseLogoStaff from "@assets/blackrose-logo.png";
 import { useTranslate } from "@/lib/useTranslate";
 
 interface Order {
@@ -208,7 +208,7 @@ export default function EmployeeOrdersDisplay() {
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="flex items-center gap-3">
-          <img src={qiroxLogoStaff} alt="BLACK ROSE" className="w-8 h-8 object-contain rounded-lg" />
+          <img src={blackroseLogoStaff} alt="BLACK ROSE" className="w-8 h-8 object-contain rounded-lg" />
           <h1 className="text-3xl font-bold text-foreground">{tc("عرض الطلبات", "Orders Display")}</h1>
         </div>
         <div className="w-10" />

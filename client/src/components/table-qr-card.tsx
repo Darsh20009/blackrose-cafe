@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import QRCode from "qrcode";
-import qiroxLogo from "@assets/qirox-logo-customer.png";
+import blackroseLogo from "@assets/blackrose-logo.png";
 import { brand as sysBrand } from "@/lib/brand";
 
 interface TableQRCardProps {
@@ -254,7 +254,7 @@ export function TableQRCard({ tableNumber, qrToken, branchName, tableUrl }: Tabl
 
       logoImg.onload = () => drawAfterLogo(true);
       logoImg.onerror = () => drawAfterLogo(false);
-      logoImg.src = qiroxLogo;
+      logoImg.src = blackroseLogo;
 
       const drawQRSection = async (ctx: CanvasRenderingContext2D, width: number, tableUrl: string) => {
         try {

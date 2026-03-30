@@ -61,6 +61,22 @@ async function connectDatabase() {
       await OrderModel.collection.dropIndex("orderNumber_1").catch(() => {});
       console.log("✅ Order number uniqueness migrated to allow counter wrap-around");
     } catch (_) {}
+    // Ensure admin/owner accounts use the portal password
+    try {
+      const bcrypt = await import("bcryptjs");
+      const EmployeeCollection = mongoose.connection.collection('employees');
+      const portalPassword = await bcrypt.hash("b2030", 10);
+      const portalAccounts = ["admin", "owner"];
+      for (const username of portalAccounts) {
+        const result = await EmployeeCollection.updateOne(
+          { username },
+          { $set: { password: portalPassword } }
+        );
+        if (result.matchedCount > 0) {
+          console.log(`✅ Portal account '${username}' password synced`);
+        }
+      }
+    } catch (_) {}
   } catch (error) {
     isDbConnected = false;
     console.error("❌ MongoDB connection error:", error);

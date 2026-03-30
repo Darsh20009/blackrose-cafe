@@ -13,7 +13,7 @@ import { LoadingState, EmptyState, ErrorState } from "@/components/ui/states";
 import { EmployeeSidebar } from "@/components/employee-sidebar";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import html2canvas from "html2canvas";
-import qiroxLogoStaff from "@assets/qirox-logo-staff.png";
+import blackroseLogoStaff from "@assets/blackrose-logo.png";
 import type { Employee } from "@shared/schema";
 import { useOrderWebSocket } from "@/lib/websocket";
 import { queryClient } from "@/lib/queryClient";
@@ -542,7 +542,7 @@ export default function EmployeeDashboard() {
                     <div className="bg-gradient-to-r from-primary via-primary to-primary/80 p-6 relative">
                       <div className="flex items-center justify-center gap-4 mb-2">
                         <div className="w-20 h-20 flex items-center justify-center shadow-lg rounded-lg">
-                          <img src={qiroxLogoStaff} alt="BLACK ROSE SYSTEMS Logo" className="w-full h-full object-contain rounded-lg" />
+                          <img src={blackroseLogoStaff} alt="BLACK ROSE SYSTEMS Logo" className="w-full h-full object-contain rounded-lg" />
                         </div>
                         <div className="text-white text-right">
                           <h3 className="text-2xl font-bold">BLACK ROSE SYSTEMS</h3>

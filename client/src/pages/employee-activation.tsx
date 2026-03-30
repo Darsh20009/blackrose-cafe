@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { UserPlus, Eye, EyeOff } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useTranslate } from "@/lib/useTranslate";
-import qiroxLogoStaff from "@assets/qirox-logo-staff.png";
+import blackroseLogoStaff from "@assets/blackrose-logo.png";
 
 export default function EmployeeActivation() {
   const [, setLocation] = useLocation();
@@ -75,7 +75,7 @@ export default function EmployeeActivation() {
       <Card className="w-full max-w-md border border-border bg-card shadow-xl">
         <CardHeader className="space-y-3 text-center pb-4">
           <div className="flex justify-center mb-1">
-            <img src={qiroxLogoStaff} alt="BLACK ROSE" className="h-12 object-contain" />
+            <img src={blackroseLogoStaff} alt="BLACK ROSE" className="h-12 object-contain" />
           </div>
           <div className="text-center">
             <CardTitle className="text-2xl font-bold text-foreground">{tc("تفعيل حساب موظف جديد", "Activate New Employee Account")}</CardTitle>

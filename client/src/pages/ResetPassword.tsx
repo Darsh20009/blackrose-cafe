@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Lock, CheckCircle, Eye, EyeOff } from "lucide-react";
-import qiroxLogoStaff from "@assets/qirox-logo-staff.png";
+import blackroseLogoStaff from "@assets/blackrose-logo.png";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslate } from "@/lib/useTranslate";
@@ -153,7 +153,7 @@ export default function ResetPassword() {
                 <CheckCircle className="w-8 h-8 text-primary" />
               </div>
             ) : (
-              <img src={qiroxLogoStaff} alt="BLACK ROSE" className="h-12 object-contain" />
+              <img src={blackroseLogoStaff} alt="BLACK ROSE" className="h-12 object-contain" />
             )}
           </div>
           <CardTitle className="text-3xl font-bold text-foreground">

@@ -7,7 +7,7 @@ import {
   Coffee, Users, BarChart3, Globe, Shield, Headphones,
   Smartphone, ChefHat, Star
 } from "lucide-react";
-import qiroxLogoStaff from "@assets/qirox-logo-staff.png";
+import blackroseLogoStaff from "@assets/blackrose-logo.png";
 
 const tc = (ar: string, en: string) => ar;
 
@@ -119,7 +119,7 @@ export default function PricingPage() {
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={qiroxLogoStaff} alt="BLACK ROSE" className="h-10 object-contain" />
+            <img src={blackroseLogoStaff} alt="BLACK ROSE" className="h-10 object-contain" />
           </div>
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={() => navigate("/")}>

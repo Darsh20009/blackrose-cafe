@@ -1820,8 +1820,8 @@ const TaxInvoiceSchema = new Schema<ITaxInvoice>({
   uuid: { type: String, required: true, unique: true },
   orderId: { type: String, required: true },
 
-  sellerName: { type: String, required: true, default: 'QIROX Cafe' },
-  sellerNameEn: { type: String, default: 'QIROX Cafe' },
+  sellerName: { type: String, required: true, default: 'BLACK ROSE CAFE' },
+  sellerNameEn: { type: String, default: 'BLACK ROSE CAFE' },
   sellerVatNumber: { type: String, required: true, default: '311234567890003' },
   sellerCrNumber: { type: String },
   sellerAddress: { type: String, required: true, default: 'الرياض، المملكة العربية السعودية' },

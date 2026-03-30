@@ -1,7 +1,7 @@
 {
-  "name": "QIROX Cafe",
-  "short_name": "QIROX",
-  "description": "نظام إدارة مقهى كيروكس | QIROX Cafe Management System",
+  "name": "BLACK ROSE CAFE",
+  "short_name": "Black Rose",
+  "description": "نظام إدارة مقهى بلاك روز | BLACK ROSE CAFE Management System",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -26,7 +26,7 @@
       "type": "image/png",
       "sizes": "512x512",
       "form_factor": "wide",
-      "label": "QIROX Cafe Home Screen"
+      "label": "BLACK ROSE CAFE Home Screen"
     }
   ],
   "icons": [

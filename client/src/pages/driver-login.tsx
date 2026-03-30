@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Truck, Phone, ArrowLeft } from "lucide-react";
-import qiroxLogoStaff from "@assets/qirox-logo-staff.png";
+import blackroseLogoStaff from "@assets/blackrose-logo.png";
 import { useTranslate } from "@/lib/useTranslate";
 
 export default function DriverLogin() {
@@ -57,7 +57,7 @@ export default function DriverLogin() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-3">
-            <img src={qiroxLogoStaff} alt="BLACK ROSE SYSTEMS" className="w-14 h-14 object-contain rounded-xl" />
+            <img src={blackroseLogoStaff} alt="BLACK ROSE SYSTEMS" className="w-14 h-14 object-contain rounded-xl" />
           </div>
           <div className="w-14 h-14 mx-auto bg-primary/10 rounded-full flex items-center justify-center mb-2">
             <Truck className="w-7 h-7 text-primary" />

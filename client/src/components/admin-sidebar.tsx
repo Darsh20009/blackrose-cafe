@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { LayoutDashboard, Users, FileText, Settings, LogOut, Bell, FlaskConical, Code2 } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, LogOut, Bell, Code2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import qiroxLogoStaff from "@assets/qirox-logo-staff.png";
+import blackroseLogoStaff from "@assets/blackrose-logo.png";
 import { brand } from "@/lib/brand";
-import { DemoDataManager } from './demo-data-manager';
+
 
 export function AdminSidebar() {
   const [location, navigate] = useLocation();
-  const [demoOpen, setDemoOpen] = useState(false);
+
 
   const menuItems = [
     { label: 'لوحة التحكم', icon: LayoutDashboard, path: '/admin/dashboard' },
@@ -32,7 +32,7 @@ export function AdminSidebar() {
         <div className="p-6 border-b border-border">
           <div className="flex items-center gap-3 mb-1">
             <img
-              src={qiroxLogoStaff}
+              src={blackroseLogoStaff}
               alt={brand.platformNameEn}
               className="w-10 h-10 object-contain rounded-lg"
             />
@@ -68,15 +68,7 @@ export function AdminSidebar() {
 
         {/* Bottom actions */}
         <div className="p-4 border-t border-border space-y-2">
-          <Button
-            onClick={() => setDemoOpen(true)}
-            variant="outline"
-            className="w-full justify-start text-muted-foreground hover:text-foreground"
-            data-testid="button-demo-manager"
-          >
-            <FlaskConical className="w-4 h-4 ml-2" />
-            البيانات التجريبية
-          </Button>
+
           <Button
             onClick={handleLogout}
             variant="outline"
@@ -89,7 +81,7 @@ export function AdminSidebar() {
         </div>
       </div>
 
-      <DemoDataManager open={demoOpen} onOpenChange={setDemoOpen} />
+
     </>
   );
 }

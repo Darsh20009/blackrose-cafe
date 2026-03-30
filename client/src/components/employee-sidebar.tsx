@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { LayoutDashboard, ShoppingCart, ClipboardList, Settings, LogOut, User, BarChart3, Warehouse, Wallet, ChefHat, Table, Coffee, Utensils, Languages, Clock, Truck, Building2, Brain, FileSpreadsheet, Tag, Monitor } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Employee } from '@shared/schema';
-import qiroxLogoStaff from "@assets/qirox-logo-staff.png";
+import blackroseLogoStaff from "@assets/blackrose-logo.png";
 import { brand } from "@/lib/brand";
 
 interface EmployeeSidebarProps {
@@ -95,7 +95,7 @@ export function EmployeeSidebar({ employee, onLogout }: EmployeeSidebarProps) {
       <div className="p-4 border-b border-border">
         <div className="flex items-center gap-3 mb-2">
           <img 
-            src={qiroxLogoStaff} 
+            src={blackroseLogoStaff} 
             alt={brand.platformNameEn}
             className="w-10 h-10 object-contain rounded-lg"
           />

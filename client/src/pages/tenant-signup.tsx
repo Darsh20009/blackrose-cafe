@@ -11,7 +11,7 @@ import { CheckCircle2, AlertCircle, Loader } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import SarIcon from "@/components/sar-icon";
-import qiroxLogoCustomer from "@assets/qirox-logo-customer.png";
+import blackroseLogo from "@assets/blackrose-logo.png";
 
 const SUBSCRIPTION_PLANS = [
   {
@@ -179,7 +179,7 @@ export default function TenantSignup() {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <img src={qiroxLogoCustomer} alt="BLACK ROSE CAFE" className="w-16 h-16 object-contain rounded-xl" />
+            <img src={blackroseLogo} alt="BLACK ROSE CAFE" className="w-16 h-16 object-contain rounded-xl" />
           </div>
           <h1 className="text-4xl font-bold text-foreground mb-2">
             انضم إلى BLACK ROSE CAFE

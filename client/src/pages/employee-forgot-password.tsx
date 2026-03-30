@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { AtSign, Lock, Phone, Eye, EyeOff, Loader2, ArrowRight, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslate } from "@/lib/useTranslate";
-import qiroxLogoStaff from "@assets/qirox-logo-staff.png";
+import blackroseLogoStaff from "@assets/blackrose-logo.png";
 
 type Step = "username" | "phone" | "password";
 
@@ -104,7 +104,7 @@ export default function EmployeeForgotPassword() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-40 h-28 mb-4">
-            <img src={qiroxLogoStaff} alt="BLACK ROSE SYSTEMS" className="w-full h-full object-contain" />
+            <img src={blackroseLogoStaff} alt="BLACK ROSE SYSTEMS" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-2 font-playfair">BLACK ROSE SYSTEMS</h1>
           <p className="text-muted-foreground font-cairo">{tc("استعادة كلمة المرور", "Password Recovery")}</p>

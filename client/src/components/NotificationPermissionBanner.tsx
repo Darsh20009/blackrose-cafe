@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Bell, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import qiroxLogo from "@assets/qirox-logo-customer.png";
+import blackroseLogo from "@assets/blackrose-logo.png";
 
 interface NotificationPermissionBannerProps {
   onRequestPermission: () => Promise<NotificationPermission | void>;
@@ -75,8 +75,8 @@ export function NotificationPermissionBanner({
           <div className="flex flex-col items-center text-center mb-6">
             <div className="relative mb-3">
               <img
-                src={qiroxLogo}
-                alt="كيروكس"
+                src={blackroseLogo}
+                alt="بلاك روز"
                 className="w-20 h-20 rounded-3xl shadow-xl border border-white/10"
               />
               <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-primary rounded-full flex items-center justify-center shadow-lg border-2 border-[#111827]">

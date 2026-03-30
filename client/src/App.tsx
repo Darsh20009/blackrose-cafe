@@ -130,8 +130,8 @@ const QiroxDashboard = lazy(() => import("@/pages/qirox-dashboard"));
 const HardwareManagement = lazy(() => import("@/pages/hardware-management"));
 const B2BMarketplace = lazy(() => import("@/pages/b2b-marketplace"));
 const PartnerProgram = lazy(() => import("@/pages/partner-program"));
-import qiroxLogo from "@assets/qirox-logo-customer.png";
-import qiroxLogoStaff from "@assets/qirox-logo-staff.png";
+import blackroseLogo from "@assets/blackrose-logo.png";
+import blackroseLogoStaff from "@assets/blackrose-logo.png";
 
 const PageLoader = () => {
   const isEmployee = window.location.pathname.startsWith('/employee') || 
@@ -143,9 +143,9 @@ const PageLoader = () => {
     <div className="w-full h-screen flex items-center justify-center bg-[#F7F8F8] dark:bg-[#1a1410]">
       <div className="flex flex-col items-center gap-4">
         {isEmployee ? (
-          <img src={qiroxLogoStaff} alt="BLACK ROSE SYSTEMS" className="w-16 h-16 object-contain rounded-xl animate-pulse" />
+          <img src={blackroseLogoStaff} alt="BLACK ROSE SYSTEMS" className="w-16 h-16 object-contain rounded-xl animate-pulse" />
         ) : (
-          <img src={qiroxLogo} alt="BLACK ROSE CAFE" className="w-16 h-16 object-contain rounded-xl animate-pulse" />
+          <img src={blackroseLogo} alt="BLACK ROSE CAFE" className="w-16 h-16 object-contain rounded-xl animate-pulse" />
         )}
         <p className="text-[#9FB2B3] font-medium animate-pulse font-ibm-arabic">جاري التحميل...</p>
       </div>

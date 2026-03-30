@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useTranslate } from "@/lib/useTranslate";
 import { Coffee, Settings, Wrench, Clock } from "lucide-react";
-import qiroxLogo from "@assets/qirox-logo-customer.png";
+import blackroseLogo from "@assets/blackrose-logo.png";
 
 export default function MaintenancePage({ reason = "maintenance" }: { reason?: string }) {
   const tc = useTranslate();
@@ -16,7 +16,7 @@ export default function MaintenancePage({ reason = "maintenance" }: { reason?: s
         className="max-w-md w-full space-y-8"
       >
         <div className="relative inline-block">
-          <img src={qiroxLogo} alt="BLACK ROSE CAFE" className="w-24 h-24 mx-auto rounded-3xl shadow-xl mb-6" />
+          <img src={blackroseLogo} alt="BLACK ROSE CAFE" className="w-24 h-24 mx-auto rounded-3xl shadow-xl mb-6" />
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 10, repeat: Infinity, ease: "linear" }}

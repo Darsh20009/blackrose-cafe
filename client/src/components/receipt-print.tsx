@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useState } from "react";
 import QRCode from "qrcode";
 import JsBarcode from "jsbarcode";
-import qiroxLogo from "@assets/qirox-logo-customer.png";
+import blackroseLogo from "@assets/blackrose-logo.png";
 import { brand } from "@/lib/brand";
 import SarIcon from "@/components/sar-icon";
 import { VAT_RATE } from "@/lib/constants";
@@ -232,7 +232,7 @@ export const ReceiptPrint = forwardRef<HTMLDivElement, ReceiptProps>(
         <div className="max-w-[80mm] mx-auto bg-white text-black p-3 font-sans" dir="rtl">
           <div className="text-center mb-4 pb-4 border-b-2 border-dashed border-gray-800">
             <img
-              src={qiroxLogo}
+              src={blackroseLogo}
               alt="BLACK ROSE CAFE"
               style={{ filter: 'invert(1)', mixBlendMode: 'multiply', width: '90px', height: '90px', objectFit: 'contain', margin: '0 auto 6px' }}
             />

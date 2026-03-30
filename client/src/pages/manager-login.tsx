@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AtSign, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 import type { Employee } from "@shared/schema";
-import qiroxLogoStaff from "@assets/qirox-logo-staff.png";
+import blackroseLogoStaff from "@assets/blackrose-logo.png";
 import { useTranslate } from "@/lib/useTranslate";
 
 export default function ManagerLogin() {
@@ -93,7 +93,7 @@ export default function ManagerLogin() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-40 h-28 mb-4">
-            <img src={qiroxLogoStaff} alt="BLACK ROSE SYSTEMS" className="w-full h-full object-contain" />
+            <img src={blackroseLogoStaff} alt="BLACK ROSE SYSTEMS" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-3xl font-bold font-playfair text-foreground mb-2">BLACK ROSE CAFE</h1>
           <p className="text-muted-foreground font-cairo">{tc("تسجيل دخول المدير", "Manager Login")}</p>

@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import qiroxLogoStaff from "@assets/qirox-logo-staff.png";
+import blackroseLogoStaff from "@assets/blackrose-logo.png";
 import { useTranslate } from "@/lib/useTranslate";
 
 export default function EmployeeSplash() {
@@ -62,7 +62,7 @@ export default function EmployeeSplash() {
             >
               <div className="w-28 h-28 rounded-2xl overflow-hidden shadow-lg shadow-black/30 ring-1 ring-white/10">
                 <img
-                  src={qiroxLogoStaff}
+                  src={blackroseLogoStaff}
                   alt="BLACK ROSE SYSTEMS"
                   className="w-full h-full object-cover"
                 />
