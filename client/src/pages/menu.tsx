@@ -192,8 +192,8 @@ export default function MenuPage() {
 
   const isBothModes = false; // Unified categories — no food/drink tab separation
 
-  // Construct dynamic banners
-  const bannerSlides = (() => {
+  // Construct dynamic banners — memoized to prevent infinite re-renders
+  const bannerSlides = useMemo(() => {
     const slides: any[] = [];
 
     // 1. Add custom admin banners first
@@ -303,7 +303,7 @@ export default function MenuPage() {
     }
 
     return slides;
-  })();
+  }, [customBanners, coffeeItems, promoOffers, i18n.language]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -483,7 +483,7 @@ export default function MenuPage() {
 
   return (
     <div className="min-h-screen bg-background" dir={i18n.language === 'ar' ? 'rtl' : 'ltr'}>
-      <header className="fixed top-0 inset-x-0 z-[60] h-16 bg-black/60 backdrop-blur-md border-b border-white/10 flex items-center justify-between px-4">
+      <header className="fixed top-0 inset-x-0 z-[60] bg-black/60 backdrop-blur-md border-b border-white/10 flex items-end justify-between px-4 pb-3 min-h-[64px]" style={{paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)'}}>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-white/10 p-1.5 flex items-center justify-center">
             <img src={blackroseLogo} alt="Logo" className="w-full h-full object-contain" />
@@ -546,8 +546,9 @@ export default function MenuPage() {
         </div>
       </header>
 
-      <main className="pt-16 space-y-6 pb-24 relative z-0">
-        <div ref={bannerRef} className="w-full -mt-16">
+      <main className="space-y-6 pb-24 relative z-0" style={{paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 64px), 76px)'}}>
+        <div ref={bannerRef} className="w-full" style={{marginTop: 'calc(-1 * max(calc(env(safe-area-inset-top, 0px) + 64px), 76px))'}}>
+
           <div className="relative h-[320px] sm:h-[400px] overflow-hidden shadow-lg border-b border-border/50">
             <AnimatePresence mode="wait">
               <motion.div

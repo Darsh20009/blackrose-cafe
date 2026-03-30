@@ -157,7 +157,7 @@ export default function CartPage() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => updateQuantity(item.coffeeItemId, Math.max(0, item.quantity - 1))}
+                            onClick={() => updateQuantity(item.id, Math.max(0, item.quantity - 1))}
                             className="h-9 w-9 sm:h-8 sm:w-8 text-foreground hover:bg-primary hover:text-primary-foreground rounded-full"
                             data-testid={`button-decrease-${item.coffeeItemId}`}
                           >
@@ -171,7 +171,7 @@ export default function CartPage() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => updateQuantity(item.coffeeItemId, item.quantity + 1)}
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
                             className="h-9 w-9 sm:h-8 sm:w-8 text-foreground hover:bg-primary hover:text-primary-foreground rounded-full"
                             data-testid={`button-increase-${item.coffeeItemId}`}
                           >
@@ -182,7 +182,7 @@ export default function CartPage() {
                         <Button
                           size="icon"
                           variant="outline"
-                          onClick={() => removeFromCart(item.coffeeItemId)}
+                          onClick={() => removeFromCart(item.id)}
                           className="h-9 w-9 sm:h-10 sm:w-10 border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 rounded-full"
                           data-testid={`button-remove-${item.coffeeItemId}`}
                         >

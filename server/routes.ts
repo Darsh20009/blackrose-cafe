@@ -1006,8 +1006,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const serializedOrder = serializeDoc(order);
       cache.invalidate('live-orders:');
       
-      // Notify via WebSocket - use broadcastNewOrder so POS/kitchen receive it as "new_order"
-      wsManager.broadcastNewOrder(serializedOrder);
+      // Only notify employees when order is confirmed (not when awaiting payment)
+      if (orderData.status !== 'awaiting_payment') {
+        wsManager.broadcastNewOrder(serializedOrder);
+      }
 
       res.status(201).json(serializedOrder);
 
@@ -3501,11 +3503,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
               if (isPaid || hasSuccessfulTx) {
                 const txId = String(transactions.find((t: any) => t?.success)?.id || intentData?.id || intentionId || '');
-                await OrderModel.findOneAndUpdate(
+                const updatedOrder = await OrderModel.findOneAndUpdate(
                   { orderNumber, tenantId },
-                  { $set: { paymentStatus: 'paid', status: 'payment_confirmed', paymentTransactionId: txId } }
-                ).catch(() => {});
-                return res.json({ found: true, paid: true, status: 'payment_confirmed', paymentStatus: 'paid' });
+                  { $set: { paymentStatus: 'paid', status: 'pending', paymentTransactionId: txId } },
+                  { new: true }
+                ).lean().catch(() => null);
+                // Notify employees now that payment is confirmed
+                if (updatedOrder) {
+                  cache.invalidate('live-orders:');
+                  wsManager.broadcastNewOrder(serializeDoc(updatedOrder));
+                }
+                return res.json({ found: true, paid: true, status: 'pending', paymentStatus: 'paid' });
               }
             }
           }
@@ -3573,17 +3581,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
 
           // Try by orderNumber first (most common for PayMob SA flow)
-          const byOrderNumber = await OrderModel.findOneAndUpdate(
+          let confirmedOrder = await OrderModel.findOneAndUpdate(
             { orderNumber: merchantOrderId, tenantId },
-            { $set: paymentUpdate }
-          ).catch(() => null);
+            { $set: paymentUpdate },
+            { new: true }
+          ).lean().catch(() => null);
 
-          if (!byOrderNumber) {
+          if (!confirmedOrder) {
             // Fallback: try by MongoDB _id (for legacy flow)
-            await OrderModel.findOneAndUpdate(
+            confirmedOrder = await OrderModel.findOneAndUpdate(
               { _id: merchantOrderId, tenantId },
-              { $set: paymentUpdate }
-            ).catch(() => null);
+              { $set: paymentUpdate },
+              { new: true }
+            ).lean().catch(() => null);
+          }
+
+          // Notify employees via WebSocket (handles awaiting_payment → confirmed transition)
+          if (confirmedOrder) {
+            cache.invalidate('live-orders:');
+            wsManager.broadcastNewOrder(serializeDoc(confirmedOrder));
           }
 
           console.log(`[Paymob Webhook] Payment confirmed + status=payment_confirmed for order: ${merchantOrderId}`);

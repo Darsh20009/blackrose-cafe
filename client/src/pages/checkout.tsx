@@ -733,11 +733,13 @@ export default function CheckoutPage() {
 
     if (isPaymobMethod(selectedPaymentMethod)) {
       // Real PayMob Saudi Arabia payment flow
-      pendingGeideaOrderData.current = orderData;
+      // Create order with awaiting_payment status — employees NOT notified yet
+      const paymobOrderData = { ...orderData, status: 'awaiting_payment', paymentStatus: 'pending' };
+      pendingGeideaOrderData.current = paymobOrderData;
       setShowConfirmation(false);
       try {
-        // First create the order
-        const res = await apiRequest("POST", "/api/orders", orderData);
+        // First create the order (no WS broadcast for awaiting_payment)
+        const res = await apiRequest("POST", "/api/orders", paymobOrderData);
         const createdOrder = await res.json();
         if (createdOrder?.error) throw new Error(createdOrder.error);
         setOrderDetails(createdOrder);
