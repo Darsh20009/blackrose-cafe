@@ -51,6 +51,8 @@ interface OrderCardProps {
     carColor?: string;
     carPlate?: string;
     plateNumber?: string;
+    customerArrived?: boolean;
+    customerArrivedAt?: string;
     branchId?: string;
     estimatedPrepTimeMinutes?: number;
     prepStartedAt?: string;
@@ -267,6 +269,9 @@ export function OrderCard({
                 <div className="flex items-center gap-1 text-sm text-purple-600 dark:text-purple-400 font-bold">
                   <Car className="h-3.5 w-3.5" />
                   <span>استلام من السيارة</span>
+                  {order.customerArrived && (
+                    <span className="mr-1 px-1.5 py-0.5 rounded text-xs bg-green-500 text-white animate-pulse">🚗 وصل</span>
+                  )}
                 </div>
                 {(order.carType || order.carColor || order.carInfo?.carType) && (
                   <div className="flex items-center gap-2 text-xs bg-purple-500/10 rounded p-1.5 border border-purple-500/20">

@@ -147,8 +147,9 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
           <div style="font-size:11px;margin-top:4px;">رقم الطلب: <strong>${order.orderNumber || ''}</strong></div>
           <div style="font-size:10px;">${dateStr} ${timeStr}</div>
           ${(order as any).tableNumber ? `<div style="font-size:11px;">طاولة: <strong>${(order as any).tableNumber}</strong></div>` : ''}
-          ${((order as any).deliveryType === 'curbside' || (order as any).deliveryType === 'car_pickup' || (order as any).deliveryType === 'car-pickup') ? `<div style="font-size:11px;color:#6b21a8;font-weight:bold;">🚗 استلام من السيارة</div>` : ''}
-          ${(order as any).carType ? `<div style="font-size:10px;color:#6b21a8;">نوع: ${(order as any).carType} | لون: ${(order as any).carColor || ''} | لوحة: ${(order as any).plateNumber || (order as any).carPlate || ''}</div>` : ''}
+          ${(order as any).scheduledPickupTime ? `<div style="font-size:11px;color:#d97706;font-weight:bold;">🕐 موعد الاستلام: ${(order as any).scheduledPickupTime}</div>` : ''}
+          ${((order as any).deliveryType === 'curbside' || (order as any).deliveryType === 'car_pickup' || (order as any).deliveryType === 'car-pickup' || (order as any).carPickup) ? `<div style="font-size:11px;color:#6b21a8;font-weight:bold;">🚗 استلام من السيارة</div>` : ''}
+          ${((order as any).carType || (order as any).carInfo?.carType) ? `<div style="font-size:10px;color:#6b21a8;">نوع: ${(order as any).carType || (order as any).carInfo?.carType || ''} | لون: ${(order as any).carColor || (order as any).carInfo?.carColor || ''} | لوحة: ${(order as any).plateNumber || (order as any).carPlate || (order as any).carInfo?.plateNumber || ''}</div>` : ''}
         </div>
         <div style="margin-bottom:6px;font-size:11px;">
           <div>العميل: ${(order as any).customerName || 'عميل نقدي'}</div>
@@ -216,6 +217,9 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
           <div style="font-size:30px;font-weight:bold;margin:8px 0;letter-spacing:2px;">${order.orderNumber || ''}</div>
           <div style="font-size:11px;">${timeStr} — ${dateStr}</div>
           ${(order as any).tableNumber ? `<div style="font-size:13px;font-weight:bold;margin-top:4px;">طاولة رقم: ${(order as any).tableNumber}</div>` : ''}
+          ${(order as any).scheduledPickupTime ? `<div style="font-size:12px;font-weight:bold;color:#d97706;">🕐 موعد الاستلام: ${(order as any).scheduledPickupTime}</div>` : ''}
+          ${((order as any).deliveryType === 'curbside' || (order as any).deliveryType === 'car_pickup' || (order as any).deliveryType === 'car-pickup' || (order as any).carPickup) ? `<div style="font-size:12px;font-weight:bold;color:#6b21a8;">🚗 استلام من السيارة</div>` : ''}
+          ${((order as any).carType || (order as any).carInfo?.carType) ? `<div style="font-size:11px;color:#6b21a8;font-weight:bold;">نوع: ${(order as any).carType || (order as any).carInfo?.carType || ''} | لون: ${(order as any).carColor || (order as any).carInfo?.carColor || ''} | لوحة: ${(order as any).plateNumber || (order as any).carPlate || (order as any).carInfo?.plateNumber || ''}</div>` : ''}
           ${(order as any).orderType ? `<div style="font-size:11px;color:#555;">${(order as any).orderType}</div>` : ''}
         </div>
         <div style="margin-bottom:10px;">

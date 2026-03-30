@@ -8094,9 +8094,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Failed to update order" });
       }
 
-      res.json(serializeDoc(updatedOrder));
+      const serializedCarPickup = serializeDoc(updatedOrder);
+      wsManager.broadcastOrderUpdate(serializedCarPickup);
+      res.json(serializedCarPickup);
     } catch (error) {
       res.status(500).json({ error: "Failed to update car pickup info" });
+    }
+  });
+
+  app.post("/api/orders/:id/customer-arrived", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const order = await storage.getOrder(id);
+      if (!order) return res.status(404).json({ error: "Order not found" });
+
+      const updatedOrder = await OrderModel.findOneAndUpdate(
+        { $or: [{ id: id }, { _id: id.length === 24 ? id : undefined }] },
+        { $set: { customerArrived: true, customerArrivedAt: new Date().toISOString() } },
+        { new: true }
+      );
+      if (!updatedOrder) return res.status(404).json({ error: "Failed to update" });
+
+      const serialized = serializeDoc(updatedOrder);
+      const branchId = (order as any).branchId || 'all';
+
+      wsManager.broadcastToBranch(branchId, {
+        type: 'push_alert',
+        title: '🚗 العميل وصل',
+        body: `طلب #${serialized.orderNumber} — العميل في الموقف وينتظر`,
+        url: '/employee/orders',
+        order: serialized
+      });
+      wsManager.broadcastOrderUpdate(serialized);
+
+      res.json(serialized);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update arrival status" });
     }
   });
 

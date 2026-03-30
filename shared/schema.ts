@@ -1158,6 +1158,8 @@ export interface IOrder extends Document {
   isOpenTab?: boolean;
   dineIn?: boolean;
   deliveryType?: 'pickup' | 'delivery' | 'dine-in' | 'curbside' | 'car_pickup' | 'car-pickup';
+  customerArrived?: boolean;
+  customerArrivedAt?: string;
   deliveryAddress?: {
     fullAddress?: string;
     lat: number;
@@ -1230,6 +1232,8 @@ const OrderSchema = new Schema<IOrder>({
   preparationHoldUntil: { type: String },
   dineIn: { type: Boolean, default: false },
   carPickup: { type: Boolean, default: false },
+  customerArrived: { type: Boolean, default: false },
+  customerArrivedAt: { type: String },
   carInfo: {
     carType: { type: String },
     carColor: { type: String },
