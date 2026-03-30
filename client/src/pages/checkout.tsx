@@ -624,6 +624,10 @@ export default function CheckoutPage() {
       toast({ variant: "destructive", title: t("checkout.enter_customer_name") });
       return;
     }
+    if (isPaymobMethod(selectedPaymentMethod)) {
+      initiatePaymobDirect();
+      return;
+    }
     if (isCardPaymentMethod(selectedPaymentMethod) || isOnlinePaymentMethod(selectedPaymentMethod)) {
       confirmAndCreateOrder();
       return;
@@ -644,6 +648,108 @@ export default function CheckoutPage() {
   };
 
   const isOnlinePaymentMethod = (_method: string | null) => false;
+
+  const buildOrderData = async (): Promise<{ orderData: any; activeCustomerId: string | undefined }> => {
+    let activeCustomerId = customer?.id;
+    if (!activeCustomerId && wantToRegister) {
+      setIsRegistering(true);
+      const regRes = await fetch("/api/customers/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: customerName, phone: customerPhone, email: customerEmail, password: customerPassword })
+      });
+      if (regRes.ok) {
+        const newC = await regRes.json();
+        activeCustomerId = newC.id;
+        setCustomer(newC);
+      }
+      setIsRegistering(false);
+    }
+
+    const finalTotal = getFinalAmount();
+    const orderData: any = {
+      customerId: activeCustomerId,
+      customerName,
+      customerPhone,
+      customerEmail,
+      items: cartItems.map(i => {
+        const inlineAddons = (i as any).selectedItemAddons || [];
+        const addonsExtra = inlineAddons.reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
+        return {
+          coffeeItemId: i.coffeeItemId,
+          quantity: i.quantity,
+          price: (i.coffeeItem?.price || 0) + addonsExtra,
+          nameAr: i.coffeeItem?.nameAr || "",
+          nameEn: i.coffeeItem?.nameEn || "",
+          customization: inlineAddons.length > 0 ? { selectedItemAddons: inlineAddons } : undefined,
+        };
+      }),
+      totalAmount: finalTotal,
+      paymentMethod: selectedPaymentMethod as PaymentMethod,
+      status: "pending",
+      branchId: deliveryInfo?.branchId || "default",
+      orderType: deliveryInfo?.type === 'car-pickup' ? 'car_pickup'
+              : deliveryInfo?.type === 'scheduled-pickup' ? 'pickup'
+              : deliveryInfo?.type === 'delivery' ? 'delivery'
+              : (deliveryInfo?.type === 'pickup' && deliveryInfo?.dineIn ? 'dine-in' : 'regular'),
+      deliveryType: deliveryInfo?.type === 'car-pickup' ? 'car_pickup'
+               : deliveryInfo?.type === 'scheduled-pickup' ? 'pickup'
+               : deliveryInfo?.type || 'pickup',
+      customerNotes,
+      discountCode: appliedDiscount?.code,
+      pointsRedeemed: usePointsAsDiscount ? pointsToRedeem : 0,
+      pointsValue: usePointsAsDiscount ? Math.min(pointsDiscountSAR, getBaseTotal()) : 0,
+      bypassPointsVerification: true,
+      ...(appliedGiftCard && giftCardDiscount > 0 ? { giftCardCode: appliedGiftCard.code, giftCardAmount: giftCardDiscount } : {}),
+      ...(deliveryInfo?.type === 'car-pickup' && deliveryInfo?.carInfo ? {
+        carType: deliveryInfo.carInfo.carType,
+        carColor: deliveryInfo.carInfo.carColor,
+        plateNumber: deliveryInfo.carInfo.plateNumber,
+      } : {}),
+      ...(deliveryInfo?.scheduledPickupTime ? {
+        scheduledPickupTime: deliveryInfo.scheduledPickupTime,
+        arrivalTime: deliveryInfo.scheduledPickupTime,
+      } : {}),
+      ...(deliveryInfo?.type === 'delivery' && deliveryInfo?.deliveryAddress ? {
+        deliveryAddress: { fullAddress: deliveryInfo.deliveryAddress, lat: 0, lng: 0, zone: 'general' },
+      } : {}),
+      channel: "online",
+    };
+
+    if (receiptFile) {
+      const uploadedUrl = await uploadReceiptToServer(receiptFile);
+      orderData.paymentReceiptUrl = uploadedUrl || receiptPreview || undefined;
+    }
+
+    return { orderData, activeCustomerId };
+  };
+
+  const initiatePaymobDirect = async () => {
+    try {
+      const { orderData } = await buildOrderData();
+      pendingGeideaOrderData.current = orderData;
+
+      const tempOrderRef = `PAY-${Date.now()}`;
+      const payRes = await apiRequest("POST", "/api/payments/init", {
+        orderId: tempOrderRef,
+        amount: orderData.totalAmount,
+        currency: "SAR",
+        paymentMethod: selectedPaymentMethod,
+        customerName,
+        customerPhone,
+        customerEmail,
+      });
+      const payData = await payRes.json();
+      if (payData.success && payData.redirectUrl) {
+        setPaymobCheckoutUrl(payData.redirectUrl);
+        setShowPaymobCheckout(true);
+      } else {
+        toast({ variant: "destructive", title: "خطأ في بوابة الدفع", description: payData.error || payData.details || "فشل تهيئة بوابة الدفع" });
+      }
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "خطأ", description: err.message || "حدث خطأ أثناء تهيئة الدفع" });
+    }
+  };
 
   const confirmAndCreateOrder = async () => {
     let finalTotal = getFinalAmount();
@@ -729,41 +835,6 @@ export default function CheckoutPage() {
       } else {
         (orderData as any).paymentReceiptUrl = receiptPreview || undefined;
       }
-    }
-
-    if (isPaymobMethod(selectedPaymentMethod)) {
-      // Real PayMob Saudi Arabia payment flow
-      // Create order with awaiting_payment status — employees NOT notified yet
-      const paymobOrderData = { ...orderData, status: 'awaiting_payment', paymentStatus: 'pending' };
-      pendingGeideaOrderData.current = paymobOrderData;
-      setShowConfirmation(false);
-      try {
-        // First create the order (no WS broadcast for awaiting_payment)
-        const res = await apiRequest("POST", "/api/orders", paymobOrderData);
-        const createdOrder = await res.json();
-        if (createdOrder?.error) throw new Error(createdOrder.error);
-        setOrderDetails(createdOrder);
-        // Then initiate PayMob payment
-        const payRes = await apiRequest("POST", "/api/payments/init", {
-          orderId: createdOrder.orderNumber || createdOrder._id,
-          amount: orderData.totalAmount,
-          currency: "SAR",
-          paymentMethod: selectedPaymentMethod,
-          customerName: customerName,
-          customerPhone: customerPhone,
-          customerEmail: customerEmail,
-        });
-        const payData = await payRes.json();
-        if (payData.success && payData.redirectUrl) {
-          setPaymobCheckoutUrl(payData.redirectUrl);
-          setShowPaymobCheckout(true);
-        } else {
-          toast({ variant: "destructive", title: "خطأ في بوابة الدفع", description: payData.error || payData.details || "فشل تهيئة PayMob" });
-        }
-      } catch (err: any) {
-        toast({ variant: "destructive", title: "خطأ", description: err.message || "حدث خطأ أثناء إنشاء الطلب" });
-      }
-      return;
     }
 
     if (isCardPaymentMethod(selectedPaymentMethod)) {
@@ -1236,14 +1307,24 @@ export default function CheckoutPage() {
                 {/* Real PayMob checkout bottom sheet */}
                 {showPaymobCheckout && paymobCheckoutUrl && (
                   <PaymobCheckoutWidget
-                    orderNumber={orderDetails?.orderNumber || orderDetails?.dailyNumber || "—"}
+                    orderNumber="—"
                     amount={pendingGeideaOrderData.current?.totalAmount || getFinalTotalWithPoints()}
                     checkoutUrl={paymobCheckoutUrl}
                     onSuccess={() => {
                       setShowPaymobCheckout(false);
-                      clearCart();
-                      setShowSuccessPage(true);
-                      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+                      const od = pendingGeideaOrderData.current;
+                      if (od) {
+                        createOrderMutation.mutate({
+                          ...od,
+                          paymentStatus: 'paid',
+                          status: 'payment_confirmed',
+                          paymentReference: `PAYMOB-${Date.now()}`,
+                        });
+                      } else {
+                        clearCart();
+                        setShowSuccessPage(true);
+                        queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+                      }
                     }}
                     onError={(msg) => {
                       toast({ variant: "destructive", title: "فشلت عملية الدفع", description: msg });
@@ -1251,7 +1332,7 @@ export default function CheckoutPage() {
                     }}
                     onCancel={() => {
                       setShowPaymobCheckout(false);
-                      toast({ title: "تم إغلاق نافذة الدفع", description: "إذا تم سحب المال، سيظهر طلبك في 'طلباتي' خلال لحظات." });
+                      toast({ title: "تم إلغاء الدفع", description: "لم يتم إنشاء أي طلب. يمكنك المحاولة مرة أخرى." });
                     }}
                   />
                 )}
@@ -1328,8 +1409,10 @@ export default function CheckoutPage() {
                   >
                     {selectedPaymentMethod === 'cash' && cashDistanceChecking ? (
                       <><Loader2 className="w-5 h-5 animate-spin ml-2" />جاري التحقق من الموقع...</>
-                    ) : (isCardPaymentMethod(selectedPaymentMethod) || isOnlinePaymentMethod(selectedPaymentMethod) || isPaymobMethod(selectedPaymentMethod)) ? (
-                      <><CreditCard className="w-5 h-5 ml-2" />ادفع الآن عبر PayMob</>
+                    ) : isPaymobMethod(selectedPaymentMethod) ? (
+                      <><CreditCard className="w-5 h-5 ml-2" />اذهب للدفع</>
+                    ) : (isCardPaymentMethod(selectedPaymentMethod) || isOnlinePaymentMethod(selectedPaymentMethod)) ? (
+                      <><CreditCard className="w-5 h-5 ml-2" />ادفع الآن</>
                     ) : t("checkout.confirm_order")}
                   </Button>
                 ) : null}
