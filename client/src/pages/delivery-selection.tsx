@@ -171,6 +171,61 @@ function CarSVG({ color, className = '' }: { color: string; className?: string }
 
 type OrderMethod = 'takeaway' | 'car-pickup' | 'dine-in' | 'scheduled' | 'delivery';
 
+const DELIVERY_COUNTRIES: { value: string; label: string; governorates: string[] }[] = [
+  {
+    value: 'SA',
+    label: 'المملكة العربية السعودية',
+    governorates: [
+      'منطقة الرياض',
+      'منطقة مكة المكرمة',
+      'منطقة المدينة المنورة',
+      'منطقة القصيم',
+      'المنطقة الشرقية',
+      'منطقة عسير',
+      'منطقة تبوك',
+      'منطقة حائل',
+      'منطقة الحدود الشمالية',
+      'منطقة جازان',
+      'منطقة نجران',
+      'منطقة الباحة',
+      'منطقة الجوف',
+    ],
+  },
+  {
+    value: 'EG',
+    label: 'جمهورية مصر العربية',
+    governorates: [
+      'القاهرة',
+      'الجيزة',
+      'الإسكندرية',
+      'الدقهلية',
+      'البحيرة',
+      'الشرقية',
+      'الغربية',
+      'المنوفية',
+      'القليوبية',
+      'كفر الشيخ',
+      'دمياط',
+      'بورسعيد',
+      'الإسماعيلية',
+      'السويس',
+      'الفيوم',
+      'بني سويف',
+      'المنيا',
+      'أسيوط',
+      'سوهاج',
+      'قنا',
+      'الأقصر',
+      'أسوان',
+      'البحر الأحمر',
+      'مطروح',
+      'شمال سيناء',
+      'جنوب سيناء',
+      'الوادي الجديد',
+    ],
+  },
+];
+
 export default function DeliverySelectionPage() {
   const { t, i18n } = useTranslation();
   const [, setLocation] = useLocation();
@@ -211,6 +266,9 @@ export default function DeliverySelectionPage() {
   const [loadingTables, setLoadingTables] = useState(false);
   const [bookedTable, setBookedTable] = useState<{ tableNumber: string; bookingId: string } | null>(null);
   const [deliveryAddressText, setDeliveryAddressText] = useState<string>('');
+  const [selectedCountry, setSelectedCountry] = useState<string>('');
+  const [selectedGovernorate, setSelectedGovernorate] = useState<string>('');
+  const [detailedAddress, setDetailedAddress] = useState<string>('');
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -413,9 +471,19 @@ export default function DeliverySelectionPage() {
       return;
     }
 
-    if (selectedMethod === 'delivery' && !deliveryAddressText.trim()) {
-      toast({ title: t("product.error"), description: "يرجى إدخال عنوان التوصيل", variant: 'destructive' });
-      return;
+    if (selectedMethod === 'delivery') {
+      if (!selectedCountry) {
+        toast({ title: t("product.error"), description: "يرجى اختيار الدولة", variant: 'destructive' });
+        return;
+      }
+      if (!selectedGovernorate) {
+        toast({ title: t("product.error"), description: "يرجى اختيار المحافظة / المنطقة", variant: 'destructive' });
+        return;
+      }
+      if (!detailedAddress.trim()) {
+        toast({ title: t("product.error"), description: "يرجى إدخال تفاصيل العنوان (الحي، الشارع، المبنى)", variant: 'destructive' });
+        return;
+      }
     }
 
     setDeliveryInfo({
@@ -439,7 +507,9 @@ export default function DeliverySelectionPage() {
       tableNumber: bookedTable?.tableNumber || undefined,
       arrivalTime: arrivalTime || undefined,
       scheduledPickupTime: selectedMethod === 'scheduled' ? scheduledPickupTime : undefined,
-      deliveryAddress: selectedMethod === 'delivery' ? deliveryAddressText.trim() : undefined,
+      deliveryAddress: selectedMethod === 'delivery'
+        ? [DELIVERY_COUNTRIES.find(c => c.value === selectedCountry)?.label, selectedGovernorate, detailedAddress.trim()].filter(Boolean).join(' - ')
+        : undefined,
       deliveryFee: selectedMethod === 'delivery' ? deliveryFeeAmount : 0,
     });
 
@@ -990,16 +1060,61 @@ export default function DeliverySelectionPage() {
                   <p className="text-green-100 text-xs">أدخل عنوانك وسنوصل طلبك إليك</p>
                 </div>
                 <CardContent className="p-4 space-y-3">
+                  {/* Country */}
                   <div>
-                    <Label className="text-sm font-medium mb-2 block">عنوان التوصيل</Label>
-                    <Input
-                      placeholder="مثال: حي النرجس، شارع الأمير محمد، مبنى 12"
-                      value={deliveryAddressText}
-                      onChange={(e) => setDeliveryAddressText(e.target.value)}
-                      className="text-sm"
-                      data-testid="input-delivery-address"
-                    />
+                    <Label className="text-sm font-medium mb-2 block">الدولة</Label>
+                    <Select
+                      value={selectedCountry}
+                      onValueChange={(v) => { setSelectedCountry(v); setSelectedGovernorate(''); }}
+                      data-testid="select-country"
+                    >
+                      <SelectTrigger className="text-sm" data-testid="trigger-country">
+                        <SelectValue placeholder="اختر الدولة" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DELIVERY_COUNTRIES.map((c) => (
+                          <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
+
+                  {/* Governorate / Region */}
+                  {selectedCountry && (
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">
+                        {selectedCountry === 'SA' ? 'المنطقة الإدارية' : 'المحافظة'}
+                      </Label>
+                      <Select
+                        value={selectedGovernorate}
+                        onValueChange={setSelectedGovernorate}
+                        data-testid="select-governorate"
+                      >
+                        <SelectTrigger className="text-sm" data-testid="trigger-governorate">
+                          <SelectValue placeholder={selectedCountry === 'SA' ? 'اختر المنطقة' : 'اختر المحافظة'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DELIVERY_COUNTRIES.find(c => c.value === selectedCountry)?.governorates.map((g) => (
+                            <SelectItem key={g} value={g}>{g}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* Detailed address */}
+                  {selectedGovernorate && (
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">تفاصيل العنوان</Label>
+                      <Input
+                        placeholder="الحي، الشارع، رقم المبنى / الشقة..."
+                        value={detailedAddress}
+                        onChange={(e) => setDetailedAddress(e.target.value)}
+                        className="text-sm"
+                        data-testid="input-delivery-address"
+                      />
+                    </div>
+                  )}
                   <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
                     <div className="flex items-center gap-2">
                       <Truck className="w-4 h-4 text-green-600 flex-shrink-0" />
