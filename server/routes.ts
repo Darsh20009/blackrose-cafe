@@ -2770,7 +2770,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               extras: { order_ref: orderId || internalSessionId },
               special_reference: orderId || internalSessionId,
               notification_url: `${process.env.SITE_URL || 'https://www.blackrose.sa'}/api/payments/paymob/webhook`,
-              redirection_url: `${process.env.SITE_URL || 'https://www.blackrose.sa'}/payment-return-iframe?session=${internalSessionId}`,
+              redirection_url: `${process.env.SITE_URL || 'https://www.blackrose.sa'}/payment-return-iframe?session=${internalSessionId}&orderRef=${encodeURIComponent(orderId || internalSessionId)}`,
             };
 
             const intentRes = await fetch(`${baseUrl}/v1/intention/`, {
@@ -3350,13 +3350,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ── PayMob iframe return page (returns bare HTML, no SPA — sends postMessage reliably) ──
   app.get("/payment-return-iframe", (req, res) => {
     const p = req.query as Record<string, string>;
-    const success = p.success === 'true';
+    // 'success' param may not be present in PayMob SA redirect — treat missing as pending
+    const successParam = p.success;
+    const success = successParam === 'true';
     const pending = p.pending === 'true';
+    const hasSuccessParam = successParam !== undefined;
     const session = p.session || '';
+    const orderRef = p.orderRef || '';
     const transactionId = p.id || p.transaction_id || '';
-    const type = success && !pending ? 'PAYMOB_SUCCESS' : pending ? 'PAYMOB_PENDING' : 'PAYMOB_ERROR';
-    const icon = success && !pending ? '✅' : pending ? '⏳' : '❌';
-    const label = success && !pending ? 'تم الدفع بنجاح' : pending ? 'جارٍ المعالجة...' : 'فشل الدفع';
+    // If success param is absent entirely, treat as pending (webhook may have fired already)
+    const type = success && !pending ? 'PAYMOB_SUCCESS'
+               : pending ? 'PAYMOB_PENDING'
+               : !hasSuccessParam ? 'PAYMOB_PENDING'
+               : 'PAYMOB_ERROR';
+    const icon = type === 'PAYMOB_SUCCESS' ? '✅' : type === 'PAYMOB_PENDING' ? '⏳' : '❌';
+    const label = type === 'PAYMOB_SUCCESS' ? 'تم الدفع بنجاح' : type === 'PAYMOB_PENDING' ? 'جارٍ التحقق...' : 'فشل الدفع';
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(`<!DOCTYPE html><html lang="ar" dir="rtl">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -3365,11 +3373,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 <body><div class="box"><div class="icon">${icon}</div><div class="msg">${label}</div></div>
 <script>
 (function(){
-  var data={type:${JSON.stringify(type)},success:${JSON.stringify(success&&!pending)},session:${JSON.stringify(session)},transactionId:${JSON.stringify(transactionId)}};
+  var data={type:${JSON.stringify(type)},success:${JSON.stringify(success&&!pending)},session:${JSON.stringify(session)},orderRef:${JSON.stringify(orderRef)},transactionId:${JSON.stringify(transactionId)}};
   try{window.parent&&window.parent.postMessage(data,'*')}catch(e){}
   try{window.opener&&window.opener.postMessage(data,'*')}catch(e){}
   if(window.self===window.top){
-    setTimeout(function(){location.replace('/payment-return?success=${success}&pending=${pending}&session=${encodeURIComponent(session)}')},600);
+    var orderParam=orderRef?'&orderRef='+encodeURIComponent(orderRef):'';
+    setTimeout(function(){location.replace('/payment-return?success=${success}&pending=${pending}&session='+encodeURIComponent(${JSON.stringify(session)})+orderParam)},600);
   }
 })();
 </script></body></html>`);
@@ -3432,13 +3441,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const transaction = body?.obj;
       if (transaction?.success === true) {
-        const merchantOrderId = transaction?.order?.merchant_order_id;
+        const merchantOrderId = transaction?.order?.merchant_order_id
+          || transaction?.special_reference
+          || body?.special_reference;
+
         if (merchantOrderId && !merchantOrderId.startsWith('temp-')) {
-          await OrderModel.findOneAndUpdate(
-            { _id: merchantOrderId, tenantId },
-            { $set: { paymentStatus: 'paid', paymentTransactionId: String(transaction.id) } }
-          ).catch(() => {});
+          const paymentUpdate = { paymentStatus: 'paid', paymentTransactionId: String(transaction.id) };
+
+          // Try by orderNumber first (most common for PayMob SA flow)
+          const byOrderNumber = await OrderModel.findOneAndUpdate(
+            { orderNumber: merchantOrderId, tenantId },
+            { $set: paymentUpdate }
+          ).catch(() => null);
+
+          if (!byOrderNumber) {
+            // Fallback: try by MongoDB _id (for legacy flow)
+            await OrderModel.findOneAndUpdate(
+              { _id: merchantOrderId, tenantId },
+              { $set: paymentUpdate }
+            ).catch(() => null);
+          }
+
+          console.log(`[Paymob Webhook] Payment confirmed for order: ${merchantOrderId}`);
         }
+      }
+
+      // Also handle PayMob SA Intention API format (body.type = "TRANSACTION")
+      if (body?.type === 'TRANSACTION' && body?.obj?.success === false && body?.obj?.pending === false) {
+        console.log('[Paymob Webhook] Failed transaction received:', body?.obj?.id);
       }
 
       res.json({ success: true });

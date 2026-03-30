@@ -38,7 +38,19 @@ export default function PaymentReturnPage() {
     const geideaCurrency = params.get("geideaCurrency") || params.get("currency");
     const geideaSignature = params.get("geideaSignature") || params.get("signature");
 
-    const resolvePaymob = () => {
+    const orderRef = params.get("orderRef") || "";
+
+    const verifyOrderPaid = async (ref: string): Promise<boolean> => {
+      try {
+        const res = await fetch(`/api/payments/order-status/${encodeURIComponent(ref)}`);
+        const data = await res.json();
+        return data.paid === true;
+      } catch {
+        return false;
+      }
+    };
+
+    const resolvePaymob = async () => {
       if (paymobSuccess === "true" && paymobPending !== "true") {
         setStatus("success");
         setMessage(tc("تمت عملية الدفع بنجاح! شكراً لك.", "Payment successful! Thank you."));
@@ -46,17 +58,36 @@ export default function PaymentReturnPage() {
         if (!isInIframe()) {
           setTimeout(() => navigate("/my-orders"), 2500);
         }
-      } else if (paymobSuccess === "false") {
-        setStatus("failed");
-        setMessage(tc("لم تتم عملية الدفع. يرجى المحاولة مرة أخرى.", "Payment was not completed. Please try again."));
-        try { window.parent.postMessage({ type: "PAYMOB_ERROR", status: "failed", session }, "*"); } catch {}
-      } else if (paymobPending === "true") {
-        setStatus("pending");
-        setMessage(tc("الدفع قيد المعالجة...", "Payment is being processed..."));
-        try { window.parent.postMessage({ type: "PAYMOB_PENDING", status: "pending", session }, "*"); } catch {}
-      } else {
-        setStatus("pending");
+      } else if (paymobSuccess === "false" || paymobPending === "true" || paymobSuccess === null) {
+        // Don't immediately fail — verify with server (webhook may have confirmed payment)
+        setStatus("loading");
         setMessage(tc("جاري التحقق من حالة الدفع...", "Checking payment status..."));
+
+        const ref = orderRef || session;
+        if (ref) {
+          await new Promise(r => setTimeout(r, 2500));
+          const paid = await verifyOrderPaid(ref);
+          if (paid) {
+            setStatus("success");
+            setMessage(tc("تمت عملية الدفع بنجاح! شكراً لك.", "Payment successful! Thank you."));
+            try { window.parent.postMessage({ type: "PAYMOB_SUCCESS", status: "success", session }, "*"); } catch {}
+            if (!isInIframe()) setTimeout(() => navigate("/my-orders"), 2500);
+            return;
+          }
+        }
+
+        if (paymobSuccess === "false") {
+          setStatus("failed");
+          setMessage(tc("لم تتم عملية الدفع. يرجى المحاولة مرة أخرى.", "Payment was not completed. Please try again."));
+          try { window.parent.postMessage({ type: "PAYMOB_ERROR", status: "failed", session }, "*"); } catch {}
+        } else if (paymobPending === "true") {
+          setStatus("pending");
+          setMessage(tc("الدفع قيد المعالجة...", "Payment is being processed..."));
+          try { window.parent.postMessage({ type: "PAYMOB_PENDING", status: "pending", session }, "*"); } catch {}
+        } else {
+          setStatus("pending");
+          setMessage(tc("جاري التحقق من حالة الدفع...", "Checking payment status..."));
+        }
       }
     };
 

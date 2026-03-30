@@ -97,8 +97,28 @@ export default function PaymobCheckout({
         ) {
           triggerSuccess();
         } else if (data.type === "PAYMOB_ERROR" || data.success === false) {
+          // Always verify server-side before showing error
+          // Webhook may have already marked the payment as paid
           const msg = data.message || "فشلت عملية الدفع. يرجى المحاولة مرة أخرى.";
-          triggerError(msg);
+          setState("verifying");
+          (async () => {
+            await new Promise(r => setTimeout(r, 2500));
+            const paid = await verifyPaymentStatus();
+            if (paid) {
+              triggerSuccess();
+            } else {
+              triggerError(msg);
+            }
+          })();
+        } else if (data.type === "PAYMOB_PENDING") {
+          // Pending — verify after short delay
+          setState("verifying");
+          (async () => {
+            await new Promise(r => setTimeout(r, 3000));
+            const paid = await verifyPaymentStatus();
+            if (paid) triggerSuccess();
+            else setState("ready");
+          })();
         } else if (data.type === "PAYMOB_CANCEL") {
           handleCloseAttempt();
         }
@@ -119,7 +139,23 @@ export default function PaymobCheckout({
         if (success === "true" && pending !== "true") {
           triggerSuccess();
         } else if (success === "false") {
-          triggerError("لم تكتمل عملية الدفع. يرجى المحاولة مرة أخرى.");
+          // Verify server-side before showing failure — webhook may have paid it
+          setState("verifying");
+          (async () => {
+            await new Promise(r => setTimeout(r, 2500));
+            const paid = await verifyPaymentStatus();
+            if (paid) triggerSuccess();
+            else triggerError("لم تكتمل عملية الدفع. يرجى المحاولة مرة أخرى.");
+          })();
+        } else if (success === null) {
+          // No success param — check server in case webhook fired
+          setState("verifying");
+          (async () => {
+            await new Promise(r => setTimeout(r, 2000));
+            const paid = await verifyPaymentStatus();
+            if (paid) triggerSuccess();
+            else setState("ready");
+          })();
         }
       }
     } catch {}
