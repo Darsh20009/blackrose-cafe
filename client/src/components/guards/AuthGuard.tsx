@@ -47,35 +47,24 @@ export function AuthGuard({
             break;
           }
           case "employee": {
-            // Roles that belong ONLY to the manager portal
-            const managerOnlyRoles = ["manager", "branch_manager", "admin", "owner"];
+            // All staff roles (including manager/admin) can access employee pages
+            // e.g. managers may need POS, kitchen display, cashier, etc.
             const employee = localStorage.getItem("currentEmployee");
             if (employee) {
               const parsed = JSON.parse(employee);
-              const role = parsed.role || "";
-              // If this is a manager-level account, kick them to the manager portal
-              if (managerOnlyRoles.includes(role)) {
-                setLocation("/manager/dashboard");
-                return;
-              }
               isAuthenticated = true;
-              userRole = role;
+              userRole = parsed.role || "";
               allowedPages = parsed.allowedPages || [];
             } else {
-              // Final fallback check session
+              // Fallback: check active session
               const response = await fetch("/api/user", { credentials: 'include' });
               if (response.ok) {
                 const user = await response.json();
                 if (user.type === 'employee') {
-                  const role = user.role || "";
-                  if (!managerOnlyRoles.includes(role)) {
-                    localStorage.setItem("currentEmployee", JSON.stringify(user));
-                    isAuthenticated = true;
-                    userRole = role;
-                  } else {
-                    setLocation("/manager/dashboard");
-                    return;
-                  }
+                  localStorage.setItem("currentEmployee", JSON.stringify(user));
+                  isAuthenticated = true;
+                  userRole = user.role || "";
+                  allowedPages = user.allowedPages || [];
                 }
               }
             }
