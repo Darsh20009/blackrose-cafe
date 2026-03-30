@@ -639,9 +639,13 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     const lineTotal = unitPrice * item.quantity;
     const itemDiscount = parseNumber(item.itemDiscount);
     const lineAfterDiscount = lineTotal - itemDiscount;
+    const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
     return `
       <tr>
-        <td style="padding:3px 2px;">${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}${itemDiscount > 0 ? ` <span style="color:#16a34a;font-size:9px;">(-${itemDiscount.toFixed(2)})</span>` : ''}</td>
+        <td style="padding:3px 2px;">
+          ${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}${itemDiscount > 0 ? ` <span style="color:#16a34a;font-size:9px;">(-${itemDiscount.toFixed(2)})</span>` : ''}
+          ${addons ? `<div style="font-size:9px;color:#666;margin-top:1px;">+ ${addons}</div>` : ''}
+        </td>
         <td style="text-align:center;">${item.quantity}</td>
         <td style="text-align:center;">${unitPrice.toFixed(2)}</td>
         <td style="text-align:left;">${lineAfterDiscount.toFixed(2)}</td>
@@ -771,12 +775,17 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
       ${orderTypeLabel ? `<div class="emp-type">${orderTypeLabel}${data.tableNumber ? ' - طاولة ' + data.tableNumber : ''}</div>` : (data.tableNumber ? `<div class="emp-type">طاولة ${data.tableNumber}</div>` : '')}
       
       <div class="emp-items">
-        ${data.items.map(item => `
+        ${data.items.map(item => {
+          const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
+          return `
           <div class="emp-item">
-            <div class="emp-item-name">${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}</div>
+            <div style="flex:1;">
+              <div class="emp-item-name">${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}</div>
+              ${addons ? `<div style="font-size:10px;color:#555;margin-top:2px;">+ ${addons}</div>` : ''}
+            </div>
             <span class="emp-item-qty">x${item.quantity}</span>
-          </div>
-        `).join('')}
+          </div>`;
+        }).join('')}
       </div>
       
       <div class="emp-total"><span>الإجمالي:</span><span>${totalAmount.toFixed(2)} ر.س</span></div>
@@ -877,12 +886,17 @@ export async function printCustomerPickupReceipt(data: TaxInvoiceData & { delive
     </div>
 
     <div class="items-section">
-      ${data.items.map(item => `
-        <div class="item-row">
-          <div class="item-name" style="flex:1;">${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}</div>
+      ${data.items.map(item => {
+        const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
+        return `
+        <div class="item-row" style="align-items:flex-start;">
+          <div class="item-name" style="flex:1;">
+            ${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}
+            ${addons ? `<div style="font-size:11px;color:#92400e;margin-top:2px;">+ ${addons}</div>` : ''}
+          </div>
           <span class="item-qty">x${item.quantity}</span>
-        </div>
-      `).join('')}
+        </div>`;
+      }).join('')}
     </div>
 
     <div class="total-section">
@@ -963,9 +977,13 @@ export async function printCashierReceipt(data: TaxInvoiceData & { deliveryType?
     <div class="items">
       ${data.items.map(item => {
         const price = parseNumber(item.coffeeItem.price);
+        const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
         return `
         <div class="item-row" style="align-items:flex-start;">
-          <div style="flex:1;">${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}<span style="font-size:11px;color:#555;"> x${item.quantity}</span></div>
+          <div style="flex:1;">
+            ${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}<span style="font-size:11px;color:#555;"> x${item.quantity}</span>
+            ${addons ? `<div style="font-size:10px;color:#777;margin-top:2px;">+ ${addons}</div>` : ''}
+          </div>
           <span style="flex-shrink:0;">${(price * item.quantity).toFixed(2)}</span>
         </div>
         `;
@@ -1009,9 +1027,13 @@ export async function printSimpleReceipt(data: TaxInvoiceData): Promise<void> {
   const itemsHtml = data.items.map(item => {
     const unitPrice = parseNumber(item.coffeeItem.price);
     const lineTotal = unitPrice * item.quantity;
+    const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
     return `
       <tr style="border-bottom: 1px solid #e5e5e5;">
-        <td style="padding: 8px 4px;">${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}</td>
+        <td style="padding: 8px 4px;">
+          ${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}
+          ${addons ? `<div style="font-size:11px;color:#666;margin-top:2px;">+ ${addons}</div>` : ''}
+        </td>
         <td style="padding: 8px 4px; text-align: center;">${item.quantity}</td>
         <td style="padding: 8px 4px; text-align: left;">${lineTotal.toFixed(2)}</td>
       </tr>
