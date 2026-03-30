@@ -87,7 +87,7 @@ const NAV_GROUPS: { label: string; labelEn: string; color: string; items: NavIte
     ]
   },
   {
-    label: "🤖 الذكاء الاصطناعي", labelEn: "AI Center", color: "#a855f7",
+    label: "الذكاء الاصطناعي", labelEn: "AI Center", color: "#a855f7",
     items: [
       { label: "مركز الذكاء الاصطناعي", labelEn: "AI Center", icon: Sparkles, path: "/manager/ai", color: "#a855f7" },
     ]

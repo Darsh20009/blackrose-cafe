@@ -392,7 +392,7 @@ function PaymentSuccessScreen({ state, formatPrice, tc }: { state: DisplayState;
         <span className="text-gray-300 text-xl">{tc("المبلغ المدفوع: ", "Amount paid: ")}</span>
         <span className="text-white text-3xl font-black">{formatPrice(state.total)}</span>
       </div>
-      <p className="text-gray-500 text-lg animate-pulse">{tc("شكراً لزيارتكم 🎉", "Thank you for visiting 🎉")}</p>
+      <p className="text-gray-500 text-lg animate-pulse">{tc("شكراً لزيارتكم", "Thank you for visiting")}</p>
     </div>
   );
 }

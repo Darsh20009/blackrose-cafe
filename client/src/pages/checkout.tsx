@@ -195,7 +195,7 @@ function LoyaltyCheckoutCard({
 
       {!isApplied && loyaltyPoints === 0 && (
         <div className="text-center px-3 py-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-dashed border-amber-300 dark:border-amber-700/50">
-          <p className="text-sm text-amber-700 dark:text-amber-300 font-medium">🎯 اكسب نقاطك عند إتمام طلبك!</p>
+          <p className="text-sm text-amber-700 dark:text-amber-300 font-medium">اكسب نقاطك عند إتمام طلبك!</p>
           <p className="text-[11px] text-amber-600/70 mt-1">
             ابدأ باكتساب {minPointsForRedemption} نقطة للحصول على أول خصم بقيمة {(minPointsForRedemption / pointsPerSar).toFixed(2)} ريال
           </p>
@@ -689,8 +689,13 @@ export default function CheckoutPage() {
       paymentMethod: selectedPaymentMethod as PaymentMethod,
       status: "pending",
       branchId: deliveryInfo?.branchId || "default",
-      orderType: deliveryInfo?.type === 'car-pickup' ? 'car_pickup' : deliveryInfo?.type === 'scheduled-pickup' ? 'pickup' : (deliveryInfo?.type === 'pickup' && deliveryInfo?.dineIn ? 'dine-in' : 'regular'),
-      deliveryType: deliveryInfo?.type === 'car-pickup' ? 'car_pickup' : deliveryInfo?.type === 'scheduled-pickup' ? 'pickup' : deliveryInfo?.type || 'pickup',
+      orderType: deliveryInfo?.type === 'car-pickup' ? 'car_pickup'
+              : deliveryInfo?.type === 'scheduled-pickup' ? 'pickup'
+              : deliveryInfo?.type === 'delivery' ? 'delivery'
+              : (deliveryInfo?.type === 'pickup' && deliveryInfo?.dineIn ? 'dine-in' : 'regular'),
+      deliveryType: deliveryInfo?.type === 'car-pickup' ? 'car_pickup'
+               : deliveryInfo?.type === 'scheduled-pickup' ? 'pickup'
+               : deliveryInfo?.type || 'pickup',
       customerNotes: customerNotes,
       discountCode: appliedDiscount?.code,
       pointsRedeemed: usePointsAsDiscount ? pointsToRedeem : 0,
@@ -709,6 +714,9 @@ export default function CheckoutPage() {
       ...(deliveryInfo?.scheduledPickupTime ? {
         scheduledPickupTime: deliveryInfo.scheduledPickupTime,
         arrivalTime: deliveryInfo.scheduledPickupTime,
+      } : {}),
+      ...(deliveryInfo?.type === 'delivery' && deliveryInfo?.deliveryAddress ? {
+        deliveryAddress: { fullAddress: deliveryInfo.deliveryAddress, lat: 0, lng: 0, zone: 'general' },
       } : {}),
       channel: "online",
     };
@@ -796,7 +804,7 @@ export default function CheckoutPage() {
 
           {isGuestMode && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-right space-y-3">
-              <p className="font-bold text-amber-900">⭐ هل تريد تتبع طلباتك؟</p>
+              <p className="font-bold text-amber-900">هل تريد تتبع طلباتك؟</p>
               <p className="text-sm text-amber-800">
                 سجّل الآن بنفس رقم جوالك وسيتم ربط طلباتك تلقائياً. ستحصل على بطاقة ولاء ونقاط مكافآت مع كل طلب.
               </p>
@@ -840,7 +848,7 @@ export default function CheckoutPage() {
                 )}
                 {usePointsAsDiscount && pointsDiscountSAR > 0 && (
                   <div className="flex justify-between items-center gap-2 text-sm text-amber-700 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2 rounded">
-                    <span className="flex items-center gap-1.5">⭐ خصم النقاط ({pointsToRedeem.toLocaleString()} نقطة)</span>
+                    <span className="flex items-center gap-1.5">خصم النقاط ({pointsToRedeem.toLocaleString()} نقطة)</span>
                     <span className="font-bold">-{Math.min(pointsDiscountSAR, getBaseTotal()).toFixed(2)} <SarIcon /></span>
                   </div>
                 )}
@@ -1280,13 +1288,13 @@ export default function CheckoutPage() {
               <>
                 <p className="text-sm text-muted-foreground">قبل الخصم: {getBaseTotal().toFixed(2)} <SarIcon /></p>
                 {usePointsAsDiscount && pointsDiscountSAR > 0 && (
-                  <p className="text-sm text-amber-600 font-semibold">⭐ خصم النقاط: -{Math.min(pointsDiscountSAR, getBaseTotal()).toFixed(2)} <SarIcon /></p>
+                  <p className="text-sm text-amber-600 font-semibold">خصم النقاط: -{Math.min(pointsDiscountSAR, getBaseTotal()).toFixed(2)} <SarIcon /></p>
                 )}
                 {appliedGiftCard && giftCardDiscount > 0 && (
                   <p className="text-sm text-primary font-semibold">🎁 بطاقة هدية: -{giftCardDiscount.toFixed(2)} <SarIcon /></p>
                 )}
                 <p className="text-3xl font-black text-primary">{getFinalAmount().toFixed(2)} <SarIcon /></p>
-                {getFinalAmount() === 0 && <p className="text-sm text-green-600 font-bold">🎉 تغطية كاملة!</p>}
+                {getFinalAmount() === 0 && <p className="text-sm text-green-600 font-bold">تغطية كاملة!</p>}
               </>
             ) : (
               <p className="text-2xl font-bold text-primary">{getFinalAmount().toFixed(2)} <SarIcon /></p>

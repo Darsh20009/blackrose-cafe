@@ -43,7 +43,7 @@ export default function CustomerLogin() {
     setLoading(true);
     customerStorage.setGuestInfo(trimName, trimPhone);
     customerStorage.setGuestMode(true);
-    toast({ title: tc("أهلاً ", "Welcome ") + trimName + " 👋", description: tc("اختر مشروبك وأكمل الطلب", "Choose your drink and complete your order") });
+    toast({ title: tc("أهلاً ", "Welcome ") + trimName, description: tc("اختر مشروبك وأكمل الطلب", "Choose your drink and complete your order") });
     setLocation("/menu");
   };
 
@@ -162,7 +162,7 @@ export default function CustomerLogin() {
           </div>
 
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-sm text-amber-800 dark:text-amber-300">
-            <p className="font-semibold mb-0.5">💡 {tc("ملاحظة", "Note")}</p>
+            <p className="font-semibold mb-0.5">{tc("ملاحظة", "Note")}</p>
             <p>{tc("الطلب السريع لا يشمل نقاط الولاء. يمكنك التسجيل لاحقاً بنفس رقم الجوال وسيتم ربط طلباتك تلقائياً.", "Quick orders don't include loyalty points. You can register later with the same number and your orders will be linked automatically.")}</p>
           </div>
 

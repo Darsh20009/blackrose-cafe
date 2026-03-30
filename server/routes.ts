@@ -7087,11 +7087,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Validate delivery data when deliveryType is 'delivery'
       if (deliveryType === 'delivery') {
-        if (!deliveryAddress || !deliveryAddress.lat || !deliveryAddress.lng) {
-          return res.status(400).json({ error: "Delivery address with coordinates is required for delivery orders" });
-        }
-        if (deliveryFee === undefined || deliveryFee === null) {
-          return res.status(400).json({ error: "Delivery fee is required for delivery orders" });
+        if (!deliveryAddress || !deliveryAddress.fullAddress) {
+          return res.status(400).json({ error: "Delivery address is required for delivery orders" });
         }
       }
 

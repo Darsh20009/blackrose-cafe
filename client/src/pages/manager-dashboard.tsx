@@ -940,7 +940,7 @@ export default function ManagerDashboard() {
          {topItemsData.length > 0 && (
            <div className="bg-card border border-border rounded-2xl p-4">
              <div className="flex items-center justify-between mb-4">
-               <div className="text-foreground font-bold text-sm">🏆 الأكثر مبيعاً</div>
+               <div className="text-foreground font-bold text-sm">الأكثر مبيعاً</div>
                <Button variant="ghost" size="sm" onClick={() => setLocation("/manager/analytics")} className="text-[#2D9B6E] hover:text-[#2D9B6E] text-xs h-7">
                  التفاصيل ←
                </Button>

@@ -169,7 +169,7 @@ function CarSVG({ color, className = '' }: { color: string; className?: string }
   );
 }
 
-type OrderMethod = 'takeaway' | 'car-pickup' | 'dine-in' | 'scheduled';
+type OrderMethod = 'takeaway' | 'car-pickup' | 'dine-in' | 'scheduled' | 'delivery';
 
 export default function DeliverySelectionPage() {
   const { t, i18n } = useTranslation();
@@ -210,6 +210,7 @@ export default function DeliverySelectionPage() {
   const [arrivalTime, setArrivalTime] = useState<string>('');
   const [loadingTables, setLoadingTables] = useState(false);
   const [bookedTable, setBookedTable] = useState<{ tableNumber: string; bookingId: string } | null>(null);
+  const [deliveryAddressText, setDeliveryAddressText] = useState<string>('');
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -368,6 +369,7 @@ export default function DeliverySelectionPage() {
   const enableCarPickup = orderMethods.enableCarPickup !== false;
   const enableScheduledPickup = orderMethods.enableScheduledPickup !== false;
   const enableTakeaway = orderMethods.enableTakeaway !== false;
+  const enableDelivery = orderMethods.enableDelivery !== false;
 
   const handleContinue = () => {
     if (!cartItems || cartItems.length === 0) {
@@ -410,8 +412,17 @@ export default function DeliverySelectionPage() {
       return;
     }
 
+    if (selectedMethod === 'delivery' && !deliveryAddressText.trim()) {
+      toast({ title: t("product.error"), description: "يرجى إدخال عنوان التوصيل", variant: 'destructive' });
+      return;
+    }
+
     setDeliveryInfo({
-      type: selectedMethod === 'car-pickup' ? 'car-pickup' : selectedMethod === 'scheduled' ? 'scheduled-pickup' : selectedMethod === 'dine-in' ? 'dine-in' : 'pickup',
+      type: selectedMethod === 'car-pickup' ? 'car-pickup'
+          : selectedMethod === 'scheduled' ? 'scheduled-pickup'
+          : selectedMethod === 'dine-in' ? 'dine-in'
+          : selectedMethod === 'delivery' ? 'delivery'
+          : 'pickup',
       branchId: branch.id,
       branchName: branch.nameAr,
       branchAddress: branch.address,
@@ -427,6 +438,7 @@ export default function DeliverySelectionPage() {
       tableNumber: bookedTable?.tableNumber || undefined,
       arrivalTime: arrivalTime || undefined,
       scheduledPickupTime: selectedMethod === 'scheduled' ? scheduledPickupTime : undefined,
+      deliveryAddress: selectedMethod === 'delivery' ? deliveryAddressText.trim() : undefined,
       deliveryFee: 0,
     });
 
@@ -442,7 +454,6 @@ export default function DeliverySelectionPage() {
     enableTakeaway && {
       id: 'takeaway' as OrderMethod,
       icon: Store,
-      emoji: '🏪',
       label: 'استلام من الفرع',
       desc: 'استلم طلبك مباشرة',
       color: 'from-blue-500 to-blue-600',
@@ -452,7 +463,6 @@ export default function DeliverySelectionPage() {
     enableCarPickup && {
       id: 'car-pickup' as OrderMethod,
       icon: Car,
-      emoji: '🚗',
       label: 'استلام من السيارة',
       desc: 'لا تنزل من سيارتك',
       color: 'from-purple-500 to-purple-600',
@@ -463,7 +473,6 @@ export default function DeliverySelectionPage() {
     enableDineIn && {
       id: 'dine-in' as OrderMethod,
       icon: Utensils,
-      emoji: '🍽️',
       label: 'داخل المطعم',
       desc: 'اجلس واطلب من طاولتك',
       color: 'from-orange-500 to-orange-600',
@@ -473,17 +482,24 @@ export default function DeliverySelectionPage() {
     enableScheduledPickup && {
       id: 'scheduled' as OrderMethod,
       icon: Timer,
-      emoji: '⏰',
       label: 'طلب مجدول',
       desc: 'حدد وقت وصولك',
       color: 'from-teal-500 to-teal-600',
       ring: 'ring-teal-500',
       bg: 'bg-teal-50 dark:bg-teal-950/20',
     },
+    enableDelivery && {
+      id: 'delivery' as OrderMethod,
+      icon: Truck,
+      label: 'توصيل للمنزل',
+      desc: 'نوصل لباب بيتك',
+      color: 'from-green-500 to-green-600',
+      ring: 'ring-green-500',
+      bg: 'bg-green-50 dark:bg-green-950/20',
+    },
   ].filter(Boolean) as Array<{
     id: OrderMethod;
     icon: any;
-    emoji: string;
     label: string;
     desc: string;
     color: string;
@@ -620,7 +636,9 @@ export default function DeliverySelectionPage() {
                         <Check className="w-3 h-3 text-white" />
                       </div>
                     )}
-                    <div className="text-3xl mb-2">{method.emoji}</div>
+                    <div className="mb-2 flex items-center justify-center">
+                      <method.icon className="w-8 h-8" />
+                    </div>
                     <p className={`text-sm font-bold ${isSelected ? '' : 'text-foreground'}`}>{method.label}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">{method.desc}</p>
                   </button>
@@ -829,7 +847,7 @@ export default function DeliverySelectionPage() {
             {selectedMethod === 'dine-in' && (
               <Card className="border-orange-200 dark:border-orange-800">
                 <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-4">
-                  <p className="text-white font-bold text-sm mb-1">🍽️ حجز طاولة</p>
+                  <p className="text-white font-bold text-sm mb-1">حجز طاولة</p>
                   <p className="text-orange-100 text-xs">اختر طاولتك المفضلة وسيكون طلبك جاهزاً عند وصولك</p>
                 </div>
                 <CardContent className="p-4 space-y-4">
@@ -911,7 +929,7 @@ export default function DeliverySelectionPage() {
             {selectedMethod === 'scheduled' && (
               <Card className="border-teal-200 dark:border-teal-800">
                 <div className="bg-gradient-to-r from-teal-500 to-teal-600 p-4">
-                  <p className="text-white font-bold text-sm mb-1">⏰ طلب مجدول</p>
+                  <p className="text-white font-bold text-sm mb-1">طلب مجدول</p>
                   <p className="text-teal-100 text-xs">سيبدأ تحضير طلبك قبل وصولك بوقت كافٍ ليكون جاهزاً تماماً</p>
                 </div>
                 <CardContent className="p-4 space-y-4">
@@ -954,11 +972,39 @@ export default function DeliverySelectionPage() {
                           </div>
                         </div>
                         <p className="text-xs text-teal-600 dark:text-teal-400 font-medium">
-                          🎯 طلبك سيكون جاهزاً تماماً عند وصولك!
+                          طلبك سيكون جاهزاً تماماً عند وصولك!
                         </p>
                       </div>
                     );
                   })()}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Delivery Address Form */}
+            {selectedMethod === 'delivery' && (
+              <Card className="border-green-200 dark:border-green-800">
+                <div className="bg-gradient-to-r from-green-500 to-green-600 p-4">
+                  <p className="text-white font-bold text-sm mb-1">توصيل للمنزل</p>
+                  <p className="text-green-100 text-xs">أدخل عنوانك وسنوصل طلبك إليك</p>
+                </div>
+                <CardContent className="p-4 space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">عنوان التوصيل</Label>
+                    <Input
+                      placeholder="مثال: حي النرجس، شارع الأمير محمد، مبنى 12"
+                      value={deliveryAddressText}
+                      onChange={(e) => setDeliveryAddressText(e.target.value)}
+                      className="text-sm"
+                      data-testid="input-delivery-address"
+                    />
+                  </div>
+                  <div className="flex items-start gap-2 p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
+                    <MapPin className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-green-700 dark:text-green-400">
+                      سيتواصل معك موظفونا لتأكيد العنوان وتحديد رسوم التوصيل
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             )}

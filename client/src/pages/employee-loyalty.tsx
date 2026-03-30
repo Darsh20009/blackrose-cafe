@@ -82,7 +82,7 @@ export default function EmployeeLoyalty() {
     onSuccess: (data) => {
       invalidateCard();
       if (data.earnedFreeCup) {
-        toast({ title: tc("🎉 تهانينا!", "🎉 Congratulations!"), description: tc("حصل العميل على مشروب مجاني!", "Customer earned a free drink!") });
+        toast({ title: tc("تهانينا!", "Congratulations!"), description: tc("حصل العميل على مشروب مجاني!", "Customer earned a free drink!") });
       } else {
         toast({ title: tc("✓ تم إضافة الطابع", "✓ Stamp Added"), description: `${tc("الطوابع:", "Stamps:")} ${data.card?.stamps ?? "-"} / 6` });
       }

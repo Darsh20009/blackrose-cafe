@@ -39,6 +39,7 @@ export interface DeliveryInfo {
     zone: string;
   };
   deliveryFee?: number;
+  deliveryAddress?: string;
 }
 
 interface CartContextType {

@@ -134,11 +134,11 @@ export default function ManagerReviewsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{tc("الكل", "All")}</SelectItem>
-              <SelectItem value="5">5 {tc("نجوم", "stars")} ⭐⭐⭐⭐⭐</SelectItem>
-              <SelectItem value="4">4 {tc("نجوم", "stars")} ⭐⭐⭐⭐</SelectItem>
-              <SelectItem value="3">3 {tc("نجوم", "stars")} ⭐⭐⭐</SelectItem>
-              <SelectItem value="2">2 {tc("نجوم", "stars")} ⭐⭐</SelectItem>
-              <SelectItem value="1">{tc("نجمة واحدة", "1 star")} ⭐</SelectItem>
+              <SelectItem value="5">5 {tc("نجوم", "stars")} ★★★★★</SelectItem>
+              <SelectItem value="4">4 {tc("نجوم", "stars")} ★★★★</SelectItem>
+              <SelectItem value="3">3 {tc("نجوم", "stars")} ★★★</SelectItem>
+              <SelectItem value="2">2 {tc("نجوم", "stars")} ★★</SelectItem>
+              <SelectItem value="1">{tc("نجمة واحدة", "1 star")} ★</SelectItem>
             </SelectContent>
           </Select>
         </div>

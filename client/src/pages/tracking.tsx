@@ -227,7 +227,7 @@ export default function OrderTrackingPage() {
                     <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
                       <span className="text-muted-foreground">{t("tracking.drink_status")}:</span>
                       <Badge variant={order.status === 'ready' ? 'default' : 'secondary'} className="text-sm px-3 py-1">
-                        {order.status === 'ready' ? `✨ ${t("tracking.ready_badge")}` : order.status === 'in_progress' ? `☕ ${t("tracking.preparing_badge")}` : `⏳ ${t("tracking.pending_badge")}`}
+                        {order.status === 'ready' ? t("tracking.ready_badge") : order.status === 'in_progress' ? t("tracking.preparing_badge") : t("tracking.pending_badge")}
                       </Badge>
                     </div>
                     <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">

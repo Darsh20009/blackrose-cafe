@@ -61,7 +61,7 @@ export default function MyOrders() {
      setActiveReview(null);
      setReviewRating(5);
      setReviewComment('');
-     toast({ title: tc('شكراً على تقييمك! 🌟', 'Thank you for your rating! 🌟') });
+     toast({ title: tc('شكراً على تقييمك!', 'Thank you for your rating!') });
    },
    onError: (err: any) => {
      if (String(err?.message || '').includes(tc('مسبقاً', 'already'))) {

@@ -1728,7 +1728,7 @@ export default function AdminSettings() {
                 </div>
 
                 <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded border border-green-200 dark:border-green-800 text-xs space-y-1">
-                  <p className="font-bold text-green-800 dark:text-green-300">⭐ Paymob السعودية (الإعداد الجديد — ksa.paymob.com)</p>
+                  <p className="font-bold text-green-800 dark:text-green-300">Paymob السعودية (الإعداد الجديد — ksa.paymob.com)</p>
                   <p className="text-green-700 dark:text-green-400">أدخل الـ Secret Key و Public Key من لوحة تحكم Paymob السعودية أدناه. هذا الإعداد يفعّل الـ Unified Checkout مباشرةً.</p>
                   <p className="text-green-600 dark:text-green-500 font-mono text-[10px]">Callback URL: {window.location.origin}/api/payments/paymob/webhook</p>
                 </div>

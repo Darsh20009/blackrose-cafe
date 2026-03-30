@@ -47,11 +47,19 @@ export function AuthGuard({
             break;
           }
           case "employee": {
+            // Roles that belong ONLY to the manager portal
+            const managerOnlyRoles = ["manager", "branch_manager", "admin", "owner"];
             const employee = localStorage.getItem("currentEmployee");
             if (employee) {
               const parsed = JSON.parse(employee);
+              const role = parsed.role || "";
+              // If this is a manager-level account, kick them to the manager portal
+              if (managerOnlyRoles.includes(role)) {
+                setLocation("/manager/dashboard");
+                return;
+              }
               isAuthenticated = true;
-              userRole = parsed.role || "";
+              userRole = role;
               allowedPages = parsed.allowedPages || [];
             } else {
               // Final fallback check session
@@ -59,24 +67,36 @@ export function AuthGuard({
               if (response.ok) {
                 const user = await response.json();
                 if (user.type === 'employee') {
-                  localStorage.setItem("currentEmployee", JSON.stringify(user));
-                  isAuthenticated = true;
-                  userRole = user.role || "";
+                  const role = user.role || "";
+                  if (!managerOnlyRoles.includes(role)) {
+                    localStorage.setItem("currentEmployee", JSON.stringify(user));
+                    isAuthenticated = true;
+                    userRole = role;
+                  } else {
+                    setLocation("/manager/dashboard");
+                    return;
+                  }
                 }
               }
             }
             break;
           }
           case "manager": {
-            // Managers also use currentEmployee storage key
+            // Roles that belong ONLY to the employee portal (cannot access manager routes)
+            const employeeOnlyRoles = ["cashier", "barista", "waiter", "cook"];
             const manager = localStorage.getItem("currentEmployee") || localStorage.getItem("currentManager");
             if (manager) {
               const parsed = JSON.parse(manager);
-              // Check if user has manager/admin/owner role
+              const role = parsed.role || "";
+              // If this is a pure employee role, redirect to employee portal
+              if (employeeOnlyRoles.includes(role)) {
+                setLocation("/employee/dashboard");
+                return;
+              }
               const allowedManagerRoles = ["manager", "admin", "owner", "branch_manager", "supervisor"];
-              if (allowedManagerRoles.includes(parsed.role)) {
+              if (allowedManagerRoles.includes(role)) {
                 isAuthenticated = true;
-                userRole = parsed.role || "manager";
+                userRole = role;
                 allowedPages = parsed.allowedPages || [];
               }
             }

@@ -59,7 +59,7 @@ const TASK_OPTIONS: TaskOption[] = [
   },
   {
     id: "description_both",
-    labelAr: "وصف ثنائي ✨",
+    labelAr: "وصف ثنائي",
     labelEn: "Both Languages",
     icon: <Layers className="w-4 h-4" />,
     color: "from-violet-600 to-purple-700",
@@ -231,7 +231,7 @@ export function AIMenuAssistant({
         data-testid="button-ai-assistant"
       >
         <Sparkles className={`${compact ? "w-3 h-3" : "w-4 h-4"} ml-1.5`} />
-        {compact ? "AI ✨" : "مساعد الذكاء الاصطناعي ✨"}
+        {compact ? "AI" : "مساعد الذكاء الاصطناعي"}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

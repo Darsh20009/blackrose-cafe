@@ -1002,7 +1002,7 @@ export default function CopyCard() {
               </div>
             </div>
             <div className="bg-gradient-to-br from-amber-950/40 to-stone-900/40 rounded-2xl p-4 border border-amber-500/20">
-              <p className="text-xs font-bold text-amber-400 mb-2.5 flex items-center gap-1.5">⭐ كيف تستخدم نقاطك؟</p>
+              <p className="text-xs font-bold text-amber-400 mb-2.5 flex items-center gap-1.5">كيف تستخدم نقاطك؟</p>
               <div className="space-y-2">
                 <div className="flex items-start gap-2 text-[11px] text-white/60">
                   <span className="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-black text-[10px] flex-shrink-0 mt-0.5">١</span>
