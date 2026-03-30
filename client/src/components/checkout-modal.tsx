@@ -265,6 +265,7 @@ const CheckoutModal = memo(() => {
  const getCurrentStepIndex = () => steps.findIndex(step => step.id === currentStep);
 
  return (
+<>
  <Dialog open={isCheckoutOpen} onOpenChange={handleClose} data-testid="modal-checkout">
  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gradient-to-br from-background via-card to-background border-primary/30" dir={dir}>
  <DialogHeader className="text-center pb-6">
@@ -474,6 +475,8 @@ const CheckoutModal = memo(() => {
      }}
    />
  )}
+
+</>
  );
 });
 
