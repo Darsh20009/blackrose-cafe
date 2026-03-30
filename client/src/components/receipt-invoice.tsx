@@ -137,19 +137,25 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
         </tr>`;
     }).join('');
 
-    // ── صفحة العميل (Page 1) ──
+    const isCarPickup = (order as any).deliveryType === 'curbside' ||
+      (order as any).deliveryType === 'car_pickup' ||
+      (order as any).deliveryType === 'car-pickup' ||
+      (order as any).carPickup;
+    const carType    = (order as any).carType    || (order as any).carInfo?.carType    || '';
+    const carColor   = (order as any).carColor   || (order as any).carInfo?.carColor   || '';
+    const plateNumber = (order as any).plateNumber || (order as any).carPlate || (order as any).carInfo?.plateNumber || '';
+
+    // ── صفحة العميل (Page 1) — بدون بيانات السيارة ──
     const customerPage = `
-      <div style="page-break-after:always;font-family:'Cairo',Arial,sans-serif;direction:rtl;width:80mm;max-width:80mm;margin:0 auto;padding:10px;color:#000;font-size:12px;">
+      <div style="page-break-after:always;break-after:page;font-family:'Cairo',Arial,sans-serif;direction:rtl;width:80mm;max-width:80mm;margin:0 auto;padding:10px;color:#000;font-size:12px;">
         <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:8px;">
-          <img src="${logoImage}" alt="BLACK ROSE CAFE" style="width:80px;height:80px;object-fit:contain;display:block;margin:0 auto 4px;filter:invert(1);mix-blend-mode:multiply;" />
+          <img src="${logoImage}" alt="BLACK ROSE CAFE" style="width:80px;height:80px;object-fit:contain;display:block;margin:0 auto 4px;" />
           <div style="font-size:16px;font-weight:bold;">${brand.nameAr}</div>
           <div style="font-size:10px;color:#555;">فاتورة ضريبية — نسخة العميل</div>
-          <div style="font-size:11px;margin-top:4px;">رقم الطلب: <strong>${order.orderNumber || ''}</strong></div>
+          <div style="font-size:11px;margin-top:4px;">رقم الطلب: <strong>#${order.orderNumber || ''}</strong></div>
           <div style="font-size:10px;">${dateStr} ${timeStr}</div>
           ${(order as any).tableNumber ? `<div style="font-size:11px;">طاولة: <strong>${(order as any).tableNumber}</strong></div>` : ''}
           ${(order as any).scheduledPickupTime ? `<div style="font-size:11px;color:#d97706;font-weight:bold;">🕐 موعد الاستلام: ${(order as any).scheduledPickupTime}</div>` : ''}
-          ${((order as any).deliveryType === 'curbside' || (order as any).deliveryType === 'car_pickup' || (order as any).deliveryType === 'car-pickup' || (order as any).carPickup) ? `<div style="font-size:11px;color:#6b21a8;font-weight:bold;">🚗 استلام من السيارة</div>` : ''}
-          ${((order as any).carType || (order as any).carInfo?.carType) ? `<div style="font-size:10px;color:#6b21a8;">نوع: ${(order as any).carType || (order as any).carInfo?.carType || ''} | لون: ${(order as any).carColor || (order as any).carInfo?.carColor || ''} | لوحة: ${(order as any).plateNumber || (order as any).carPlate || (order as any).carInfo?.plateNumber || ''}</div>` : ''}
         </div>
         <div style="margin-bottom:6px;font-size:11px;">
           <div>العميل: ${(order as any).customerName || 'عميل نقدي'}</div>
@@ -187,11 +193,11 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
         </div>` : ''}
         <div style="text-align:center;margin-top:10px;border-top:1px solid #000;padding-top:6px;font-size:10px;color:#555;">
           <div style="font-weight:bold;">شكراً لزيارتكم!</div>
-          <div>www.blackrose.com.sa</div>
+          <div>www.blackrose.sa</div>
         </div>
       </div>`;
 
-    // ── صفحة الموظف / المطبخ (Page 2) ──
+    // ── صفحة الموظف / المطبخ (Page 2) — مع بيانات السيارة ──
     const employeeItemsHtml = items.map((item: any) => {
       const nameAr = item.nameAr || item.coffeeItem?.nameAr || item.name || '';
       const nameEn = item.nameEn || item.coffeeItem?.nameEn || '';
@@ -214,13 +220,13 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
       <div style="font-family:'Cairo',Arial,sans-serif;direction:rtl;width:80mm;max-width:80mm;margin:0 auto;padding:10px;color:#000;">
         <div style="text-align:center;border-bottom:3px solid #000;padding-bottom:10px;margin-bottom:10px;">
           <div style="font-size:13px;font-weight:bold;color:#555;">ورقة التحضير — نسخة الموظف</div>
-          <div style="font-size:30px;font-weight:bold;margin:8px 0;letter-spacing:2px;">${order.orderNumber || ''}</div>
+          <div style="font-size:30px;font-weight:bold;margin:8px 0;letter-spacing:2px;">#${order.orderNumber || ''}</div>
           <div style="font-size:11px;">${timeStr} — ${dateStr}</div>
           ${(order as any).tableNumber ? `<div style="font-size:13px;font-weight:bold;margin-top:4px;">طاولة رقم: ${(order as any).tableNumber}</div>` : ''}
           ${(order as any).scheduledPickupTime ? `<div style="font-size:12px;font-weight:bold;color:#d97706;">🕐 موعد الاستلام: ${(order as any).scheduledPickupTime}</div>` : ''}
-          ${((order as any).deliveryType === 'curbside' || (order as any).deliveryType === 'car_pickup' || (order as any).deliveryType === 'car-pickup' || (order as any).carPickup) ? `<div style="font-size:12px;font-weight:bold;color:#6b21a8;">🚗 استلام من السيارة</div>` : ''}
-          ${((order as any).carType || (order as any).carInfo?.carType) ? `<div style="font-size:11px;color:#6b21a8;font-weight:bold;">نوع: ${(order as any).carType || (order as any).carInfo?.carType || ''} | لون: ${(order as any).carColor || (order as any).carInfo?.carColor || ''} | لوحة: ${(order as any).plateNumber || (order as any).carPlate || (order as any).carInfo?.plateNumber || ''}</div>` : ''}
-          ${(order as any).orderType ? `<div style="font-size:11px;color:#555;">${(order as any).orderType}</div>` : ''}
+          ${isCarPickup ? `<div style="font-size:13px;font-weight:bold;color:#6b21a8;border:2px solid #6b21a8;padding:3px 6px;margin-top:4px;border-radius:4px;">🚗 استلام من السيارة</div>` : ''}
+          ${carType ? `<div style="font-size:12px;color:#6b21a8;font-weight:bold;margin-top:4px;background:#f3e8ff;padding:4px 8px;border-radius:4px;">نوع: ${carType} | لون: ${carColor} | لوحة: ${plateNumber}</div>` : ''}
+          ${(order as any).orderType ? `<div style="font-size:11px;color:#555;margin-top:4px;">${(order as any).orderType}</div>` : ''}
         </div>
         <div style="margin-bottom:10px;">
           ${employeeItemsHtml}
