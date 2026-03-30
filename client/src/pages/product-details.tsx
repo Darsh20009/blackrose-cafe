@@ -433,7 +433,7 @@ export default function ProductDetails() {
             </div>
 
             {/* Add to Cart Button - Mobile Sticky */}
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-lg border-t z-50 lg:relative lg:p-0 lg:bg-transparent lg:border-0">
+            <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-lg border-t z-50 lg:relative lg:p-0 lg:bg-transparent lg:border-0" style={{paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 16px)'}}>
               <Button
                 onClick={handleAddToCart}
                 size="lg"
