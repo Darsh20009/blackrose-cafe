@@ -1,0 +1,661 @@
+import { useEffect, useState, useRef, useCallback } from "react";
+import { useLocation } from "wouter";
+import { useTranslate } from "@/lib/useTranslate";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { 
+  Coffee, LogOut, MapPin, Camera, Clock, CheckCircle2, XCircle, 
+  Loader2, ArrowRight, Calendar, AlertCircle, RefreshCw, FileText, Briefcase 
+} from "lucide-react";
+import LocationDistanceMap from "@/components/location-distance-map";
+import type { Employee } from "@shared/schema";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
+
+interface AttendanceStatus {
+  hasCheckedIn: boolean;
+  hasCheckedOut: boolean;
+  attendance: {
+    id: string;
+    checkInTime: string;
+    checkOutTime?: string;
+    isLate: number;
+    lateMinutes?: number;
+  } | null;
+  todayCheckIn?: string;
+  todayCheckOut?: string;
+  leaveBalance?: number;
+  totalLeaves?: number;
+}
+
+interface DistanceError {
+  userLocation: { lat: number; lng: number };
+  branchLocation: { lat: number; lng: number };
+  distance: number;
+  mapsUrl: string;
+}
+
+export default function EmployeeAttendance() {
+  const tc = useTranslate();
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [employee, setEmployee] = useState<Employee | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus | null>(null);
+  const [location, setLocationState] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [distanceError, setDistanceError] = useState<DistanceError | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    const storedEmployee = localStorage.getItem("currentEmployee");
+    if (storedEmployee) {
+      setEmployee(JSON.parse(storedEmployee));
+      fetchAttendanceStatus();
+    } else {
+      setLocation("/employee/gateway");
+    }
+
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [setLocation]);
+
+  const fetchAttendanceStatus = async () => {
+    try {
+      const response = await fetch("/api/attendance/my-status", {
+        credentials: "include"
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAttendanceStatus(data);
+      }
+    } catch (error) {
+      console.error("Error fetching attendance status:", error);
+    }
+  };
+
+  const getLocation = useCallback(() => {
+    setLocationError(null);
+    if (!navigator.geolocation) {
+      setLocationError(tc("المتصفح لا يدعم تحديد الموقع", "Browser does not support geolocation"));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocationState({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        });
+      },
+      (error) => {
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError(tc("تم رفض إذن تحديد الموقع. يرجى السماح بتحديد الموقع من إعدادات المتصفح.", "Location permission denied. Please allow location access in browser settings."));
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setLocationError(tc("معلومات الموقع غير متوفرة.", "Location information unavailable."));
+            break;
+          case error.TIMEOUT:
+            setLocationError(tc("انتهت مهلة طلب الموقع.", "Location request timed out."));
+            break;
+          default:
+            setLocationError(tc("حدث خطأ غير معروف.", "An unknown error occurred."));
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
+  }, []);
+
+  useEffect(() => {
+    getLocation();
+  }, [getLocation]);
+
+  const startCamera = async () => {
+    setIsCapturing(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" }
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (error) {
+      toast({
+        title: tc("خطأ", "Error"),
+        description: tc("لا يمكن الوصول للكاميرا", "Cannot access the camera"),
+        variant: "destructive"
+      });
+      setIsCapturing(false);
+    }
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+
+    if (!context) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video, 0, 0);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    setCapturedPhoto(dataUrl);
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
+    setIsCapturing(false);
+
+    const blob = await fetch(dataUrl).then(r => r.blob());
+    const formData = new FormData();
+    formData.append('photo', blob, 'attendance.jpg');
+
+    try {
+      const response = await fetch('/api/upload-attendance-photo', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPhotoUrl(data.url);
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (error) {
+      toast({
+        title: tc("خطأ", "Error"),
+        description: tc("فشل رفع الصورة", "Failed to upload photo"),
+        variant: "destructive"
+      });
+    }
+  };
+
+  const retakePhoto = () => {
+    setCapturedPhoto(null);
+    setPhotoUrl(null);
+    startCamera();
+  };
+
+  const handleCheckIn = async () => {
+    if (!location) {
+      toast({
+        title: tc("خطأ", "Error"),
+        description: tc("يرجى تحديد الموقع أولاً", "Please get your location first"),
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!photoUrl) {
+      toast({
+        title: tc("خطأ", "Error"),
+        description: tc("يرجى التقاط صورة أولاً", "Please take a photo first"),
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/attendance/check-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location, photoUrl }),
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // If error includes map URL, show it with a map instead of toast
+        if (data.showMap && data.mapsUrl && data.userLocation && data.branchLocation) {
+          setDistanceError({
+            userLocation: data.userLocation,
+            branchLocation: data.branchLocation,
+            distance: data.distance,
+            mapsUrl: data.mapsUrl
+          });
+        } else {
+          toast({
+            title: tc("خطأ", "Error"),
+            description: data.error || tc("فشل التحضير", "Check-in failed"),
+            variant: "destructive",
+            duration: 10000
+          });
+        }
+        return;
+      }
+
+      toast({
+        title: tc("تم التحضير", "Checked in"),
+        description: data.message
+      });
+
+      fetchAttendanceStatus();
+      setCapturedPhoto(null);
+      setPhotoUrl(null);
+    } catch (error: any) {
+      toast({
+        title: tc("خطأ", "Error"),
+        description: error.message || tc("فشل التحضير", "Check-in failed"),
+        variant: "destructive",
+        duration: 10000
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCheckOut = async () => {
+    if (!location) {
+      toast({
+        title: tc("خطأ", "Error"),
+        description: tc("يرجى تحديد الموقع أولاً", "Please get your location first"),
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!photoUrl) {
+      toast({
+        title: tc("خطأ", "Error"),
+        description: tc("يرجى التقاط صورة أولاً", "Please take a photo first"),
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/attendance/check-out', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location, photoUrl }),
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // If error includes map URL, show it with a map instead of toast
+        if (data.showMap && data.mapsUrl && data.userLocation && data.branchLocation) {
+          setDistanceError({
+            userLocation: data.userLocation,
+            branchLocation: data.branchLocation,
+            distance: data.distance,
+            mapsUrl: data.mapsUrl
+          });
+        } else {
+          toast({
+            title: tc("خطأ", "Error"),
+            description: data.error || tc("فشل الانصراف", "Check-out failed"),
+            variant: "destructive",
+            duration: 10000
+          });
+        }
+        return;
+      }
+
+      toast({
+        title: tc("تم الانصراف", "Checked out"),
+        description: data.message
+      });
+
+      fetchAttendanceStatus();
+      setCapturedPhoto(null);
+      setPhotoUrl(null);
+    } catch (error: any) {
+      toast({
+        title: tc("خطأ", "Error"),
+        description: error.message || tc("فشل الانصراف", "Check-out failed"),
+        variant: "destructive",
+        duration: 10000
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("currentEmployee");
+    setLocation("/employee/gateway");
+  };
+
+  if (!employee) {
+    return null;
+  }
+
+  const today = new Date();
+  const formattedDate = today.toLocaleDateString('ar-SA', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 pb-20 sm:pb-4" dir="rtl">
+      <div className="max-w-lg mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+              <Coffee className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-primary">{tc("تسجيل الحضور", "Attendance")}</h1>
+              <p className="text-muted-foreground text-xs">{formattedDate}</p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleLogout}
+            className="text-muted-foreground hover:text-destructive"
+            data-testid="button-logout"
+          >
+            <LogOut className="w-5 h-5" />
+          </Button>
+        </div>
+
+        <Card className="bg-card border-border mb-4">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
+                <span className="text-primary text-lg font-bold">
+                  {employee.fullName?.charAt(0) || 'م'}
+                </span>
+              </div>
+              <div>
+                <h2 className="text-lg font-bold font-playfair text-foreground" data-testid="text-employee-name">
+                  {employee.fullName}
+                </h2>
+                <p className="text-muted-foreground text-sm">{employee.jobTitle || tc('موظف', 'Employee')}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Distance Error Map */}
+        {distanceError && (
+          <div className="mb-4">
+            <LocationDistanceMap
+              userLocation={distanceError.userLocation}
+              branchLocation={distanceError.branchLocation}
+              distance={distanceError.distance}
+              mapsUrl={distanceError.mapsUrl}
+              onClose={() => setDistanceError(null)}
+            />
+          </div>
+        )}
+
+        {attendanceStatus && (
+          <Card className="bg-card border-border mb-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-primary flex items-center gap-2">
+                <Calendar className="w-5 h-5" />
+                {tc("حالة اليوم والاجازات", "Today's Status & Leaves")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Check-in/Check-out Status */}
+              <div className="space-y-2">
+                {attendanceStatus.hasCheckedOut ? (
+                  <div className="flex items-center gap-2 text-green-600">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span>{tc("تم الانصراف", "Checked out")}</span>
+                  </div>
+                ) : attendanceStatus.hasCheckedIn ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-primary">
+                      <Clock className="w-5 h-5" />
+                      <span>
+                        {tc("وقت الحضور:", "Check-in:")} {new Date(attendanceStatus.attendance?.checkInTime || '').toLocaleTimeString('ar-SA')}
+                      </span>
+                    </div>
+                    {attendanceStatus.attendance?.isLate === 1 && (
+                      <Badge variant="destructive" className="text-xs">
+                        {tc("تأخير", "Late")} {attendanceStatus.attendance.lateMinutes} {tc("دقيقة", "min")}
+                      </Badge>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <XCircle className="w-5 h-5" />
+                    <span>{tc("لم يتم التحضير بعد", "Not checked in yet")}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="h-px bg-border"></div>
+
+              {/* Check-in & Check-out Times */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-primary/5 rounded-lg p-3">
+                  <p className="text-muted-foreground text-xs mb-1">{tc("وقت الحضور", "Check-in Time")}</p>
+                  <p className="text-primary font-semibold" data-testid="text-checkin-time">
+                    {attendanceStatus.todayCheckIn 
+                      ? new Date(attendanceStatus.todayCheckIn).toLocaleTimeString('ar-SA')
+                      : tc('لم يسجل بعد', 'Not recorded')}
+                  </p>
+                </div>
+                <div className="bg-primary/5 rounded-lg p-3">
+                  <p className="text-muted-foreground text-xs mb-1">{tc("وقت الانصراف", "Check-out Time")}</p>
+                  <p className="text-primary font-semibold" data-testid="text-checkout-time">
+                    {attendanceStatus.todayCheckOut 
+                      ? new Date(attendanceStatus.todayCheckOut).toLocaleTimeString('ar-SA')
+                      : tc('لم يسجل بعد', 'Not recorded')}
+                  </p>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="h-px bg-border"></div>
+
+              {/* Leave Balance */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-primary">
+                    <Briefcase className="w-5 h-5" />
+                    <span className="text-sm">{tc("رصيد الاجازات", "Leave Balance")}</span>
+                  </div>
+                  <Badge className="bg-primary/10 text-primary border-primary/20">
+                    {attendanceStatus.leaveBalance || 0} {tc("يوم", "days")}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{tc("إجمالي الاجازات السنوية", "Total Annual Leaves")}</span>
+                  <span>{attendanceStatus.totalLeaves || 0} {tc("يوم", "days")}</span>
+                </div>
+              </div>
+
+              {/* Apply for Leave Button */}
+              <Button 
+                onClick={() => setLocation("/employee/leave-request")}
+                className="w-full gap-2 bg-[#2D9B6E] hover:bg-[#2D9B6E]/90 text-white"
+                data-testid="button-apply-leave"
+              >
+                <FileText className="w-4 h-4" />
+                {tc("التقديم على اجازة", "Apply for Leave")}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className="bg-card border-border mb-4">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-primary flex items-center gap-2">
+              <MapPin className="w-5 h-5" />
+              {tc("الموقع", "Location")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {locationError ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-destructive">
+                  <AlertCircle className="w-5 h-5" />
+                  <span className="text-sm">{locationError}</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={getLocation}
+                  className="border-primary/50 text-primary"
+                  data-testid="button-retry-location"
+                >
+                  <RefreshCw className="w-4 h-4 ml-1" />
+                  {tc("إعادة", "Retry")}
+                </Button>
+              </div>
+            ) : location ? (
+              <div className="flex items-center gap-2 text-green-600">
+                <CheckCircle2 className="w-5 h-5" />
+                <span>{tc("تم تحديد الموقع", "Location obtained")}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>{tc("جاري تحديد الموقع...", "Getting location...")}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-primary flex items-center gap-2">
+              <Camera className="w-5 h-5" />
+              {tc("صورة الحضور", "Attendance Photo")}
+            </CardTitle>
+            <CardDescription className="text-muted-foreground text-xs">
+              {tc("التقط صورة سيلفي للتأكيد", "Take a selfie to confirm")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isCapturing ? (
+              <div className="space-y-3">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full rounded-lg"
+                />
+                <Button
+                  onClick={capturePhoto}
+                  className="w-full bg-primary hover:bg-primary/90"
+                  data-testid="button-capture"
+                >
+                  <Camera className="w-4 h-4 ml-2" />
+                  {tc("التقاط", "Capture")}
+                </Button>
+              </div>
+            ) : capturedPhoto ? (
+              <div className="space-y-3">
+                <img
+                  src={capturedPhoto}
+                  alt="Captured"
+                  className="w-full rounded-lg"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={retakePhoto}
+                    className="flex-1 border-primary/50 text-primary"
+                    data-testid="button-retake"
+                  >
+                    {tc("إعادة التقاط", "Retake")}
+                  </Button>
+                  {photoUrl && (
+                    <div className="flex items-center text-green-600 text-sm">
+                      <CheckCircle2 className="w-4 h-4 ml-1" />
+                      {tc("تم الرفع", "Uploaded")}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <Button
+                onClick={startCamera}
+                variant="outline"
+                className="w-full border-primary/50 text-primary"
+                data-testid="button-start-camera"
+              >
+                <Camera className="w-4 h-4 ml-2" />
+                {tc("فتح الكاميرا", "Open Camera")}
+              </Button>
+            )}
+            <canvas ref={canvasRef} className="hidden" />
+          </CardContent>
+        </Card>
+
+        {!attendanceStatus?.hasCheckedOut && (
+          <div className="space-y-3">
+            {!attendanceStatus?.hasCheckedIn ? (
+              <Button
+                onClick={handleCheckIn}
+                disabled={isLoading || !location || !photoUrl}
+                className="w-full h-14 bg-green-600 hover:bg-green-700 text-lg"
+                data-testid="button-check-in"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-5 h-5 animate-spin ml-2" />
+                ) : (
+                  <CheckCircle2 className="w-5 h-5 ml-2" />
+                )}
+                {tc("تسجيل الحضور", "Check In")}
+              </Button>
+            ) : (
+              <Button
+                onClick={handleCheckOut}
+                disabled={isLoading || !location || !photoUrl}
+                className="w-full h-14 bg-accent hover:bg-accent text-lg"
+                data-testid="button-check-out"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-5 h-5 animate-spin ml-2" />
+                ) : (
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                )}
+                {tc("تسجيل الانصراف", "Check Out")}
+              </Button>
+            )}
+          </div>
+        )}
+
+        <div className="mt-6">
+          <Button
+            variant="ghost"
+            onClick={() => setLocation("/employee/home")}
+            className="w-full text-muted-foreground hover:text-primary"
+            data-testid="button-back-dashboard"
+          >
+            {tc("العودة للوحة التحكم", "Back to Dashboard")}
+          </Button>
+        </div>
+      </div>
+      <MobileBottomNav employeeRole={employee?.role} />
+    </div>
+  );
+}
