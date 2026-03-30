@@ -43,7 +43,7 @@ export function usePlan() {
   });
 
   const subscription = config?.subscription;
-  const plan: PlanName = subscription?.plan || "lite";
+  const plan: PlanName = subscription?.plan || "infinity";
   const isActive = subscription?.isActive ?? true;
 
   function hasFeature(featureKey: FeatureKey | string): boolean {

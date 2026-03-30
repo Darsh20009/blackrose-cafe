@@ -77,6 +77,47 @@ async function connectDatabase() {
         }
       }
     } catch (_) {}
+    // Ensure demo-tenant has Infinity plan — all features unlocked
+    try {
+      const { SubscriptionConfigModel } = await import("./qirox-admin");
+      await SubscriptionConfigModel.findOneAndUpdate(
+        { tenantId: 'demo-tenant' },
+        {
+          $set: {
+            plan: 'infinity',
+            isActive: true,
+            maxBranches: 999,
+            maxEmployees: 9999,
+            maxProducts: 9999,
+            maxOrders: 999999,
+            customBranding: true,
+            apiAccess: true,
+            advancedAnalytics: true,
+            multiLanguage: true,
+            inventoryManagement: true,
+            recipeManagement: true,
+            accountingModule: true,
+            erpIntegration: true,
+            deliveryManagement: true,
+            loyaltyProgram: true,
+            giftCards: true,
+            tableManagement: true,
+            kitchenDisplay: true,
+            customerApp: true,
+            posSystem: true,
+            payrollManagement: true,
+            supplierManagement: true,
+            warehouseManagement: true,
+            zatcaCompliance: true,
+            supportPriority: 'dedicated',
+            activatedBy: 'system',
+            updatedAt: new Date(),
+          }
+        },
+        { upsert: true, new: true }
+      );
+      console.log("✅ Subscription: Infinity plan — all features unlocked");
+    } catch (_) {}
   } catch (error) {
     isDbConnected = false;
     console.error("❌ MongoDB connection error:", error);
