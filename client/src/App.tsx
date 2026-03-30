@@ -388,6 +388,9 @@ function App() {
       prefetch("/api/coffee-items"),
       prefetch("/api/menu-categories"),
       prefetch("/api/product-addons"),
+      prefetch("/api/custom-banners"),
+      prefetch("/api/payment-methods"),
+      prefetch("/api/public/loyalty-settings"),
     ]);
   }, []);
 

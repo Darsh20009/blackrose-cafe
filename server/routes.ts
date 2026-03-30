@@ -843,6 +843,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenantId = employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
       const branchId = (req.query.branchId as string) || employee?.branchId;
 
+      // 2-second burst cache: prevents DB hammering when multiple staff pages poll simultaneously
+      const ck = cacheKey('live-orders', tenantId, branchId || 'all');
+      const cached = cache.get<any[]>(ck);
+      if (cached) return res.json(cached);
+
       const query: any = {
         tenantId,
         status: { $in: ['pending', 'in_progress', 'ready', 'payment_confirmed', 'confirmed', 'preparing', 'serving'] }
@@ -869,6 +874,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
+      cache.set(ck, enriched, 2); // 2-second burst cache
       res.json(enriched);
     } catch (error) {
       console.error("Error fetching live orders:", error);
@@ -998,6 +1004,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const order = await storage.createOrder(orderData);
       const serializedOrder = serializeDoc(order);
+      cache.invalidate('live-orders:');
       
       // Notify via WebSocket - use broadcastNewOrder so POS/kitchen receive it as "new_order"
       wsManager.broadcastNewOrder(serializedOrder);
@@ -1333,6 +1340,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       cache.invalidateKey(cacheKey('biz-config', tenantId));
+      cache.invalidate('payment-methods:' + tenantId);
+      cache.invalidate('loyalty-settings:' + tenantId);
       res.json(serializeDoc(config));
     } catch (error) {
       console.error("[CONFIG] Error updating business config:", error);
@@ -1375,6 +1384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.body.paymentMethod) order.paymentMethod = req.body.paymentMethod;
       order.updatedAt = new Date();
       await order.save();
+      cache.invalidate('live-orders:');
 
       // Reverse totalSpent on loyalty card when order is cancelled by staff
       if (status === 'cancelled' && oldStatus !== 'cancelled' && order.customerId) {
@@ -1572,16 +1582,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all tables
   app.get("/api/tables", async (req, res) => {
     try {
-      // Use a consistent tenantId detection
       const branchId = req.query.branchId as string;
       const tenantId = req.headers['x-tenant-id'] as string || getTenantIdFromRequest(req) || 'demo-tenant';
+      const ck = cacheKey('tables', tenantId, branchId || 'all');
+      const cached = cache.get<any[]>(ck);
+      if (cached) return res.json(cached);
+
       let query: any = { tenantId };
       if (branchId && branchId !== 'none' && branchId !== 'undefined' && branchId !== 'null' && branchId !== '') {
         query.branchId = branchId;
       }
       
       const tables = await TableModel.find(query).sort({ tableNumber: 1 });
-      res.json(tables.map(serializeDoc));
+      const result = tables.map(serializeDoc);
+      cache.set(ck, result, CACHE_TTL.TABLES);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch tables" });
     }
@@ -1607,7 +1622,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isOccupied: 0
       };
       const table = await TableModel.create(tableData);
-
+      cache.invalidate('tables:' + tenantId);
       res.json(serializeDoc(table));
     } catch (error) {
       console.error("Error creating table:", error);
@@ -1667,6 +1682,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const created = await TableModel.insertMany(tables);
+      cache.invalidate('tables:' + tenantId);
       res.json({ results: { created: created.map(serializeDoc) } });
     } catch (error) {
       console.error("Error bulk creating tables:", error);
@@ -1710,6 +1726,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       
       const result = await TableModel.deleteMany({ branchId, tenantId });
+      cache.invalidate('tables:' + tenantId);
       res.json({ message: "تم حذف جميع الطاولات بنجاح", count: result.deletedCount });
     } catch (error) {
       console.error("Error deleting all tables:", error);
@@ -1720,6 +1737,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/tables/all", async (req, res) => {
     try {
       const result = await TableModel.deleteMany({});
+      cache.invalidate('tables:');
       res.json({ message: `Deleted ${result.deletedCount} tables` });
     } catch (error) {
       console.error("[TABLES_DELETE] Error:", error);
@@ -1737,6 +1755,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ].filter(q => q._id !== null || q.id !== undefined)
       });
       if (!result) return res.status(404).json({ error: "الطاولة غير موجودة" });
+      cache.invalidate('tables:');
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete table" });
@@ -1757,6 +1776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       table.isActive = table.isActive === 1 ? 0 : 1;
       await table.save();
+      cache.invalidate('tables:');
       res.json(serializeDoc(table));
     } catch (error) {
       res.status(500).json({ error: "Failed to toggle status" });
@@ -1775,8 +1795,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/custom-banners", async (req, res) => {
     try {
       const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const ck = cacheKey('banners', tenantId);
+      const cached = cache.get<any[]>(ck);
+      if (cached) return res.json(cached);
       const banners = await CustomBannerModel.find({ tenantId, isActive: true }).sort({ orderIndex: 1 });
-      res.json(banners.map(serializeDoc));
+      const result = banners.map(serializeDoc);
+      cache.set(ck, result, CACHE_TTL.BANNERS);
+      res.json(result);
     } catch (error) {
       console.error("Error fetching custom banners:", error);
       res.status(500).json({ error: "Failed to fetch banners" });
@@ -1794,6 +1819,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedAt: new Date()
       };
       const banner = await CustomBannerModel.create(bannerData);
+      cache.invalidate('banners:' + tenantId);
       res.json(serializeDoc(banner));
     } catch (error) {
       console.error("Error creating banner:", error);
@@ -1804,9 +1830,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/custom-banners/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const updates = { ...req.body, updatedAt: new Date() };
       const banner = await CustomBannerModel.findOneAndUpdate({ id }, updates, { new: true });
       if (!banner) return res.status(404).json({ error: "Banner not found" });
+      cache.invalidate('banners:' + tenantId);
       res.json(serializeDoc(banner));
     } catch (error) {
       console.error("Error updating banner:", error);
@@ -1817,8 +1845,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/custom-banners/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const result = await CustomBannerModel.deleteOne({ id });
       if (result.deletedCount === 0) return res.status(404).json({ error: "Banner not found" });
+      cache.invalidate('banners:' + tenantId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting banner:", error);
@@ -1933,12 +1963,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/public/loyalty-settings", async (req, res) => {
     try {
       const tenantId = 'demo-tenant';
+      const ck = cacheKey('loyalty-settings', tenantId);
+      const cached = cache.get<any>(ck);
+      if (cached) return res.json(cached);
       const config = await storage.getBusinessConfig(tenantId);
       const loyaltyConfig = (config as any)?.loyaltyConfig || {};
       const pointsPerSar = loyaltyConfig.pointsPerSar ?? 20;
       const cfgFallback = loyaltyConfig.pointsForFreeDrink ?? 500;
       const pointsForFreeDrink = await calcFreeDrinkThreshold(tenantId, pointsPerSar, cfgFallback);
-      res.json({
+      const result = {
         enabled: loyaltyConfig.enabled ?? true,
         pointsPerDrink: loyaltyConfig.pointsPerDrink ?? 10,
         pointsPerSar,
@@ -1947,7 +1980,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pointsValueInSar: loyaltyConfig.pointsValueInSar ?? 0.05,
         redemptionRate: loyaltyConfig.redemptionRate ?? 100,
         pointsForFreeDrink,
-      });
+      };
+      cache.set(ck, result, CACHE_TTL.LOYALTY_SETTINGS);
+      res.json(result);
     } catch (error) {
       res.json({
         enabled: true,
@@ -1965,12 +2000,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/loyalty-config", async (req, res) => {
     try {
       const tenantId = 'demo-tenant';
+      const ck = cacheKey('loyalty-settings', tenantId);
+      const cached = cache.get<any>(ck);
+      if (cached) return res.json(cached);
       const config = await storage.getBusinessConfig(tenantId);
       const loyaltyConfig = (config as any)?.loyaltyConfig || {};
       const pointsPerSar = loyaltyConfig.pointsPerSar ?? 20;
       const cfgFallback = loyaltyConfig.pointsForFreeDrink ?? 500;
       const pointsForFreeDrink = await calcFreeDrinkThreshold(tenantId, pointsPerSar, cfgFallback);
-      res.json({
+      const loyaltyResult = {
         enabled: loyaltyConfig.enabled ?? true,
         pointsPerDrink: loyaltyConfig.pointsPerDrink ?? 10,
         pointsPerSar,
@@ -1979,7 +2017,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pointsValueInSar: loyaltyConfig.pointsValueInSar ?? 0.05,
         redemptionRate: loyaltyConfig.redemptionRate ?? 100,
         pointsForFreeDrink,
-      });
+      };
+      cache.set(ck, loyaltyResult, CACHE_TTL.LOYALTY_SETTINGS);
+      res.json(loyaltyResult);
     } catch (error) {
       res.json({
         enabled: true,
@@ -2326,6 +2366,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/payment-methods", async (req, res) => {
     try {
       const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const ck = cacheKey('payment-methods', tenantId);
+      const cached = cache.get<any[]>(ck);
+      if (cached) return res.json(cached);
       const configDoc = await BusinessConfigModel.findOne({ tenantId });
       const pg = configDoc?.toObject()?.paymentGateway;
 
@@ -2393,6 +2436,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       allMethods.push({ id: 'loyalty-card', nameAr: 'بطاقة كوبي (رقم العميل)', nameEn: 'Loyalty Card', details: 'خصم تلقائي ودفع بالنقاط', icon: 'fas fa-gift' });
 
+      cache.set(ck, allMethods, CACHE_TTL.PAYMENT_METHODS);
       res.json(allMethods);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch payment methods" });
