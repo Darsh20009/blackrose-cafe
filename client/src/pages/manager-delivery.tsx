@@ -565,9 +565,29 @@ export default function ManagerDelivery() {
     },
   });
 
+  const orderStatusMutation = useMutation({
+    mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/orders/${orderId}/status`, { status });
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/delivery/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/delivery/stats"] });
+      const labels: Record<string, string> = {
+        in_progress: tc("طلبك قيد التحضير", "Order is being prepared"),
+        out_for_delivery: tc("الطلب في الطريق", "Order is on the way"),
+        completed: tc("تم تسليم الطلب", "Order delivered"),
+      };
+      toast({ title: labels[vars.status] || tc("تم تحديث الحالة", "Status updated"), className: "bg-green-600 text-white" });
+    },
+    onError: (err: any) => {
+      toast({ title: err.message || tc("فشل تحديث الحالة", "Status update failed"), variant: "destructive" });
+    },
+  });
+
   const stats = statsData?.stats;
   const activeOrders = ordersData.filter((o: any) =>
-    ['pending', 'accepted', 'assigned', 'picking_up', 'on_the_way', 'arrived'].includes(o.status)
+    ['pending', 'accepted', 'assigned', 'picking_up', 'on_the_way', 'arrived', 'in_progress', 'out_for_delivery'].includes(o.status)
   );
   const pendingOrders = ordersData.filter((o: any) => o.status === 'pending');
 
@@ -823,19 +843,53 @@ export default function ManagerDelivery() {
                         </div>
                       )}
 
-                      {order.status === 'pending' && (
-                        <div className="mt-3 flex gap-2">
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {order.status === 'pending' && (
+                          <>
+                            <Button
+                              size="sm"
+                              onClick={() => autoAssignMutation.mutate(order.id)}
+                              disabled={autoAssignMutation.isPending}
+                              className="bg-[#2D9B6E] hover:bg-[#258a5e] text-white"
+                            >
+                              <Zap className="w-3 h-3 ml-1" />
+                              {tc("تعيين سائق", "Assign Driver")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => orderStatusMutation.mutate({ orderId: order.id, status: 'in_progress' })}
+                              disabled={orderStatusMutation.isPending}
+                              className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                            >
+                              <Package className="w-3 h-3 ml-1" />
+                              {tc("بدء التحضير", "Start Preparing")}
+                            </Button>
+                          </>
+                        )}
+                        {order.status === 'in_progress' && (
                           <Button
                             size="sm"
-                            onClick={() => autoAssignMutation.mutate(order.id)}
-                            disabled={autoAssignMutation.isPending}
-                            className="bg-[#2D9B6E] hover:bg-[#258a5e]"
+                            onClick={() => orderStatusMutation.mutate({ orderId: order.id, status: 'out_for_delivery' })}
+                            disabled={orderStatusMutation.isPending}
+                            className="bg-orange-500 hover:bg-orange-600 text-white"
                           >
-                            <Zap className="w-3 h-3 ml-1" />
-                            {tc("تعيين تلقائي", "Auto Assign")}
+                            <Truck className="w-3 h-3 ml-1" />
+                            {tc("في الطريق", "Out for Delivery")}
                           </Button>
-                        </div>
-                      )}
+                        )}
+                        {order.status === 'out_for_delivery' && (
+                          <Button
+                            size="sm"
+                            onClick={() => orderStatusMutation.mutate({ orderId: order.id, status: 'completed' })}
+                            disabled={orderStatusMutation.isPending}
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                          >
+                            <CheckCircle className="w-3 h-3 ml-1" />
+                            {tc("تم التوصيل", "Delivered")}
+                          </Button>
+                        )}
+                      </div>
 
                       {order.estimatedDeliveryTime && (
                         <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">

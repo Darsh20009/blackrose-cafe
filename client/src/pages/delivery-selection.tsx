@@ -370,6 +370,7 @@ export default function DeliverySelectionPage() {
   const enableScheduledPickup = orderMethods.enableScheduledPickup !== false;
   const enableTakeaway = orderMethods.enableTakeaway !== false;
   const enableDelivery = orderMethods.enableDelivery !== false;
+  const deliveryFeeAmount: number = orderMethods.deliveryFeeAmount ?? 15;
 
   const handleContinue = () => {
     if (!cartItems || cartItems.length === 0) {
@@ -439,7 +440,7 @@ export default function DeliverySelectionPage() {
       arrivalTime: arrivalTime || undefined,
       scheduledPickupTime: selectedMethod === 'scheduled' ? scheduledPickupTime : undefined,
       deliveryAddress: selectedMethod === 'delivery' ? deliveryAddressText.trim() : undefined,
-      deliveryFee: 0,
+      deliveryFee: selectedMethod === 'delivery' ? deliveryFeeAmount : 0,
     });
 
     setLocation('/checkout');
@@ -999,10 +1000,19 @@ export default function DeliverySelectionPage() {
                       data-testid="input-delivery-address"
                     />
                   </div>
-                  <div className="flex items-start gap-2 p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
-                    <MapPin className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                    <p className="text-xs text-green-700 dark:text-green-400">
-                      سيتواصل معك موظفونا لتأكيد العنوان وتحديد رسوم التوصيل
+                  <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <Truck className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      <p className="text-xs text-green-700 dark:text-green-400">رسوم التوصيل</p>
+                    </div>
+                    <p className="text-sm font-bold text-green-700 dark:text-green-400">
+                      {deliveryFeeAmount > 0 ? `${deliveryFeeAmount} ريال` : 'مجاني'}
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-2 p-3 bg-muted/30 rounded-lg">
+                    <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-muted-foreground">
+                      سيتواصل معك موظفونا لتأكيد العنوان وتفاصيل التوصيل
                     </p>
                   </div>
                 </CardContent>

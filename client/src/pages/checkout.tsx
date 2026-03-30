@@ -20,7 +20,7 @@ import { useCustomer } from "@/contexts/CustomerContext";
 import { useLoyaltyCard } from "@/hooks/useLoyaltyCard";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useTranslate, tc } from "@/lib/useTranslate";
-import { User, Gift, CheckCircle, Sparkles, Loader2, Ticket, Tag, Wrench, Coffee, Award, CreditCard, Star, Coins, X, ChevronLeft, Upload, Camera } from "lucide-react";
+import { User, Gift, CheckCircle, Sparkles, Loader2, Ticket, Tag, Wrench, Coffee, Award, CreditCard, Star, Coins, X, ChevronLeft, Upload, Camera, Truck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { PaymentMethodInfo, PaymentMethod } from "@shared/schema";
 import SarIcon from "@/components/sar-icon";
@@ -274,7 +274,8 @@ export default function CheckoutPage() {
   };
 
   const giftCardDiscount = appliedGiftCard ? Math.min(appliedGiftCard.applied, getFinalTotalWithPoints()) : 0;
-  const getFinalAmount = () => Math.max(0, getFinalTotalWithPoints() - giftCardDiscount);
+  const orderDeliveryFee = deliveryInfo?.type === 'delivery' ? (deliveryInfo?.deliveryFee || 0) : 0;
+  const getFinalAmount = () => Math.max(0, getFinalTotalWithPoints() - giftCardDiscount) + orderDeliveryFee;
 
   const handleCheckGiftCard = async (code?: string) => {
     const codeToUse = code || giftCardCode.trim();
@@ -861,6 +862,15 @@ export default function CheckoutPage() {
                     <span className="font-bold">-{giftCardDiscount.toFixed(2)} <SarIcon /></span>
                   </div>
                 )}
+                {orderDeliveryFee > 0 && (
+                  <div className="flex justify-between items-center gap-2 text-sm text-green-700 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-2 rounded">
+                    <span className="flex items-center gap-1.5">
+                      <Truck className="w-3.5 h-3.5" />
+                      رسوم التوصيل
+                    </span>
+                    <span className="font-bold">+{orderDeliveryFee.toFixed(2)} <SarIcon /></span>
+                  </div>
+                )}
                 <div className="pt-4 border-t font-bold text-xl flex justify-between gap-2">
                   <span>{t("cart.total")}:</span>
                   <span className={getFinalAmount() === 0 ? 'text-green-600' : 'text-primary'}>
@@ -1284,14 +1294,17 @@ export default function CheckoutPage() {
           </DialogHeader>
           <div className="py-4 text-center space-y-2">
             <p className="text-lg">{t("checkout.confirm_question")}</p>
-            {(usePointsAsDiscount && pointsDiscountSAR > 0) || (appliedGiftCard && giftCardDiscount > 0) ? (
+            {(usePointsAsDiscount && pointsDiscountSAR > 0) || (appliedGiftCard && giftCardDiscount > 0) || orderDeliveryFee > 0 ? (
               <>
-                <p className="text-sm text-muted-foreground">قبل الخصم: {getBaseTotal().toFixed(2)} <SarIcon /></p>
+                <p className="text-sm text-muted-foreground">{(usePointsAsDiscount && pointsDiscountSAR > 0) || (appliedGiftCard && giftCardDiscount > 0) ? 'قبل الخصم' : 'إجمالي الطلب'}: {getBaseTotal().toFixed(2)} <SarIcon /></p>
                 {usePointsAsDiscount && pointsDiscountSAR > 0 && (
                   <p className="text-sm text-amber-600 font-semibold">خصم النقاط: -{Math.min(pointsDiscountSAR, getBaseTotal()).toFixed(2)} <SarIcon /></p>
                 )}
                 {appliedGiftCard && giftCardDiscount > 0 && (
-                  <p className="text-sm text-primary font-semibold">🎁 بطاقة هدية: -{giftCardDiscount.toFixed(2)} <SarIcon /></p>
+                  <p className="text-sm text-primary font-semibold">بطاقة هدية: -{giftCardDiscount.toFixed(2)} <SarIcon /></p>
+                )}
+                {orderDeliveryFee > 0 && (
+                  <p className="text-sm text-green-600 font-semibold">رسوم التوصيل: +{orderDeliveryFee.toFixed(2)} <SarIcon /></p>
                 )}
                 <p className="text-3xl font-black text-primary">{getFinalAmount().toFixed(2)} <SarIcon /></p>
                 {getFinalAmount() === 0 && <p className="text-sm text-green-600 font-bold">تغطية كاملة!</p>}

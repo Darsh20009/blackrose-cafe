@@ -1152,6 +1152,40 @@ export default function AdminSettings() {
                 />
               </div>
             ))}
+
+            {/* Delivery Fee Field */}
+            {config?.orderMethodsConfig?.enableDelivery !== false && (
+              <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-1.5 rounded-lg bg-green-100 dark:bg-green-900/20">
+                      <Truck className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">{tc('رسوم التوصيل الثابتة','Fixed Delivery Fee')}</p>
+                      <p className="text-xs text-muted-foreground">{tc('يضاف تلقائياً على طلبات توصيل المنزل','Added to home delivery orders')}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      className="w-24 text-center h-9"
+                      defaultValue={config?.orderMethodsConfig?.deliveryFeeAmount ?? 15}
+                      onBlur={(e) => mutation.mutate({
+                        orderMethodsConfig: {
+                          ...(config?.orderMethodsConfig || {}),
+                          deliveryFeeAmount: Number(e.target.value) || 0,
+                        }
+                      })}
+                      data-testid="input-delivery-fee"
+                    />
+                    <span className="text-sm text-muted-foreground">{tc('ريال','SAR')}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

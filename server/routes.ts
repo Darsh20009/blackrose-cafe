@@ -1481,7 +1481,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const statusMessages: Record<string, { title: string; body: string; icon: string }> = {
             in_progress:      { title: "🔄 طلبك قيد التحضير", body: `طلبك رقم #${orderNum} يتم تحضيره الآن!`, icon: "🔄" },
             ready:            { title: "✅ طلبك جاهز!", body: `طلبك رقم #${orderNum} جاهز للاستلام`, icon: "✅" },
-            completed:        { title: "🎉 شكراً لك!", body: `اكتمل طلبك #${orderNum} بنجاح`, icon: "🎉" },
+            out_for_delivery: { title: "🚚 طلبك في الطريق!", body: `السائق في طريقه إليك بطلبك رقم #${orderNum}`, icon: "🚚" },
+            completed:        { title: "تم توصيل طلبك", body: `اكتمل طلبك #${orderNum} بنجاح`, icon: "✅" },
             cancelled:        { title: "❌ تم إلغاء الطلب", body: `تم إلغاء طلبك #${orderNum}`, icon: "❌" },
             payment_confirmed:{ title: "💳 تم تأكيد الدفع", body: `تم تأكيد دفع طلبك #${orderNum}`, icon: "💳" },
             confirmed:        { title: "✅ تم تأكيد طلبك", body: `طلبك رقم #${orderNum} مؤكد ويتم تحضيره`, icon: "✅" },
