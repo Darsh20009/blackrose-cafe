@@ -64,8 +64,8 @@ export default function EmployeeMenuManagement() {
  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
  const [editingItem, setEditingItem] = useState<CoffeeItem | null>(null);
  const [editableSizes, setEditableSizes] = useState<Array<{nameAr: string; price: number}>>([]);
- const [editableAddons, setEditableAddons] = useState<Array<{nameAr: string; nameEn?: string; price: number; imageUrl?: string; category?: string; section?: string}>>([]);
- const [addEditableAddons, setAddEditableAddons] = useState<Array<{nameAr: string; nameEn?: string; price: number; imageUrl?: string; category?: string; section?: string}>>([]);
+ const [editableAddons, setEditableAddons] = useState<Array<{nameAr: string; nameEn?: string; price: number; imageUrl?: string; category?: string; section?: string; selectionType?: 'single' | 'multiple'}>>([]);
+ const [addEditableAddons, setAddEditableAddons] = useState<Array<{nameAr: string; nameEn?: string; price: number; imageUrl?: string; category?: string; section?: string; selectionType?: 'single' | 'multiple'}>>([]);
  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
  const [isImageLibraryOpen, setIsImageLibraryOpen] = useState(false);
  const [imageLibraryContext, setImageLibraryContext] = useState<'add' | 'edit' | 'add-addon' | 'edit-addon'>('add');
@@ -1034,6 +1034,20 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
           className="bg-gray-50 border-gray-200 text-gray-500 text-xs h-7"
           data-testid={"input-add-addon-section-" + idx}
         />
+        <div className="flex gap-1 mt-1">
+          <button
+            type="button"
+            onClick={() => { const next = [...addEditableAddons]; next[idx] = { ...next[idx], selectionType: 'multiple' }; setAddEditableAddons(next); }}
+            className={`flex-1 text-xs py-1 rounded border transition-colors ${(addon.selectionType || 'multiple') === 'multiple' ? 'bg-primary text-primary-foreground border-primary' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-400'}`}
+            data-testid={"button-add-addon-multi-" + idx}
+          >☑ اختيار متعدد</button>
+          <button
+            type="button"
+            onClick={() => { const next = [...addEditableAddons]; next[idx] = { ...next[idx], selectionType: 'single' }; setAddEditableAddons(next); }}
+            className={`flex-1 text-xs py-1 rounded border transition-colors ${(addon.selectionType || 'multiple') === 'single' ? 'bg-primary text-primary-foreground border-primary' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-400'}`}
+            data-testid={"button-add-addon-single-" + idx}
+          >◉ اختيار واحد فقط</button>
+        </div>
       </div>
     ))}
   </div>
@@ -1041,7 +1055,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
     type="button"
     size="sm"
     variant="outline"
-    onClick={() => setAddEditableAddons([...addEditableAddons, { nameAr: '', price: 0, imageUrl: '', category: 'other', section: '' }])}
+    onClick={() => setAddEditableAddons([...addEditableAddons, { nameAr: '', price: 0, imageUrl: '', category: 'other', section: '', selectionType: 'multiple' }])}
     className="border-green-500/30 text-green-400 w-full"
     data-testid="button-add-addon"
   >
@@ -1764,6 +1778,20 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
            className="bg-gray-50 border-gray-200 text-gray-500 text-xs h-7"
            data-testid={`input-edit-addon-section-${idx}`}
          />
+         <div className="flex gap-1 mt-1">
+           <button
+             type="button"
+             onClick={() => { const newAddons = [...editableAddons]; newAddons[idx] = { ...newAddons[idx], selectionType: 'multiple' }; setEditableAddons(newAddons); }}
+             className={`flex-1 text-xs py-1 rounded border transition-colors ${(addon.selectionType || 'multiple') === 'multiple' ? 'bg-primary text-primary-foreground border-primary' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-400'}`}
+             data-testid={`button-edit-addon-multi-${idx}`}
+           >☑ اختيار متعدد</button>
+           <button
+             type="button"
+             onClick={() => { const newAddons = [...editableAddons]; newAddons[idx] = { ...newAddons[idx], selectionType: 'single' }; setEditableAddons(newAddons); }}
+             className={`flex-1 text-xs py-1 rounded border transition-colors ${(addon.selectionType || 'multiple') === 'single' ? 'bg-primary text-primary-foreground border-primary' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-400'}`}
+             data-testid={`button-edit-addon-single-${idx}`}
+           >◉ اختيار واحد فقط</button>
+         </div>
        </div>
      ))}
    </div>
@@ -1771,7 +1799,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
      type="button"
      size="sm"
      variant="outline"
-     onClick={() => setEditableAddons([...editableAddons, {nameAr: '', price: 0, imageUrl: '', category: 'other', section: ''}])}
+     onClick={() => setEditableAddons([...editableAddons, {nameAr: '', price: 0, imageUrl: '', category: 'other', section: '', selectionType: 'multiple'}])}
      className="border-green-500/30 text-green-400 w-full"
      data-testid="button-add-edit-addon"
    >

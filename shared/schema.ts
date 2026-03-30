@@ -152,6 +152,7 @@ export interface IProductAddon extends Document {
   plateNumber?: string;
   saveCarInfo?: number;
   menuCategory?: string; // Optional: limits this addon to a specific menu category (empty = all categories)
+  selectionType?: 'single' | 'multiple'; // 'single' = radio (only one per group), 'multiple' = checkbox (default)
   createdAt: Date;
 }
 
@@ -175,6 +176,7 @@ const ProductAddonSchema = new Schema<IProductAddon>({
   inventoryRawItemId: { type: String },
   linkedRawItemId: { type: String },
   menuCategory: { type: String, default: '' }, // Optional: limits addon to a specific menu category
+  selectionType: { type: String, enum: ['single', 'multiple'], default: 'multiple' },
   createdAt: { type: Date, default: Date.now },
 }, { timestamps: false });
 

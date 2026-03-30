@@ -408,7 +408,7 @@ export default function DrinkCustomizationDialog({
 
               {Object.entries(groupedAddons).map(([category, addons]) => {
                 const categoryInfo = CATEGORY_INFO[category] || CATEGORY_INFO.other;
-                const isSingleSelect = category === 'sugar' || category === 'milk' || category === 'size' || category.toLowerCase() === 'size';
+                const isSingleSelect = addons.some((a: any) => a.selectionType === 'single') || category === 'sugar' || category === 'milk' || category === 'size' || category.toLowerCase() === 'size';
                 const CategoryIcon = categoryInfo.icon;
 
                 return (
