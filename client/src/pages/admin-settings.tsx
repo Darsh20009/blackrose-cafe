@@ -400,6 +400,7 @@ export default function AdminSettings() {
   const [newCodeType, setNewCodeType] = useState<'percent' | 'amount'>('percent');
   const [newCodeValue, setNewCodeValue] = useState(10);
   const [newCodeMaxUses, setNewCodeMaxUses] = useState(100);
+  const [newCodeVisible, setNewCodeVisible] = useState(true);
   const [showAppGuide, setShowAppGuide] = useState(false);
 
   const createCodeMutation = useMutation({
@@ -414,6 +415,7 @@ export default function AdminSettings() {
       setNewCodeType('percent');
       setNewCodeValue(10);
       setNewCodeMaxUses(100);
+      setNewCodeVisible(true);
       toast({ title: "تم إنشاء كود الخصم بنجاح" });
     },
     onError: (error: Error) => {
@@ -435,6 +437,20 @@ export default function AdminSettings() {
     },
   });
 
+  const toggleVisibilityMutation = useMutation({
+    mutationFn: async ({ id, visibleToCustomers }: { id: string; visibleToCustomers: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/discount-codes/${id}`, { visibleToCustomers, employeeId: 'admin' });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/discount-codes"] });
+      toast({ title: "تم تحديث ظهور الكود" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handleCreateCode = () => {
     createCodeMutation.mutate({
       code: newCode.toUpperCase(),
@@ -445,6 +461,7 @@ export default function AdminSettings() {
       reason: `كود خصم - ${newCodeType === 'percent' ? newCodeValue + '%' : newCodeValue + ' ريال'}`,
       employeeId: 'admin',
       isActive: 1,
+      visibleToCustomers: newCodeVisible,
     });
   };
 
@@ -2648,6 +2665,17 @@ export default function AdminSettings() {
                         data-testid="input-new-code-max-uses"
                       />
                     </div>
+                    <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
+                      <div>
+                        <p className="text-sm font-medium">ظاهر للعملاء</p>
+                        <p className="text-xs text-muted-foreground">يظهر الكود في صفحة الدفع للعملاء</p>
+                      </div>
+                      <Switch
+                        checked={newCodeVisible}
+                        onCheckedChange={setNewCodeVisible}
+                        data-testid="switch-new-code-visible"
+                      />
+                    </div>
                   </div>
                   <DialogFooter>
                     <Button
@@ -2700,19 +2728,25 @@ export default function AdminSettings() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Badge
-                        variant={dc.isActive ? "default" : "secondary"}
-                        className={`text-[10px] ${dc.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}
-                      >
-                        {dc.isActive ? 'نشط' : 'معطل'}
-                      </Badge>
-                      <Switch
-                        checked={dc.isActive}
-                        onCheckedChange={(checked) => toggleCodeMutation.mutate({ id: dc._id || dc.id, isActive: checked })}
-                        disabled={toggleCodeMutation.isPending}
-                        data-testid={`switch-code-active-${dc._id || dc.id}`}
-                      />
+                    <div className="flex items-center gap-4">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-[9px] text-muted-foreground">نشط</span>
+                        <Switch
+                          checked={!!dc.isActive}
+                          onCheckedChange={(checked) => toggleCodeMutation.mutate({ id: dc._id || dc.id, isActive: checked })}
+                          disabled={toggleCodeMutation.isPending}
+                          data-testid={`switch-code-active-${dc._id || dc.id}`}
+                        />
+                      </div>
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-[9px] text-muted-foreground">ظاهر للعملاء</span>
+                        <Switch
+                          checked={!!dc.visibleToCustomers}
+                          onCheckedChange={(checked) => toggleVisibilityMutation.mutate({ id: dc._id || dc.id, visibleToCustomers: checked })}
+                          disabled={toggleVisibilityMutation.isPending}
+                          data-testid={`switch-code-visible-${dc._id || dc.id}`}
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
