@@ -40,14 +40,16 @@ export default function PaymentReturnPage() {
 
     const orderRef = params.get("orderRef") || "";
 
-    const verifyOrderPaid = async (ref: string): Promise<boolean> => {
-      try {
-        const res = await fetch(`/api/payments/order-status/${encodeURIComponent(ref)}`);
-        const data = await res.json();
-        return data.paid === true;
-      } catch {
-        return false;
+    const verifyOrderPaid = async (ref: string, retries = 10, delayMs = 1200): Promise<boolean> => {
+      for (let i = 0; i < retries; i++) {
+        try {
+          const res = await fetch(`/api/payments/order-status/${encodeURIComponent(ref)}`);
+          const data = await res.json();
+          if (data.paid === true) return true;
+        } catch {}
+        if (i < retries - 1) await new Promise(r => setTimeout(r, delayMs));
       }
+      return false;
     };
 
     const resolvePaymob = async () => {

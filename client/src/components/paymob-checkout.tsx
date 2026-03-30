@@ -55,14 +55,16 @@ export default function PaymobCheckout({
     onError(msg);
   };
 
-  const verifyPaymentStatus = async (): Promise<boolean> => {
-    try {
-      const res = await fetch(`/api/payments/order-status/${encodeURIComponent(orderNumber)}`);
-      const data = await res.json();
-      return data.paid === true;
-    } catch {
-      return false;
+  const verifyPaymentStatus = async (retries = 8, delayMs = 1500): Promise<boolean> => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const res = await fetch(`/api/payments/order-status/${encodeURIComponent(orderNumber)}`);
+        const data = await res.json();
+        if (data.paid === true) return true;
+      } catch {}
+      if (i < retries - 1) await new Promise(r => setTimeout(r, delayMs));
     }
+    return false;
   };
 
   const handleCloseAttempt = async () => {
@@ -96,28 +98,20 @@ export default function PaymobCheckout({
           data.status === "success"
         ) {
           triggerSuccess();
-        } else if (data.type === "PAYMOB_ERROR" || data.success === false) {
-          // Always verify server-side before showing error
-          // Webhook may have already marked the payment as paid
+        } else if (data.type === "PAYMOB_ERROR" || data.success === false || data.type === "PAYMOB_PENDING") {
+          // Always verify server-side before showing error/pending
+          // Webhook fires concurrently — poll until confirmed or timeout
           const msg = data.message || "فشلت عملية الدفع. يرجى المحاولة مرة أخرى.";
           setState("verifying");
           (async () => {
-            await new Promise(r => setTimeout(r, 2500));
-            const paid = await verifyPaymentStatus();
+            const paid = await verifyPaymentStatus(10, 1200);
             if (paid) {
               triggerSuccess();
+            } else if (data.type === "PAYMOB_PENDING") {
+              setState("ready");
             } else {
               triggerError(msg);
             }
-          })();
-        } else if (data.type === "PAYMOB_PENDING") {
-          // Pending — verify after short delay
-          setState("verifying");
-          (async () => {
-            await new Promise(r => setTimeout(r, 3000));
-            const paid = await verifyPaymentStatus();
-            if (paid) triggerSuccess();
-            else setState("ready");
           })();
         } else if (data.type === "PAYMOB_CANCEL") {
           handleCloseAttempt();
@@ -138,22 +132,13 @@ export default function PaymobCheckout({
         const pending = url.searchParams.get("pending");
         if (success === "true" && pending !== "true") {
           triggerSuccess();
-        } else if (success === "false") {
-          // Verify server-side before showing failure — webhook may have paid it
+        } else if (success === "false" || success === null) {
+          // Don't show failure immediately — poll server (webhook fires concurrently)
           setState("verifying");
           (async () => {
-            await new Promise(r => setTimeout(r, 2500));
-            const paid = await verifyPaymentStatus();
+            const paid = await verifyPaymentStatus(10, 1200);
             if (paid) triggerSuccess();
-            else triggerError("لم تكتمل عملية الدفع. يرجى المحاولة مرة أخرى.");
-          })();
-        } else if (success === null) {
-          // No success param — check server in case webhook fired
-          setState("verifying");
-          (async () => {
-            await new Promise(r => setTimeout(r, 2000));
-            const paid = await verifyPaymentStatus();
-            if (paid) triggerSuccess();
+            else if (success === "false") triggerError("لم تكتمل عملية الدفع. يرجى المحاولة مرة أخرى.");
             else setState("ready");
           })();
         }

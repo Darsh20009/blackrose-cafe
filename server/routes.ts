@@ -2792,9 +2792,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             const clientSecret = intentData.client_secret;
+            const intentionId = intentData.id;
             const checkoutUrl = `${baseUrl}/unifiedcheckout/?publicKey=${publicKey}&clientSecret=${clientSecret}`;
 
-            console.log(`[Paymob SA] Intention created successfully. Session: ${internalSessionId}`);
+            // Store clientSecret + intentionId on the order for later server-side verification
+            if (orderId) {
+              await OrderModel.findOneAndUpdate(
+                { $or: [{ orderNumber: orderId }, { _id: orderId }], tenantId: 'demo-tenant' },
+                { $set: { paymobClientSecret: clientSecret, paymobIntentionId: String(intentionId || '') } }
+              ).catch(() => {});
+            }
+
+            console.log(`[Paymob SA] Intention created. Session: ${internalSessionId}, Order: ${orderId}, IntentionId: ${intentionId}, HasClientSecret: ${!!clientSecret}`);
             return res.json({
               success: true,
               sessionId: internalSessionId,
@@ -3350,6 +3359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ── PayMob iframe return page (returns bare HTML, no SPA — sends postMessage reliably) ──
   app.get("/payment-return-iframe", (req, res) => {
     const p = req.query as Record<string, string>;
+    console.log('[Paymob SA Return] Query params:', JSON.stringify(p));
     // 'success' param may not be present in PayMob SA redirect — treat missing as pending
     const successParam = p.success;
     const success = successParam === 'true';
@@ -3389,12 +3399,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { orderNumber } = req.params;
       const tenantId = 'demo-tenant';
-      const order = await OrderModel.findOne({ tenantId, orderNumber }).lean();
+      const order = await OrderModel.findOne({ tenantId, orderNumber }).lean() as any;
       if (!order) {
         return res.json({ found: false, paid: false });
       }
-      const paid = (order as any).paymentStatus === 'paid' || (order as any).status === 'payment_confirmed';
-      return res.json({ found: true, paid, status: (order as any).status, paymentStatus: (order as any).paymentStatus });
+
+      const alreadyPaid = order.paymentStatus === 'paid' || order.status === 'payment_confirmed';
+      if (alreadyPaid) {
+        return res.json({ found: true, paid: true, status: order.status, paymentStatus: order.paymentStatus });
+      }
+
+      // Not yet marked as paid — try direct PayMob SA API verification if we have clientSecret
+      const clientSecret = order.paymobClientSecret;
+      if (clientSecret) {
+        try {
+          const config = await BusinessConfigModel.findOne({ tenantId });
+          const pg = config?.paymentGateway;
+          const secretKey = pg?.paymob?.secretKey;
+          const baseUrl = pg?.paymob?.baseUrl || 'https://ksa.paymob.com';
+
+          if (secretKey) {
+            const intentionId = order.paymobIntentionId;
+
+            // Try fetching intention by ID (preferred) or by client_secret
+            let intentData: any = null;
+            if (intentionId) {
+              const r = await fetch(`${baseUrl}/v1/intention/${intentionId}/`, {
+                headers: { 'Authorization': `Bearer ${secretKey}` },
+              });
+              if (r.ok) intentData = await r.json();
+            }
+
+            // Fallback: search transactions by special_reference (orderNumber)
+            if (!intentData) {
+              const r = await fetch(`${baseUrl}/v1/intention/?special_reference=${encodeURIComponent(orderNumber)}`, {
+                headers: { 'Authorization': `Bearer ${secretKey}` },
+              });
+              if (r.ok) {
+                const list = await r.json() as any;
+                intentData = Array.isArray(list?.results) ? list.results[0] : list;
+              }
+            }
+
+            if (intentData) {
+              console.log(`[PaymobSA OrderStatus] intention data for ${orderNumber}:`, JSON.stringify(intentData).slice(0, 500));
+              // Check multiple possible status fields across PayMob SA versions
+              const intentStatus = intentData?.status || intentData?.intention_detail?.status || '';
+              const isPaid = intentStatus === 'PAID' || intentStatus === 'SUCCESSFUL' || intentStatus === 'CONFIRMED' ||
+                             intentData?.confirmed === true ||
+                             intentData?.intention_detail?.confirmed === true;
+
+              // Also check nested transactions inside the intention
+              const transactions: any[] = intentData?.transactions || intentData?.intention_detail?.transactions || [];
+              const hasSuccessfulTx = transactions.some((tx: any) => tx?.success === true && tx?.pending === false);
+
+              if (isPaid || hasSuccessfulTx) {
+                const txId = String(transactions.find((t: any) => t?.success)?.id || intentData?.id || intentionId || '');
+                await OrderModel.findOneAndUpdate(
+                  { orderNumber, tenantId },
+                  { $set: { paymentStatus: 'paid', paymentTransactionId: txId } }
+                ).catch(() => {});
+                return res.json({ found: true, paid: true, status: order.status, paymentStatus: 'paid' });
+              }
+            }
+          }
+        } catch (apiErr: any) {
+          console.warn('[PaymobSA OrderStatus] Direct API check failed:', apiErr.message);
+        }
+      }
+
+      return res.json({ found: true, paid: false, status: order.status, paymentStatus: order.paymentStatus });
     } catch (err) {
       return res.json({ found: false, paid: false });
     }
