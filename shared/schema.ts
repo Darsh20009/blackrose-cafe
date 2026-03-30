@@ -53,6 +53,8 @@ export interface ICoffeeItem extends Document {
     imageUrl?: string;
     isRequired?: boolean;
     maxSelectable?: number;
+    section?: string;
+    selectionType?: 'single' | 'multiple';
   }>;
   createdAt?: Date;
   updatedAt?: Date;
@@ -94,6 +96,8 @@ const CoffeeItemSchema = new Schema<ICoffeeItem>({
     imageUrl: { type: String },
     isRequired: { type: Boolean, default: false },
     maxSelectable: { type: Number, default: 1 },
+    section: { type: String, default: '' },
+    selectionType: { type: String, enum: ['single', 'multiple'], default: 'multiple' },
   }],
   recipeId: { type: String },
   costOfGoods: { type: Number, default: 0 },
@@ -2311,6 +2315,8 @@ export const insertCoffeeItemSchema = z.object({
     price: z.number(),
     category: z.string().optional(),
     imageUrl: z.string().optional(),
+    section: z.string().optional(),
+    selectionType: z.enum(['single', 'multiple']).optional(),
   })).optional(),
   isGiftable: z.boolean().optional(),
 });
