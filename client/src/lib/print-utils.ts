@@ -63,98 +63,111 @@ interface KitchenOrderData {
   timestamp: string;
 }
 
-// Global print queue to serialize multiple print calls
-let _printQueue: Array<{ html: string; paperWidth: string }> = [];
+// ── iframe-based print queue (never touches the main page DOM during print) ──
+let _printQueue: Array<{ html: string; paperWidth: string; isFullDoc: boolean }> = [];
 let _isPrinting = false;
 
-function _drainPrintQueue() {
-  if (_isPrinting || _printQueue.length === 0) return;
-  _isPrinting = true;
-  const { html, paperWidth } = _printQueue.shift()!;
+function _buildFullDoc(html: string, paperWidth: string): string {
+  return `<!DOCTYPE html><html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+    @page { size: ${paperWidth} auto; margin: 0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 0; font-family: 'Cairo', Arial, sans-serif; direction: rtl; color: #000; background: #fff; }
+    .no-print { display: none !important; }
+  </style>
+</head>
+<body>${html}</body>
+</html>`;
+}
 
-  const styleId = 'qirox-print-style-' + Date.now();
-  const overlayId = 'qirox-print-overlay-' + Date.now();
+function _printViaIframe(html: string, paperWidth: string, isFullDoc: boolean): void {
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;pointer-events:none;';
+  document.body.appendChild(iframe);
 
-  const styleEl = document.createElement('style');
-  styleEl.id = styleId;
-  styleEl.textContent = `
-    @media print {
-      @page { size: ${paperWidth} auto; margin: 0; }
-      body > *:not(#${overlayId}) { display: none !important; visibility: hidden !important; }
-      #${overlayId} { display: block !important; visibility: visible !important; position: static !important; width: 100%; background: white; }
-      .no-print { display: none !important; }
-    }
-    #${overlayId} { display: none; }
-  `;
+  const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+  if (!iframeDoc) {
+    iframe.remove();
+    _isPrinting = false;
+    setTimeout(_drainPrintQueue, 500);
+    return;
+  }
 
-  const overlay = document.createElement('div');
-  overlay.id = overlayId;
-  overlay.innerHTML = html;
+  const fullHtml = isFullDoc ? html : _buildFullDoc(html, paperWidth);
 
-  document.head.appendChild(styleEl);
-  document.body.appendChild(overlay);
+  iframeDoc.open();
+  iframeDoc.write(fullHtml);
+  iframeDoc.close();
 
-  // Guard to ensure cleanup runs only once even if afterprint + fallback both fire
+  const iframeWin = iframe.contentWindow;
+  if (!iframeWin) {
+    iframe.remove();
+    _isPrinting = false;
+    setTimeout(_drainPrintQueue, 500);
+    return;
+  }
+
   let cleanupDone = false;
   const cleanup = () => {
     if (cleanupDone) return;
     cleanupDone = true;
-    styleEl.remove();
-    overlay.remove();
-    _isPrinting = false;
-    // Wait 2 seconds before next job — gives thermal printer time to finish cutting
-    setTimeout(_drainPrintQueue, 2000);
+    // Small delay so thermal printer finishes before iframe is removed
+    setTimeout(() => {
+      iframe.remove();
+      _isPrinting = false;
+      // Allow 1.5 s before next job so printer can cut
+      setTimeout(_drainPrintQueue, 1500);
+    }, 300);
   };
 
-  window.addEventListener('afterprint', cleanup, { once: true });
+  iframeWin.addEventListener('afterprint', cleanup, { once: true });
 
+  // Give the iframe time to render fonts + images before printing
   setTimeout(() => {
-    window.print();
-    // Fallback cleanup if afterprint never fires (some browsers/environments)
-    setTimeout(cleanup, 10000);
-  }, 300);
+    try {
+      iframeWin.focus();
+      iframeWin.print();
+    } catch {
+      // ignore — some browsers block print() without user gesture in iframes
+    }
+    // Fallback: if afterprint never fires (mobile Safari etc.), clean up after 8 s
+    setTimeout(cleanup, 8000);
+  }, 500);
+}
+
+function _drainPrintQueue() {
+  if (_isPrinting || _printQueue.length === 0) return;
+  _isPrinting = true;
+  const { html, paperWidth, isFullDoc } = _printQueue.shift()!;
+  _printViaIframe(html, paperWidth, isFullDoc);
 }
 
 function openPrintWindow(html: string, _title: string, config: PrintConfig = {}): Window | null {
   const { paperWidth = '80mm', autoPrint = true, showPrintButton = true } = config;
 
-  const dynamicStyles = `
-    <style>
-      @media print {
-        @page { size: ${paperWidth} auto; margin: 0; }
-        body { margin: 0; padding: 0; }
-        .no-print { display: none !important; }
-        .invoice-container, .receipt, .ticket, .card { max-width: ${paperWidth}; }
-      }
-    </style>
-  `;
-
-  let modifiedHtml = html.replace('</head>', `${dynamicStyles}</head>`);
-
   if (autoPrint) {
-    // Extract body content for in-page printing
-    const bodyMatch = modifiedHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-    const bodyContent = bodyMatch ? bodyMatch[1] : modifiedHtml;
-    const styleMatch = modifiedHtml.match(/<style[\s\S]*?<\/style>/gi) || [];
-    const styles = styleMatch.join('\n');
-    const printContent = `<div style="font-family:Arial,sans-serif;">${styles}<div>${bodyContent}</div></div>`;
-
-    _printQueue.push({ html: printContent, paperWidth });
+    // Determine if the provided HTML is a full document or a fragment
+    const isFullDoc = /<html[\s>]/i.test(html);
+    _printQueue.push({ html, paperWidth, isFullDoc });
     _drainPrintQueue();
     return null;
   }
 
-  // autoPrint = false → open a popup window with print button (user gesture context)
+  // autoPrint = false → open a popup window with a print button
+  const dynamicStyles = `<style>
+    @media print { @page { size: ${paperWidth} auto; margin: 0; } body { margin: 0; } .no-print { display: none !important; } }
+  </style>`;
+  let modifiedHtml = html.replace('</head>', `${dynamicStyles}</head>`);
+
   const printButtonHtml = showPrintButton ? `
-    <div class="no-print" style="text-align: center; margin-top: 20px; padding: 20px;">
-      <button onclick="window.print()" style="padding: 12px 32px; font-size: 16px; background: #b45309; color: white; border: none; border-radius: 8px; cursor: pointer; margin-left: 10px;">
-        طباعة
-      </button>
-      <button onclick="window.close()" style="padding: 12px 32px; font-size: 16px; background: #6b7280; color: white; border: none; border-radius: 8px; cursor: pointer;">
-        إغلاق
-      </button>
-    </div>
-  ` : '';
+    <div class="no-print" style="text-align:center;margin-top:20px;padding:20px;">
+      <button onclick="window.print()" style="padding:12px 32px;font-size:16px;background:#b45309;color:#fff;border:none;border-radius:8px;cursor:pointer;margin-left:10px;">طباعة</button>
+      <button onclick="window.close()" style="padding:12px 32px;font-size:16px;background:#6b7280;color:#fff;border:none;border-radius:8px;cursor:pointer;">إغلاق</button>
+    </div>` : '';
 
   if (showPrintButton && !modifiedHtml.includes('<div class="no-print"')) {
     modifiedHtml = modifiedHtml.replace('</body>', `${printButtonHtml}</body>`);
@@ -171,7 +184,8 @@ function openPrintWindow(html: string, _title: string, config: PrintConfig = {})
 
 // Export for direct use from manual print buttons (user gesture context)
 export function printHtmlInPage(html: string, paperWidth: string = '80mm'): void {
-  _printQueue.push({ html, paperWidth });
+  // receipt-invoice sends raw HTML fragments (not full documents)
+  _printQueue.push({ html, paperWidth, isFullDoc: false });
   _drainPrintQueue();
 }
 
