@@ -147,12 +147,19 @@ export default function PaymobCheckout({
   };
 
   const handleOpenExternal = () => {
+    const win = window.open(checkoutUrl, "_blank", "width=520,height=700,scrollbars=yes")
+              || window.open(checkoutUrl, "_blank");
+
+    if (!win) {
+      // Popup blocked — redirect same tab as last resort
+      window.location.href = checkoutUrl;
+      return;
+    }
+
     setState("processing");
-    const win = window.open(checkoutUrl, "_blank", "width=520,height=700,scrollbars=yes");
-    if (!win) window.open(checkoutUrl, "_blank");
     const poll = setInterval(async () => {
       try {
-        if (win?.closed) {
+        if (win.closed) {
           clearInterval(poll);
           setState("verifying");
           await new Promise(r => setTimeout(r, 1500));

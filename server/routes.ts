@@ -3457,9 +3457,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const txId = String(transactions.find((t: any) => t?.success)?.id || intentData?.id || intentionId || '');
                 await OrderModel.findOneAndUpdate(
                   { orderNumber, tenantId },
-                  { $set: { paymentStatus: 'paid', paymentTransactionId: txId } }
+                  { $set: { paymentStatus: 'paid', status: 'payment_confirmed', paymentTransactionId: txId } }
                 ).catch(() => {});
-                return res.json({ found: true, paid: true, status: order.status, paymentStatus: 'paid' });
+                return res.json({ found: true, paid: true, status: 'payment_confirmed', paymentStatus: 'paid' });
               }
             }
           }
@@ -3520,7 +3520,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           || body?.special_reference;
 
         if (merchantOrderId && !merchantOrderId.startsWith('temp-')) {
-          const paymentUpdate = { paymentStatus: 'paid', paymentTransactionId: String(transaction.id) };
+          const paymentUpdate = {
+            paymentStatus: 'paid',
+            paymentTransactionId: String(transaction.id),
+            status: 'payment_confirmed',
+          };
 
           // Try by orderNumber first (most common for PayMob SA flow)
           const byOrderNumber = await OrderModel.findOneAndUpdate(
@@ -3536,7 +3540,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ).catch(() => null);
           }
 
-          console.log(`[Paymob Webhook] Payment confirmed for order: ${merchantOrderId}`);
+          console.log(`[Paymob Webhook] Payment confirmed + status=payment_confirmed for order: ${merchantOrderId}`);
         }
       }
 
