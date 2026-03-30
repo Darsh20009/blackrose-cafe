@@ -20,7 +20,8 @@ import { useCustomer } from "@/contexts/CustomerContext";
 import { useLoyaltyCard } from "@/hooks/useLoyaltyCard";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useTranslate, tc } from "@/lib/useTranslate";
-import { User, Gift, CheckCircle, Sparkles, Loader2, Ticket, Tag, Wrench, Coffee, Award, CreditCard, Star, Coins, X, ChevronLeft, Upload, Camera, Truck } from "lucide-react";
+import { User, Gift, CheckCircle, Sparkles, Loader2, Ticket, Tag, Wrench, Coffee, Award, CreditCard, Star, Coins, X, ChevronLeft, Upload, Camera, Truck, Printer, Navigation, MapPin, PackageCheck, Bell, ClipboardList } from "lucide-react";
+import { printSimpleReceipt } from "@/lib/print-utils";
 import { useTranslation } from "react-i18next";
 import type { PaymentMethodInfo, PaymentMethod } from "@shared/schema";
 import SarIcon from "@/components/sar-icon";
@@ -874,75 +875,189 @@ export default function CheckoutPage() {
     const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
     const notifPermission = 'Notification' in window ? Notification.permission : 'denied';
     const successCustomerId = customer?.id || (customer as any)?._id;
+    const orderNum = orderDetails?.orderNumber || orderDetails?.dailyNumber || "—";
+    const orderItems = orderDetails?.items || cartItems;
+    const orderTotal = orderDetails?.totalAmount ?? getFinalAmount();
+
+    const handlePrintInvoice = async () => {
+      try {
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('ar-SA', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const mappedItems = orderItems.map((i: any) => ({
+          coffeeItem: {
+            nameAr: i.nameAr || i.coffeeItem?.nameAr || "منتج",
+            nameEn: i.nameEn || i.coffeeItem?.nameEn || "",
+            price: String(i.price ?? i.coffeeItem?.price ?? 0),
+          },
+          quantity: i.quantity,
+          customization: i.customization,
+        }));
+        await printSimpleReceipt({
+          orderNumber: orderNum,
+          items: mappedItems,
+          subtotal: orderTotal.toFixed(2),
+          total: orderTotal.toFixed(2),
+          customerName: customerName || orderDetails?.customerName || "عميل",
+          customerPhone: customerPhone || orderDetails?.customerPhone || "",
+          paymentMethod: selectedPaymentMethod || orderDetails?.paymentMethod || "cash",
+          employeeName: "نظام الطلب الإلكتروني",
+          date: dateStr,
+          orderType: (orderDetails?.orderType === 'dine-in' ? 'dine_in' : orderDetails?.orderType === 'delivery' ? 'delivery' : 'takeaway') as any,
+        });
+      } catch (e) { console.error("Print error:", e); }
+    };
+
+    const handleNavigateToBranch = () => {
+      const query = encodeURIComponent("BLACK ROSE CAFE blackrose.sa");
+      window.open(`https://www.google.com/maps/search/${query}`, "_blank");
+    };
 
     return (
-      <div className="min-h-screen flex items-center justify-center p-8 bg-background" dir={isAr ? 'rtl' : 'ltr'}>
-        <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-2xl text-center space-y-6">
-          <CheckCircle className="w-16 h-16 text-green-600 mx-auto" />
-          <h2 className="text-3xl font-bold text-accent">{t("nav.thank_you")}</h2>
-          <p>{t("checkout.order_desc")} <span className="font-bold text-primary">{orderDetails?.orderNumber}</span></p>
+      <div className="min-h-screen bg-background flex flex-col items-center py-10 px-4" dir={isAr ? 'rtl' : 'ltr'}>
+        <div className="max-w-md w-full space-y-4">
 
-          {/* Push Notification Prompt after order success */}
+          {/* Header card */}
+          <div className="bg-white dark:bg-card rounded-3xl shadow-2xl overflow-hidden">
+            {/* Green top band */}
+            <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-8 text-white text-center space-y-2">
+              <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto ring-4 ring-white/30">
+                <CheckCircle className="w-11 h-11 text-white" />
+              </div>
+              <h2 className="text-2xl font-black mt-3">تم استلام طلبك!</h2>
+              <p className="text-green-100 text-sm">سيبدأ الفريق بتحضيره فوراً</p>
+            </div>
+
+            {/* Order number */}
+            <div className="p-6 text-center border-b border-dashed">
+              <p className="text-xs text-muted-foreground mb-1">رقم طلبك</p>
+              <p className="text-5xl font-black text-primary tracking-wider" data-testid="text-order-number">{orderNum}</p>
+            </div>
+
+            {/* Action buttons */}
+            <div className="grid grid-cols-3 divide-x divide-x-reverse border-b">
+              <button
+                onClick={() => setLocation("/tracking")}
+                className="flex flex-col items-center gap-1.5 py-4 px-2 hover:bg-muted/50 transition-colors"
+                data-testid="button-track-order"
+              >
+                <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+                  <PackageCheck className="w-5 h-5 text-blue-600" />
+                </div>
+                <span className="text-[11px] font-semibold text-center">تتبع الطلب</span>
+              </button>
+              <button
+                onClick={handlePrintInvoice}
+                className="flex flex-col items-center gap-1.5 py-4 px-2 hover:bg-muted/50 transition-colors"
+                data-testid="button-print-invoice"
+              >
+                <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center">
+                  <Printer className="w-5 h-5 text-amber-600" />
+                </div>
+                <span className="text-[11px] font-semibold text-center">طباعة الفاتورة</span>
+              </button>
+              <button
+                onClick={handleNavigateToBranch}
+                className="flex flex-col items-center gap-1.5 py-4 px-2 hover:bg-muted/50 transition-colors"
+                data-testid="button-navigate-branch"
+              >
+                <div className="w-10 h-10 rounded-full bg-green-50 dark:bg-green-900/20 flex items-center justify-center">
+                  <Navigation className="w-5 h-5 text-green-600" />
+                </div>
+                <span className="text-[11px] font-semibold text-center">التوجه للفرع</span>
+              </button>
+            </div>
+
+            {/* Order items summary */}
+            <div className="p-4 space-y-2">
+              {orderItems.slice(0, 4).map((item: any, idx: number) => (
+                <div key={idx} className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center flex-shrink-0">{item.quantity}</span>
+                    <span className="text-foreground">{isAr ? (item.nameAr || item.coffeeItem?.nameAr) : (item.nameEn || item.coffeeItem?.nameEn)}</span>
+                  </span>
+                  <span className="font-semibold text-muted-foreground">{((item.price ?? item.coffeeItem?.price ?? 0) * item.quantity).toFixed(2)}</span>
+                </div>
+              ))}
+              {orderItems.length > 4 && (
+                <p className="text-xs text-muted-foreground text-center">+{orderItems.length - 4} منتجات أخرى</p>
+              )}
+              <div className="pt-2 border-t flex items-center justify-between font-bold text-base">
+                <span>الإجمالي</span>
+                <span className="text-primary">{orderTotal.toFixed(2)} <SarIcon /></span>
+              </div>
+            </div>
+          </div>
+
+          {/* Push notification */}
           {successCustomerId && notifPermission !== 'granted' && notifPermission !== 'denied' && (
             isIOS && !isStandalone ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-right space-y-2">
-                <p className="font-bold text-amber-900 text-sm">📲 تلقّ إشعاراً عندما يصبح طلبك جاهزاً!</p>
-                <p className="text-xs text-amber-700">أضف التطبيق لشاشتك الرئيسية عبر زر المشاركة ☐ في Safari لتفعيل الإشعارات.</p>
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 flex gap-3 items-start">
+                <Bell className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-amber-900 dark:text-amber-300 text-sm">فعّل إشعارات حالة طلبك</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">أضف التطبيق لشاشتك الرئيسية عبر زر المشاركة في Safari</p>
+                </div>
               </div>
             ) : pushSupported ? (
-              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 text-right space-y-3">
-                <p className="font-bold text-sm">🔔 تلقّ إشعاراً عندما يصبح طلبك جاهزاً</p>
-                <Button
-                  onClick={async () => {
-                    try {
-                      const urlB64 = (b64: string) => {
-                        const pad = '='.repeat((4 - b64.length % 4) % 4);
-                        const base = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
-                        const raw = window.atob(base);
-                        const out = new Uint8Array(raw.length);
-                        for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-                        return out;
-                      };
-                      const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-                      await navigator.serviceWorker.ready;
-                      const perm = await Notification.requestPermission();
-                      if (perm !== 'granted') return;
-                      const r = await fetch('/api/push/vapid-key');
-                      const { publicKey } = await r.json();
-                      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(publicKey) });
-                      await fetch('/api/push/subscribe', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ subscription: sub.toJSON(), userType: 'customer', userId: successCustomerId }),
-                      });
-                    } catch (e) { console.error(e); }
-                  }}
-                  variant="outline"
-                  className="w-full"
-                  data-testid="button-enable-push-success"
-                >
-                  {isAr ? "تفعيل الإشعارات" : "Enable Notifications"}
-                </Button>
-              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    const urlB64 = (b64: string) => {
+                      const pad = '='.repeat((4 - b64.length % 4) % 4);
+                      const base = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+                      const raw = window.atob(base);
+                      const out = new Uint8Array(raw.length);
+                      for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+                      return out;
+                    };
+                    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+                    await navigator.serviceWorker.ready;
+                    const perm = await Notification.requestPermission();
+                    if (perm !== 'granted') return;
+                    const r = await fetch('/api/push/vapid-key');
+                    const { publicKey } = await r.json();
+                    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(publicKey) });
+                    await fetch('/api/push/subscribe', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ subscription: sub.toJSON(), userType: 'customer', userId: successCustomerId }),
+                    });
+                  } catch (e) { console.error(e); }
+                }}
+                className="w-full flex items-center gap-3 bg-white dark:bg-card border rounded-2xl p-4 hover:bg-muted/50 transition-colors text-right"
+                data-testid="button-enable-push-success"
+              >
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Bell className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-bold text-sm">تفعيل إشعارات الطلب</p>
+                  <p className="text-xs text-muted-foreground">اعرف فوراً عندما يصبح طلبك جاهزاً</p>
+                </div>
+              </button>
             ) : null
           )}
 
+          {/* Guest register prompt */}
           {isGuestMode && (
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-right space-y-3">
-              <p className="font-bold text-amber-900">هل تريد تتبع طلباتك؟</p>
-              <p className="text-sm text-amber-800">
-                سجّل الآن بنفس رقم جوالك وسيتم ربط طلباتك تلقائياً. ستحصل على بطاقة ولاء ونقاط مكافآت مع كل طلب.
-              </p>
-              <Button
-                onClick={() => setLocation("/auth")}
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold"
-                data-testid="button-register-after-order"
-              >
-                سجّل الآن — مجاناً
+            <div className="bg-white dark:bg-card border rounded-2xl p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/20 flex items-center justify-center flex-shrink-0">
+                <Star className="w-5 h-5 text-amber-500" />
+              </div>
+              <div className="flex-1 text-right">
+                <p className="font-bold text-sm">احصل على نقاط مكافآت</p>
+                <p className="text-xs text-muted-foreground">سجّل بنفس رقم جوالك لربط طلباتك</p>
+              </div>
+              <Button size="sm" onClick={() => setLocation("/auth")} data-testid="button-register-after-order" className="flex-shrink-0">
+                سجّل
               </Button>
             </div>
           )}
 
-          <Button onClick={() => setLocation("/menu")} className="w-full h-12 bg-primary" data-testid="button-back-to-menu">{t("cart.continue_shopping")}</Button>
+          {/* Back to menu */}
+          <Button onClick={() => setLocation("/menu")} className="w-full h-12" variant="outline" data-testid="button-back-to-menu">
+            العودة للقائمة
+          </Button>
+
         </div>
       </div>
     );
