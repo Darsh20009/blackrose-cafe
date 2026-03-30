@@ -50,6 +50,7 @@ interface OrderCardProps {
     carType?: string;
     carColor?: string;
     carPlate?: string;
+    plateNumber?: string;
     branchId?: string;
     estimatedPrepTimeMinutes?: number;
     prepStartedAt?: string;

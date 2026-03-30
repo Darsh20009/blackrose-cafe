@@ -7,7 +7,7 @@ import { Coffee, LogOut, ShoppingCart, ClipboardList, User, ChefHat, Warehouse, 
 import type { Employee } from "@shared/schema";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { useTranslate } from "@/lib/useTranslate";
-import blackroseLogoStaff from "@assets/blackrose-logo.png";
+import blackroseLogo from "@assets/blackrose-logo.png";
 
 export default function EmployeeHome() {
   const [, setLocation] = useLocation();

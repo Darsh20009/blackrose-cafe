@@ -1157,7 +1157,7 @@ export interface IOrder extends Document {
   discountPercentage?: number;
   isOpenTab?: boolean;
   dineIn?: boolean;
-  deliveryType?: 'pickup' | 'delivery' | 'dine-in';
+  deliveryType?: 'pickup' | 'delivery' | 'dine-in' | 'curbside' | 'car_pickup' | 'car-pickup';
   deliveryAddress?: {
     fullAddress?: string;
     lat: number;
@@ -2590,7 +2590,7 @@ export const insertOrderSchema = z.object({
   carType: z.string().optional(),
   carColor: z.string().optional(),
   carPlate: z.string().optional(),
-  deliveryType: z.enum(['pickup', 'delivery', 'dine-in', 'curbside']).optional(),
+  deliveryType: z.enum(['pickup', 'delivery', 'dine-in', 'curbside', 'car_pickup', 'car-pickup']).optional(),
   deliveryAddress: z.object({
     fullAddress: z.string().optional(),
     lat: z.number(),
