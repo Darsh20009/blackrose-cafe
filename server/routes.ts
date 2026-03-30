@@ -1317,38 +1317,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const tenantId = getTenantIdFromRequest(req) || "demo-tenant";
       const updates = req.body;
-      // console.log(`[CONFIG] Updating business config for tenant: ${tenantId}`);
-      
-      let config = await BusinessConfigModel.findOne({ tenantId });
-      if (!config) {
-        config = new BusinessConfigModel({ tenantId, tradeNameAr: "بلاك روز" });
-      }
-      
+
+      // Build a flat $set map so we never trigger full-document validation
+      const setMap: Record<string, any> = { updatedAt: new Date() };
+
       for (const [key, value] of Object.entries(updates)) {
-        (config as any)[key] = value;
+        setMap[key] = value;
       }
-      
-      if (updates.storeHours) {
-        config.markModified('storeHours');
-      }
-      if (updates.socialLinks) {
-        config.markModified('socialLinks');
-      }
-      if (updates.paymentGateway) {
-        config.markModified('paymentGateway');
-      }
-      if (updates.loyaltyConfig) {
-        config.markModified('loyaltyConfig');
-      }
-      if (updates.offersConfig) {
-        config.markModified('offersConfig');
-      }
-      if (updates.orderMethodsConfig) {
-        config.markModified('orderMethodsConfig');
-      }
-      
-      config.updatedAt = new Date();
-      await config.save();
+
+      const config = await BusinessConfigModel.findOneAndUpdate(
+        { tenantId },
+        { $set: setMap },
+        { new: true, upsert: true, strict: false, runValidators: false }
+      );
+
       cache.invalidateKey(cacheKey('biz-config', tenantId));
       res.json(serializeDoc(config));
     } catch (error) {
