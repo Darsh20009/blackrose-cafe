@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Star, Flame, Heart } from "lucide-react";
@@ -9,6 +10,7 @@ interface CoffeeItem {
   nameAr: string;
   nameEn?: string;
   imageUrl?: string;
+  imageUrls?: string[];
   price: number | string;
   description?: string;
   isAvailable?: boolean;
@@ -45,6 +47,93 @@ function imgWrapClass(hasImage: boolean, extra = "") {
   return hasImage ? extra : `${extra} bg-[#1a1a1a]`;
 }
 
+function getImages(item: CoffeeItem): string[] {
+  const urls = item.imageUrls && item.imageUrls.length > 0
+    ? item.imageUrls
+    : item.imageUrl
+      ? [item.imageUrl]
+      : [];
+  return urls;
+}
+
+interface AutoImageSliderProps {
+  item: CoffeeItem;
+  className?: string;
+  wrapperClassName?: string;
+  intervalMs?: number;
+  showDots?: boolean;
+}
+
+function AutoImageSlider({ item, className = "", wrapperClassName = "", intervalMs = 2500, showDots = true }: AutoImageSliderProps) {
+  const images = getImages(item);
+  const [idx, setIdx] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (images.length <= 1) return;
+    timerRef.current = setInterval(() => {
+      setDirection(1);
+      setIdx(prev => (prev + 1) % images.length);
+    }, intervalMs);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [images.length, intervalMs]);
+
+  const hasImage = images.length > 0;
+  const src = images[idx] || DEFAULT_IMG;
+
+  const slideVariants = {
+    enter: (dir: number) => ({ x: dir > 0 ? "60%" : "-60%", opacity: 0, scale: 0.92 }),
+    center: { x: 0, opacity: 1, scale: 1 },
+    exit: (dir: number) => ({ x: dir > 0 ? "-60%" : "60%", opacity: 0, scale: 0.92 }),
+  };
+
+  return (
+    <div className={`relative overflow-hidden ${imgWrapClass(hasImage, wrapperClassName)}`}>
+      {images.length > 1 ? (
+        <AnimatePresence initial={false} custom={direction} mode="popLayout">
+          <motion.img
+            key={src + idx}
+            src={src}
+            custom={direction}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className={imgClass(hasImage, className)}
+            alt={item.nameAr}
+            onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_IMG; }}
+            style={{ position: "absolute", inset: 0 }}
+          />
+        </AnimatePresence>
+      ) : (
+        <img
+          src={src}
+          className={imgClass(hasImage, className)}
+          alt={item.nameAr}
+          onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_IMG; }}
+        />
+      )}
+
+      {showDots && images.length > 1 && (
+        <div className="absolute bottom-1.5 left-0 right-0 flex justify-center gap-1 z-10 pointer-events-none">
+          {images.map((_, i) => (
+            <span
+              key={i}
+              className={`rounded-full transition-all duration-300 ${
+                i === idx
+                  ? "w-3 h-1.5 bg-white shadow"
+                  : "w-1.5 h-1.5 bg-white/50"
+              }`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ClassicMenuLayout({ items, onAddItem, lang, currency, favoriteIds, onToggleFavorite }: MenuLayoutProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -62,14 +151,12 @@ export function ClassicMenuLayout({ items, onAddItem, lang, currency, favoriteId
               onClick={() => onAddItem(item)}
               data-testid={`card-menu-${item.id}`}
             >
-              <div className={`w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 ${imgWrapClass(!!item.imageUrl, "bg-secondary")}`}>
-                <img
-                  src={item.imageUrl || DEFAULT_IMG}
-                  className={imgClass(!!item.imageUrl, "group-hover:scale-110 transition-transform duration-500")}
-                  alt={getItemName(item, lang)}
-                  onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_IMG; }}
-                />
-              </div>
+              <AutoImageSlider
+                item={item}
+                wrapperClassName="w-20 h-20 rounded-xl flex-shrink-0 bg-secondary"
+                className="group-hover:scale-110 transition-transform duration-500"
+                showDots={false}
+              />
               <div className="flex-1 min-w-0 py-1">
                 <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
                   <h3 className="text-base font-semibold truncate text-foreground">{getItemName(item, lang)}</h3>
@@ -120,24 +207,24 @@ export function CardsMenuLayout({ items, onAddItem, lang, currency, favoriteIds,
               onClick={() => onAddItem(item)}
               data-testid={`card-menu-${item.id}`}
             >
-              <div className={`relative aspect-square overflow-hidden ${imgWrapClass(!!item.imageUrl, "bg-secondary")}`}>
-                <img
-                  src={item.imageUrl || DEFAULT_IMG}
-                  className={imgClass(!!item.imageUrl, "group-hover:scale-110 transition-transform duration-500")}
-                  alt={getItemName(item, lang)}
-                  onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_IMG; }}
+              <div className="relative aspect-square">
+                <AutoImageSlider
+                  item={item}
+                  wrapperClassName="absolute inset-0 bg-secondary"
+                  className="group-hover:scale-110 transition-transform duration-500"
+                  showDots={true}
                 />
                 {item.isBestSeller && (
-                  <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                  <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 z-10">
                     <Flame className="w-2.5 h-2.5" />الأكثر طلباً
                   </div>
                 )}
                 {item.isNew && (
-                  <div className="absolute top-2 left-2 bg-green-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">جديد</div>
+                  <div className="absolute top-2 left-2 bg-green-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full z-10">جديد</div>
                 )}
                 {onToggleFavorite && (
                   <button
-                    className="absolute bottom-2 left-2 w-7 h-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm"
+                    className="absolute bottom-2 left-2 w-7 h-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm z-10"
                     onClick={(e) => { e.stopPropagation(); onToggleFavorite(item.id); }}
                     data-testid={`btn-fav-${item.id}`}
                   >
@@ -183,14 +270,13 @@ export function ListMenuLayout({ items, onAddItem, lang, currency, favoriteIds, 
               onClick={() => onAddItem(item)}
               data-testid={`card-menu-${item.id}`}
             >
-              <div className={`w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 ${imgWrapClass(!!item.imageUrl, "bg-secondary")}`}>
-                <img
-                  src={item.imageUrl || DEFAULT_IMG}
-                  className={imgClass(!!item.imageUrl, "group-hover:scale-105 transition-transform duration-300")}
-                  alt={getItemName(item, lang)}
-                  onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_IMG; }}
-                />
-              </div>
+              <AutoImageSlider
+                item={item}
+                wrapperClassName="w-14 h-14 rounded-xl flex-shrink-0 bg-secondary"
+                className="group-hover:scale-105 transition-transform duration-300"
+                showDots={false}
+                intervalMs={3000}
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-sm font-semibold text-foreground truncate">{getItemName(item, lang)}</span>
