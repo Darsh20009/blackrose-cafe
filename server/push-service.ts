@@ -164,12 +164,26 @@ export async function sendPushToEmployee(branchId: string, payload: PushPayload)
   await sendPushToSubscriptions(subscriptions, payload);
 }
 
-export async function sendPushToCustomer(customerId: string, payload: PushPayload) {
-  const subscriptions = await PushSubscriptionModel.find({
+export async function sendPushToCustomer(customerId: string, payload: PushPayload, fallbackPhone?: string) {
+  let subscriptions = await PushSubscriptionModel.find({
     userType: "customer",
     userId: customerId,
   });
   console.log(`[PUSH] sendPushToCustomer: customerId=${customerId}, found ${subscriptions.length} subscriptions`);
+
+  // Fallback: if no subscription found by ID, try phone number variants
+  if (subscriptions.length === 0 && fallbackPhone) {
+    const cleanPhone = fallbackPhone.replace(/\D/g, '').replace(/^966/, '0').replace(/^9665/, '05');
+    const variants = [cleanPhone, fallbackPhone, cleanPhone.replace(/^0/, '966'), cleanPhone.replace(/^0/, '+966')];
+    subscriptions = await PushSubscriptionModel.find({
+      userType: "customer",
+      userId: { $in: variants },
+    });
+    if (subscriptions.length > 0) {
+      console.log(`[PUSH] Found ${subscriptions.length} subscriptions via phone fallback for ${cleanPhone}`);
+    }
+  }
+
   await sendPushToSubscriptions(subscriptions, payload);
 }
 

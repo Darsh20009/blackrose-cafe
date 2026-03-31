@@ -1128,24 +1128,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           stageIndex: 0,
           totalStages: 4,
         };
+        const custPhone = order.customerPhone || order.customerInfo?.customerPhone;
         if (custId) {
-          sendPushToCustomer(custId, customerPushPayload)
+          sendPushToCustomer(custId, customerPushPayload, custPhone)
             .catch(err => console.error('[PUSH] Customer order confirmation error:', err));
-        } else {
-          // Fallback: POS order with phone only — look up customer by phone and send push
-          const custPhone = order.customerPhone || order.customerInfo?.customerPhone;
-          if (custPhone) {
-            const cleanPhone = custPhone.replace(/\D/g, '').replace(/^966/, '0').replace(/^9665/, '05');
-            storage.getCustomerByPhone(cleanPhone).then(customer => {
-              if (customer) {
-                const mongoId = (customer as any)._id?.toString() || (customer as any).id;
-                if (mongoId) {
-                  sendPushToCustomer(mongoId, customerPushPayload)
-                    .catch(err => console.error('[PUSH] POS phone-based customer push error:', err));
-                }
+        } else if (custPhone) {
+          // Guest order: try by phone directly (they may have subscribed with phone number)
+          const cleanPhone = custPhone.replace(/\D/g, '').replace(/^966/, '0').replace(/^9665/, '05');
+          // Also try looking up a registered customer account by phone
+          sendPushToCustomer(cleanPhone, customerPushPayload)
+            .catch(() => {});
+          storage.getCustomerByPhone(cleanPhone).then(customer => {
+            if (customer) {
+              const mongoId = (customer as any)._id?.toString() || (customer as any).id;
+              if (mongoId) {
+                sendPushToCustomer(mongoId, customerPushPayload)
+                  .catch(err => console.error('[PUSH] POS phone-based customer push error:', err));
               }
-            }).catch(() => {});
-          }
+            }
+          }).catch(() => {});
         }
       } catch (pushErr) {
         console.error('[PUSH] Error sending push for new order:', pushErr);
@@ -2818,7 +2819,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               extras: { order_ref: orderId || internalSessionId },
               special_reference: orderId || internalSessionId,
               notification_url: `${process.env.SITE_URL || 'https://www.blackrose.sa'}/api/payments/paymob/webhook`,
-              redirection_url: `${process.env.SITE_URL || 'https://www.blackrose.sa'}/payment-return-iframe?session=${internalSessionId}&orderRef=${encodeURIComponent(orderId || internalSessionId)}`,
+              redirection_url: returnUrl
+                ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}session=${internalSessionId}`
+                : `${process.env.SITE_URL || 'https://www.blackrose.sa'}/payment-return-iframe?session=${internalSessionId}&orderRef=${encodeURIComponent(orderId || internalSessionId)}`,
             };
 
             const intentRes = await fetch(`${baseUrl}/v1/intention/`, {

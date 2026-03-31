@@ -228,6 +228,7 @@ export default function CheckoutPage() {
   const [paymobCheckoutUrl, setPaymobCheckoutUrl] = useState("");
   const [orderDetails, setOrderDetails] = useState<any>(null);
   const [showSuccessPage, setShowSuccessPage] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -728,9 +729,11 @@ export default function CheckoutPage() {
   const initiatePaymobDirect = async () => {
     try {
       const { orderData } = await buildOrderData();
-      pendingGeideaOrderData.current = orderData;
 
       const tempOrderRef = `PAY-${Date.now()}`;
+      // returnUrl: PayMob will append ?success=...&id=...&pending=... to this
+      const returnUrl = `${window.location.origin}/checkout?provider=paymob`;
+
       const payRes = await apiRequest("POST", "/api/payments/init", {
         orderId: tempOrderRef,
         amount: orderData.totalAmount,
@@ -739,15 +742,35 @@ export default function CheckoutPage() {
         customerName,
         customerPhone,
         customerEmail,
+        returnUrl,
       });
       const payData = await payRes.json();
+
       if (payData.success && payData.redirectUrl) {
-        setPaymobCheckoutUrl(payData.redirectUrl);
-        setShowPaymobCheckout(true);
+        // Save order data BEFORE leaving the page (works for both redirect & iframe)
+        sessionStorage.setItem('pendingOrderData', JSON.stringify(orderData));
+        sessionStorage.setItem('paymentSessionId', payData.sessionId || tempOrderRef);
+        sessionStorage.setItem('paymentProvider', 'paymob');
+
+        // Mobile: redirect directly (popups are blocked, iframes unreliable on iOS/Android)
+        // Desktop: show inline iframe widget
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+          || window.innerWidth < 768;
+
+        if (isMobile) {
+          window.location.href = payData.redirectUrl;
+        } else {
+          pendingGeideaOrderData.current = orderData;
+          setPaymobCheckoutUrl(payData.redirectUrl);
+          setShowPaymobCheckout(true);
+        }
       } else {
         toast({ variant: "destructive", title: "خطأ في بوابة الدفع", description: payData.error || payData.details || "فشل تهيئة بوابة الدفع" });
       }
     } catch (err: any) {
+      sessionStorage.removeItem('pendingOrderData');
+      sessionStorage.removeItem('paymentSessionId');
+      sessionStorage.removeItem('paymentProvider');
       toast({ variant: "destructive", title: "خطأ", description: err.message || "حدث خطأ أثناء تهيئة الدفع" });
     }
   };
@@ -989,52 +1012,68 @@ export default function CheckoutPage() {
           </div>
 
           {/* Push notification */}
-          {successCustomerId && notifPermission !== 'granted' && notifPermission !== 'denied' && (
-            isIOS && !isStandalone ? (
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 flex gap-3 items-start">
-                <Bell className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold text-amber-900 dark:text-amber-300 text-sm">فعّل إشعارات حالة طلبك</p>
-                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">أضف التطبيق لشاشتك الرئيسية عبر زر المشاركة في Safari</p>
+          {!pushSubscribed && notifPermission !== 'granted' && notifPermission !== 'denied' && (
+            pushSupported ? (
+              isIOS && !isStandalone ? (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 flex gap-3 items-start">
+                  <Bell className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-amber-900 dark:text-amber-300 text-sm">فعّل إشعارات حالة طلبك</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">أضف التطبيق لشاشتك الرئيسية عبر زر المشاركة في Safari ثم افتحه منها</p>
+                  </div>
                 </div>
-              </div>
-            ) : pushSupported ? (
-              <button
-                onClick={async () => {
-                  try {
-                    const urlB64 = (b64: string) => {
-                      const pad = '='.repeat((4 - b64.length % 4) % 4);
-                      const base = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
-                      const raw = window.atob(base);
-                      const out = new Uint8Array(raw.length);
-                      for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-                      return out;
-                    };
-                    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-                    await navigator.serviceWorker.ready;
-                    const perm = await Notification.requestPermission();
-                    if (perm !== 'granted') return;
-                    const r = await fetch('/api/push/vapid-key');
-                    const { publicKey } = await r.json();
-                    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(publicKey) });
-                    await fetch('/api/push/subscribe', {
-                      method: 'POST', headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ subscription: sub.toJSON(), userType: 'customer', userId: successCustomerId }),
-                    });
-                  } catch (e) { console.error(e); }
-                }}
-                className="w-full flex items-center gap-3 bg-white dark:bg-card border rounded-2xl p-4 hover:bg-muted/50 transition-colors text-right"
-                data-testid="button-enable-push-success"
-              >
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Bell className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-bold text-sm">تفعيل إشعارات الطلب</p>
-                  <p className="text-xs text-muted-foreground">اعرف فوراً عندما يصبح طلبك جاهزاً</p>
-                </div>
-              </button>
+              ) : (
+                <button
+                  onClick={async () => {
+                    try {
+                      const urlB64 = (b64: string) => {
+                        const pad = '='.repeat((4 - b64.length % 4) % 4);
+                        const base = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+                        const raw = window.atob(base);
+                        const out = new Uint8Array(raw.length);
+                        for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+                        return out;
+                      };
+                      const reg = await navigator.serviceWorker.ready;
+                      const perm = await Notification.requestPermission();
+                      if (perm !== 'granted') return;
+                      const r = await fetch('/api/push/vapid-key');
+                      const { publicKey } = await r.json();
+                      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(publicKey) });
+                      // Use customerId if available, fallback to phone number for guests
+                      const pushUserId = successCustomerId || customerPhone || 'guest';
+                      await fetch('/api/push/subscribe', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ subscription: sub.toJSON(), userType: 'customer', userId: pushUserId }),
+                      });
+                      setPushSubscribed(true);
+                      toast({ title: "✅ تم تفعيل الإشعارات", description: "سنخبرك فوراً عند تحديث حالة طلبك" });
+                    } catch (e) {
+                      console.error('[PUSH]', e);
+                      toast({ variant: "destructive", title: "تعذّر تفعيل الإشعارات", description: "يرجى التأكد من أذونات المتصفح" });
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 bg-white dark:bg-card border rounded-2xl p-4 hover:bg-muted/50 active:scale-[0.98] transition-all text-right"
+                  data-testid="button-enable-push-success"
+                >
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Bell className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm">تفعيل إشعارات الطلب</p>
+                    <p className="text-xs text-muted-foreground">اعرف فوراً عندما يصبح طلبك جاهزاً</p>
+                  </div>
+                </button>
+              )
             ) : null
+          )}
+          {pushSubscribed && (
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-2xl p-4 flex gap-3 items-center">
+              <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center flex-shrink-0">
+                <Bell className="w-4 h-4 text-green-600" />
+              </div>
+              <p className="text-sm font-semibold text-green-800 dark:text-green-300">✅ الإشعارات مفعّلة — سنبلغك فور تحديث طلبك</p>
+            </div>
           )}
 
           {/* Guest register prompt */}
