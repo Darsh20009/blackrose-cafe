@@ -14903,6 +14903,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk reorder menu categories
+  app.post("/api/menu-categories/reorder", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { MenuCategoryModel } = await import("@shared/schema");
+      const tenantId = getTenantIdFromRequest(req) || "demo-tenant";
+      const { orders } = req.body as { orders: Array<{ id: string; orderIndex: number }> };
+      if (!Array.isArray(orders)) return res.status(400).json({ error: "orders must be an array" });
+      await Promise.all(
+        orders.map(({ id, orderIndex }) =>
+          MenuCategoryModel.updateOne({ id, tenantId }, { $set: { orderIndex, updatedAt: new Date() } })
+        )
+      );
+      cache.invalidate('menu-cats:' + tenantId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "فشل في إعادة ترتيب الأقسام" });
+    }
+  });
+
   // Delete menu category with smart product reassignment
   app.delete("/api/menu-categories/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {

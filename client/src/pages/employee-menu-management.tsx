@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Coffee, ArrowRight, ArrowLeft, CheckCircle, XCircle, Plus, Edit2, Trash2, Sparkles, Upload, ImageIcon, X, FlaskConical, AlertTriangle, Library } from "lucide-react";
+import { Coffee, ArrowRight, ArrowLeft, CheckCircle, XCircle, Plus, Edit2, Trash2, Sparkles, Upload, ImageIcon, X, FlaskConical, AlertTriangle, Library, ChevronUp, ChevronDown, ListOrdered } from "lucide-react";
 import { ImageLibraryModal } from "@/components/ImageLibraryModal";
 import { AIMenuAssistant } from "@/components/AIMenuAssistant";
 import { useToast } from "@/hooks/use-toast";
@@ -84,6 +84,8 @@ export default function EmployeeMenuManagement() {
  const [selectedCoffeeStrength, setSelectedCoffeeStrength] = useState<string>("classic");
  const [selectedBranches, setSelectedBranches] = useState<BranchAvailability[]>([]);
  const [skipRecipeConfirmOpen, setSkipRecipeConfirmOpen] = useState(false);
+ const [isCategoryReorderOpen, setIsCategoryReorderOpen] = useState(false);
+ const [localCategories, setLocalCategories] = useState<MenuCategory[]>([]);
  const [step1Data, setStep1Data] = useState<{
    nameAr: string;
    nameEn: string;
@@ -476,6 +478,47 @@ const [aiEditDescription, setAiEditDescription] = useState("");
  },
  });
 
+ const reorderCategoriesMutation = useMutation({
+   mutationFn: async (orders: Array<{ id: string; orderIndex: number }>) => {
+     const res = await apiRequest("POST", "/api/menu-categories/reorder", { orders });
+     return await res.json();
+   },
+   onSuccess: () => {
+     queryClient.invalidateQueries({ queryKey: ["/api/menu-categories"] });
+     toast({ title: tc("تم الحفظ", "Saved"), description: tc("تم حفظ ترتيب الأقسام", "Category order saved") });
+     setIsCategoryReorderOpen(false);
+   },
+   onError: () => {
+     toast({ variant: "destructive", title: tc("خطأ", "Error"), description: tc("فشل حفظ الترتيب", "Failed to save order") });
+   },
+ });
+
+ const openCategoryReorder = () => {
+   const deptCats = menuCategories.filter(c => c.department === (isFood ? 'food' : 'drinks'));
+   const sorted = [...deptCats].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+   setLocalCategories(sorted);
+   setIsCategoryReorderOpen(true);
+ };
+
+ const moveCategoryUp = (idx: number) => {
+   if (idx === 0) return;
+   const arr = [...localCategories];
+   [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+   setLocalCategories(arr);
+ };
+
+ const moveCategoryDown = (idx: number) => {
+   if (idx === localCategories.length - 1) return;
+   const arr = [...localCategories];
+   [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+   setLocalCategories(arr);
+ };
+
+ const saveCategoryOrder = () => {
+   const orders = localCategories.map((c, i) => ({ id: c.id, orderIndex: i }));
+   reorderCategoriesMutation.mutate(orders);
+ };
+
  const handleToggleAvailability = (item: CoffeeItem) => {
  const newAvailability = item.isAvailable === 1 ? 0 : 1;
  updateAvailabilityMutation.mutate({ id: item.id, isAvailable: newAvailability });
@@ -763,6 +806,17 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
          </div>
          </div>
          <div className="flex flex-wrap gap-2">
+ {employee?.role === "manager" && (
+ <Button
+   variant="outline"
+   onClick={openCategoryReorder}
+   className="border-primary/40 text-primary hover:bg-primary/10"
+   data-testid="button-reorder-categories"
+ >
+   <ListOrdered className="w-4 h-4 ml-2" />
+   {tc("ترتيب الأقسام", "Reorder Categories")}
+ </Button>
+ )}
  {employee?.role === "manager" && (
  <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
   setIsAddDialogOpen(open);
@@ -2050,6 +2104,75 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
      </AlertDialogFooter>
    </AlertDialogContent>
  </AlertDialog>
+{/* Category Reorder Dialog */}
+<Dialog open={isCategoryReorderOpen} onOpenChange={setIsCategoryReorderOpen}>
+  <DialogContent className="bg-card border-border text-foreground max-w-sm" dir="rtl">
+    <DialogHeader>
+      <DialogTitle className="flex items-center gap-2 text-foreground">
+        <ListOrdered className="w-5 h-5 text-primary" />
+        {tc("ترتيب الأقسام", "Reorder Categories")}
+      </DialogTitle>
+    </DialogHeader>
+    <div className="space-y-2 my-2">
+      {localCategories.length === 0 ? (
+        <p className="text-center text-muted-foreground text-sm py-6">
+          {tc("لا توجد أقسام مخصصة لهذا القسم", "No custom categories for this department")}
+        </p>
+      ) : (
+        localCategories.map((cat, idx) => (
+          <div
+            key={cat.id}
+            className="flex items-center gap-3 bg-muted/40 border border-border rounded-xl px-3 py-2.5"
+            data-testid={`category-row-${cat.id}`}
+          >
+            <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center flex-shrink-0">
+              {idx + 1}
+            </span>
+            <span className="flex-1 text-sm font-medium text-foreground">{cat.nameAr}</span>
+            {cat.nameEn && <span className="text-xs text-muted-foreground">{cat.nameEn}</span>}
+            <div className="flex flex-col gap-0.5">
+              <button
+                onClick={() => moveCategoryUp(idx)}
+                disabled={idx === 0}
+                className="p-1 rounded-lg hover:bg-primary/10 disabled:opacity-25 disabled:cursor-not-allowed text-primary transition-colors"
+                data-testid={`btn-cat-up-${cat.id}`}
+              >
+                <ChevronUp className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => moveCategoryDown(idx)}
+                disabled={idx === localCategories.length - 1}
+                className="p-1 rounded-lg hover:bg-primary/10 disabled:opacity-25 disabled:cursor-not-allowed text-primary transition-colors"
+                data-testid={`btn-cat-down-${cat.id}`}
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+    <div className="flex gap-2 justify-end pt-2 border-t border-border">
+      <Button
+        variant="outline"
+        onClick={() => setIsCategoryReorderOpen(false)}
+        className="text-sm"
+        data-testid="btn-cat-reorder-cancel"
+      >
+        {tc("إلغاء", "Cancel")}
+      </Button>
+      <Button
+        onClick={saveCategoryOrder}
+        disabled={reorderCategoriesMutation.isPending || localCategories.length === 0}
+        className="bg-primary text-primary-foreground text-sm"
+        data-testid="btn-cat-reorder-save"
+      >
+        {reorderCategoriesMutation.isPending ? tc("جاري الحفظ...", "Saving...") : tc("حفظ الترتيب", "Save Order")}
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog>
+
 <ImageLibraryModal
   open={isImageLibraryOpen}
   onClose={() => setIsImageLibraryOpen(false)}
