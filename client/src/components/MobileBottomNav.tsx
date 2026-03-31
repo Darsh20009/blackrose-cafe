@@ -64,31 +64,53 @@ export function MobileBottomNav({ employeeRole, onLogout }: MobileBottomNavProps
     ] : []),
   ];
 
+  const visibleNav = [
+    { path: "/employee/home", icon: Home, label: t('mobile_nav.home') },
+    { path: "/employee/orders", icon: ClipboardList, label: t('mobile_nav.orders') },
+    { path: "/employee/pos", icon: CreditCard, label: t('mobile_nav.pos') },
+    { path: "/employee/cashier", icon: ShoppingCart, label: t('mobile_nav.cashier') },
+    { path: "/employee/kitchen", icon: ChefHat, label: t('mobile_nav.kitchen') },
+    { path: "/employee/table-orders", icon: Table, label: t('mobile_nav.tables') },
+    ...(isManager ? [
+      { path: "/employee/menu-management", icon: Coffee, label: t('mobile_nav.drinks') },
+    ] : []),
+  ];
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden bg-background border-t shadow-lg">
-      <div className="flex items-center justify-around px-1 py-1.5">
-        <Link href="/employee/home">
-          <button className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-[10px] ${location === '/employee/home' ? 'text-primary font-bold' : 'text-muted-foreground'}`} data-testid="mobile-nav-home">
-            <Home className="h-5 w-5" />
-            <span>{t('mobile_nav.home')}</span>
-          </button>
-        </Link>
-        <Link href="/employee/orders">
-          <button className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-[10px] ${location === '/employee/orders' ? 'text-primary font-bold' : 'text-muted-foreground'}`} data-testid="mobile-nav-orders">
-            <ClipboardList className="h-5 w-5" />
-            <span>{t('mobile_nav.orders')}</span>
-          </button>
-        </Link>
-        <Link href="/employee/pos">
-          <button className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-[10px] ${location === '/employee/pos' ? 'text-primary font-bold' : 'text-muted-foreground'}`} data-testid="mobile-nav-pos">
-            <CreditCard className="h-5 w-5" />
-            <span>{t('mobile_nav.pos')}</span>
-          </button>
-        </Link>
-        
+      <div
+        className="flex items-center overflow-x-auto no-scrollbar px-1 py-1.5 gap-0.5"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+        {visibleNav.map((item) => {
+          const Icon = item.icon;
+          const fullPath = location + window.location.search;
+          const isActive = item.path.includes('?')
+            ? fullPath === item.path
+            : location === item.path;
+          return (
+            <Link key={item.path} href={item.path}>
+              <button
+                className={`flex flex-col items-center gap-0.5 min-w-[56px] px-2 py-1 rounded-lg text-[10px] whitespace-nowrap shrink-0 transition-colors ${
+                  isActive
+                    ? 'text-primary font-bold bg-primary/10'
+                    : 'text-muted-foreground'
+                }`}
+                data-testid={`mobile-nav-${item.path.split('/').pop()?.split('?')[0]}`}
+              >
+                <Icon className="h-5 w-5" />
+                <span>{item.label}</span>
+              </button>
+            </Link>
+          );
+        })}
+
         <Sheet open={showMenu} onOpenChange={setShowMenu}>
           <SheetTrigger asChild>
-            <button className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-[10px] text-muted-foreground" data-testid="mobile-nav-menu">
+            <button
+              className="flex flex-col items-center gap-0.5 min-w-[56px] px-2 py-1 rounded-lg text-[10px] whitespace-nowrap shrink-0 text-muted-foreground"
+              data-testid="mobile-nav-menu"
+            >
               <Menu className="h-5 w-5" />
               <span>{t('mobile_nav.more')}</span>
             </button>

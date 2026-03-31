@@ -977,6 +977,14 @@ a, button, input, select, textarea, label, [role="button"] {
   .no-default-hover-elevate {}
   .no-default-active-elevate {}
 
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .toggle-elevate::before,
   .toggle-elevate-2::before {
     content: "";
