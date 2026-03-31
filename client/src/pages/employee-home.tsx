@@ -18,6 +18,14 @@ export default function EmployeeHome() {
     const storedEmployee = localStorage.getItem("currentEmployee");
     if (storedEmployee) {
       const emp = JSON.parse(storedEmployee);
+      if (emp.role === "owner" || emp.role === "admin") {
+        window.location.href = "/admin/dashboard";
+        return;
+      }
+      if (emp.role === "manager") {
+        window.location.href = "/manager/dashboard";
+        return;
+      }
       setEmployee(emp);
     } else {
       window.location.href = "/employee/gateway";

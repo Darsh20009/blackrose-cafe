@@ -53,7 +53,13 @@ export default function EmployeeLogin() {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        if (parsed?.id) { window.location.href = "/employee/home"; return; }
+        if (parsed?.id) {
+          const r = parsed.role;
+          if (r === "admin" || r === "owner") window.location.href = "/admin/dashboard";
+          else if (r === "manager" || r === "branch_manager") window.location.href = "/manager/dashboard";
+          else window.location.href = "/employee/home";
+          return;
+        }
       } catch {}
     }
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
