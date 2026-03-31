@@ -305,9 +305,9 @@ export function AddToCartModal({
             </div>
           )}
 
-          {specificAddons.length > 0 && (
+          {specificAddons.length > 0 && inlineAddons.length === 0 && (
             <div className="space-y-2">
-              <Label className="text-sm font-semibold text-foreground">{isAr ? "إضافات خاصة" : "Special Addons"}</Label>
+              <Label className="text-sm font-semibold text-foreground">{isAr ? "الإضافات" : "Addons"}</Label>
               <div className="flex flex-wrap gap-2">
                 {specificAddons.map((addon) => (
                   <button
