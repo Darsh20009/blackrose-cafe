@@ -14,6 +14,7 @@ import { PWAUpdateNotifier } from "@/components/PWAUpdateNotifier";
 import { GlobalPrompts } from "@/components/global-prompts";
 import { PWAInstallBanner } from "@/components/pwa-install";
 import { OfflineIndicator } from "@/components/offline-indicator";
+import { CustomerNotificationListener } from "@/components/customer-notification-listener";
 
 const CartModal = lazy(() => import("@/components/cart-modal"));
 const CheckoutModal = lazy(() => import("@/components/checkout-modal"));
@@ -356,6 +357,8 @@ function AppContent() {
 
   return (
     <>
+      {/* Silent real-time notification listener for logged-in customers */}
+      <CustomerNotificationListener />
       <Suspense fallback={<PageLoader />}>
         <AppRouter />
       </Suspense>

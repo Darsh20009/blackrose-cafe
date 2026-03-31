@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v12';
+const CACHE_VERSION = 'v13';
 const CACHE_NAME = `blackrose-cache-${CACHE_VERSION}`;
 
 // Essential shell files to pre-cache during install
@@ -169,9 +169,7 @@ self.addEventListener('push', function(event) {
     }
   } catch (e) {
     try {
-      if (event.data) {
-        data.body = event.data.text();
-      }
+      if (event.data) data.body = event.data.text();
     } catch (e2) {
       console.error('[SW] Push data parse error:', e2);
     }
@@ -179,87 +177,54 @@ self.addEventListener('push', function(event) {
 
   const isEmployee = data.url && data.url.startsWith('/employee');
   const icon = isEmployee ? '/employee-logo.png' : '/logo.png';
-  let options = {};
-  
+
+  // Build notification title and body
+  let notifTitle = data.title;
+  let notifBody = data.body;
+
   if (data.type === 'order_status' || data.type === 'new_order') {
     const notification = buildOrderStatusNotification(data);
-    
-    options = {
-      body: notification.body,
-      icon: icon,
-      badge: '/badge-icon.png',
-      vibrate: data.type === 'new_order' 
-        ? [200, 100, 200, 100, 200, 100, 400]
-        : (data.orderStatus === 'ready' ? [500, 200, 500] : [300, 100, 300]),
-      data: {
-        url: data.url || '/',
-        orderId: data.orderId,
-        orderNumber: data.orderNumber,
-        orderStatus: data.orderStatus,
-        type: data.type,
-        timestamp: Date.now()
-      },
-      tag: data.tag || `order-${data.orderNumber || 'notification'}`,
-      renotify: true,
-      requireInteraction: data.orderStatus === 'ready' || data.type === 'new_order',
-      silent: false,
-      actions: notification.actions,
-      timestamp: data.timestamp || Date.now(),
-      dir: 'rtl',
-      lang: 'ar',
-    };
-    
-    data.title = notification.title;
-  } else if (data.type === 'promo') {
-    options = {
-      body: data.body,
-      icon: icon,
-      badge: '/badge-icon.png',
-      vibrate: [200, 100, 200],
-      data: {
-        url: data.url || '/',
-        type: 'promo',
-        timestamp: Date.now()
-      },
-      tag: data.tag || 'promo-notification',
-      renotify: false,
-      requireInteraction: false,
-      silent: false,
-      actions: [
-        { action: 'open', title: '🎁 عرض العرض' },
-        { action: 'dismiss', title: 'تجاهل' }
-      ],
-      timestamp: data.timestamp || Date.now(),
-      dir: 'rtl',
-      lang: 'ar',
-    };
-  } else {
-    options = {
-      body: data.body,
-      icon: icon,
-      badge: '/badge-icon.png',
-      vibrate: [300, 100, 300, 100, 300],
-      data: {
-        url: data.url || '/',
-        orderId: data.orderId,
-        timestamp: Date.now()
-      },
-      tag: data.tag || 'qirox-notification',
-      renotify: true,
-      requireInteraction: true,
-      silent: false,
-      actions: [
-        { action: 'open', title: '📋 عرض' },
-        { action: 'dismiss', title: 'تجاهل' }
-      ],
-      timestamp: data.timestamp || Date.now(),
-      dir: 'rtl',
-      lang: 'ar',
-    };
+    notifTitle = notification.title || data.title;
+    notifBody = notification.body || data.body;
   }
 
+  // Core options — compatible with all platforms including iOS PWA
+  const coreOptions = {
+    body: notifBody,
+    icon: icon,
+    badge: '/badge-icon.png',
+    data: {
+      url: data.url || '/',
+      orderId: data.orderId,
+      orderNumber: data.orderNumber,
+      orderStatus: data.orderStatus,
+      type: data.type,
+      timestamp: Date.now(),
+    },
+    tag: data.tag || `notif-${Date.now()}`,
+    dir: 'rtl',
+    lang: 'ar',
+  };
+
+  // Extended options for platforms that support them (Android Chrome, Desktop)
+  // iOS ignores most of these silently, but they cause no harm
+  const extendedOptions = {
+    ...coreOptions,
+    vibrate: data.type === 'new_order'
+      ? [200, 100, 200, 100, 200]
+      : [300, 100, 300],
+    renotify: true,
+    silent: false,
+    timestamp: data.timestamp || Date.now(),
+    actions: data.type === 'order_status' || data.type === 'new_order'
+      ? buildOrderStatusNotification(data).actions
+      : [{ action: 'open', title: '📋 عرض' }],
+  };
+
+  // Try extended options first, fall back to minimal if it fails (iOS safety net)
   event.waitUntil(
-    self.registration.showNotification(data.title, options)
+    self.registration.showNotification(notifTitle, extendedOptions)
+      .catch(() => self.registration.showNotification(notifTitle, coreOptions))
   );
 });
 
