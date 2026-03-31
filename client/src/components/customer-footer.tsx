@@ -72,7 +72,7 @@ export function CustomerFooter() {
               className="text-xs text-muted-foreground hover:text-primary transition-colors font-ibm-arabic"
               data-testid="link-cr-saudi-business"
             >
-              {t("legal.cr")} — 1163184110
+              {t("legal.cr")}
             </a>
           </div>
 
