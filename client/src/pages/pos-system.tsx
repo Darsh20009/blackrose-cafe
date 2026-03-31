@@ -463,20 +463,15 @@ export default function PosSystem() {
   }, [productsData, selectedCategory, searchQuery, groupedItemsMap]);
 
   const visibleCategories = useMemo(() => {
-    const legacyNames: Record<string, string> = {
-      hot: 'مشروبات ساخنة', cold: 'مشروبات باردة', desserts: 'حلا والكيك',
-      bakery: 'المخبوزات', sandwiches: 'الساندوتشات', food: 'المأكولات',
-      drinks: 'المشروبات', specialty: 'مشروبات إضافية', basic: 'قهوة أساسية',
-    };
-    const dynamicNameMap: Record<string, string> = {};
-    menuCategories.forEach(c => { dynamicNameMap[c.id] = c.nameAr; });
-    const cats = Array.from(new Set(productsData?.map(p => p.category).filter(Boolean) || []));
-    return cats.map(c => ({
-      id: c,
-      name: dynamicNameMap[c] || legacyNames[c] || c,
-      icon: Tag,
-      color: "text-primary"
-    }));
+    const itemCategorySet = new Set(productsData?.map(p => p.category).filter(Boolean) || []);
+    return menuCategories
+      .filter(c => itemCategorySet.has(c.id))
+      .map(c => ({
+        id: c.id,
+        name: c.nameAr,
+        icon: Tag,
+        color: "text-primary"
+      }));
   }, [productsData, menuCategories]);
 
   const calculateTotal = useMemo(() => {

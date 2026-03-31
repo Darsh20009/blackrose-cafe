@@ -316,25 +316,16 @@ export default function MenuPage() {
     Coffee, Flame, Snowflake, Star, Cake, Utensils, Sparkles
   };
 
-  const systemCategories = [
-    { id: "all",        name: tc("الكل", "All"),            icon: Coffee,    isSystem: true },
-    { id: "hot",        name: tc("مشروبات ساخنة", "Hot Drinks"),   icon: Flame,     isSystem: true },
-    { id: "cold",       name: tc("مشروبات باردة", "Cold Drinks"),   icon: Snowflake, isSystem: true },
-    { id: "desserts",   name: tc("حلا والكيك", "Desserts & Cake"),       icon: Cake,      isSystem: true },
-    { id: "bakery",     name: tc("المخبوزات", "Bakery"),        icon: Cake,      isSystem: true },
-    { id: "sandwiches", name: tc("الساندوتشات", "Sandwiches"),     icon: Utensils,  isSystem: true },
-  ];
+  const allTab = { id: "all", name: tc("الكل", "All"), icon: Coffee };
 
-  const customCategories = dynamicCategories
-    .filter(c => !c.isSystem)
-    .map(c => ({
+  const categories = [
+    allTab,
+    ...dynamicCategories.map(c => ({
       id: c.id,
       name: i18n.language === 'ar' ? c.nameAr : (c.nameEn || c.nameAr),
       icon: iconMap[c.icon || 'Coffee'] || Coffee,
-      isSystem: false
-    }));
-
-  const categories = [...systemCategories, ...customCategories];
+    })),
+  ];
 
   const bestSellers = coffeeItems
     .filter(item => (item as any).isBestSeller || (item as any).salesCount > 10 || item.category === 'food' || item.category === 'bakery')
