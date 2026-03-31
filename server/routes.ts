@@ -14933,9 +14933,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!category) {
         return res.status(404).json({ error: "القسم غير موجود" });
       }
-      if (category.isSystem) {
-        return res.status(400).json({ error: "لا يمكن حذف قسم أساسي من النظام" });
-      }
       
       // Find all active categories except the one being deleted (same department preferred)
       const remainingCategories = await MenuCategoryModel.find({
