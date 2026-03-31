@@ -373,6 +373,7 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
         <div className="text-center mt-4 pt-2 border-t border-black text-[9px]">
           <p className="font-bold">شكراً لزيارتكم</p>
           <p>الرقم الضريبي: 312718675800003</p>
+          <p>السجل التجاري: 1163184110</p>
           <p className="font-bold mt-1 tracking-tight">www.blackrose.com.sa</p>
         </div>
       </div>

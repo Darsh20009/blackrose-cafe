@@ -302,11 +302,11 @@ export async function printKitchenOrder(data: KitchenOrderData): Promise<void> {
   openPrintWindow(html, `طلب المطبخ - ${data.orderNumber}`, { paperWidth: '80mm', autoPrint: true, autoClose: true, showPrintButton: false });
 }
 
-const VAT_NUMBER = "311234567890003";
+const VAT_NUMBER = "312718675800003";
 const COMPANY_NAME = "BLACK ROSE CAFE";
 const COMPANY_NAME_EN = "BLACK ROSE CAFE";
-const COMPANY_CR = "";
-const DEFAULT_BRANCH = "الفرع الرئيسي";
+const COMPANY_CR = "1163184110";
+const DEFAULT_BRANCH = "الفرع الرئيسي - ينبع";
 const DEFAULT_ADDRESS = "ينبع، المملكة العربية السعودية";
 
 function generateZATCAQRCode(data: {

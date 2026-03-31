@@ -71,15 +71,11 @@ export default function SplashScreen() {
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                   <div>
                     <p className="text-white/40 text-[9px]">السجل التجاري</p>
-                    <p className="text-white text-xs font-mono font-semibold">4700114396</p>
+                    <p className="text-white text-xs font-mono font-semibold">1163184110</p>
                   </div>
                   <div className="text-left">
                     <p className="text-white/40 text-[9px]">الرقم الضريبي</p>
                     <p className="text-white text-xs font-mono font-semibold">312718675800003</p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-white/40 text-[9px]">رقم التسجيل</p>
-                    <p className="text-white text-xs font-mono font-semibold">311099187300003</p>
                   </div>
                 </div>
                 <p className="text-white/30 text-[9px] mt-3 text-center">
