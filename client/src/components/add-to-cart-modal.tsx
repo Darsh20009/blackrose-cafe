@@ -76,18 +76,9 @@ export function AddToCartModal({
   });
 
   const generalAddons = useMemo(() => {
-    // Only show general addons as fallback when no item-specific addons are configured
-    if (!activeItem || specificAddons.length > 0) return [];
-    const itemMenuCategory = (activeItem as any).category || '';
-    return allAddons.filter(addon => {
-      if (!addon.isAvailable || addon.isAddonDrink) return false;
-      // If addon has a menuCategory set, only show it when item's category matches
-      if ((addon as any).menuCategory && itemMenuCategory) {
-        return (addon as any).menuCategory === itemMenuCategory;
-      }
-      return true; // No category restriction → show for all items
-    });
-  }, [activeItem, allAddons, specificAddons]);
+    // Never show general addons as fallback — addons must be explicitly linked to the item
+    return [];
+  }, []);
 
   const drinkAddons = useMemo(() => {
     if (!activeItem) return [];
@@ -250,11 +241,20 @@ export function AddToCartModal({
                   if (!sections[sec]) sections[sec] = [];
                   sections[sec].push(idx);
                 });
-                return Object.entries(sections).map(([sec, indices]) => (
+                return Object.entries(sections).map(([sec, indices]) => {
+                  const isSingleSelect = indices.some(i => (inlineAddons[i] as any).selectionType === 'single');
+                  return (
                   <div key={sec} className="space-y-2">
-                    <Label className="text-sm font-semibold text-foreground">
-                      {sec || (isAr ? "الإضافات" : "Extras")}
-                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm font-semibold text-foreground">
+                        {sec || (isAr ? "الإضافات" : "Extras")}
+                      </Label>
+                      {isSingleSelect && (
+                        <span className="text-[10px] text-muted-foreground border border-border rounded-full px-2 py-0.5">
+                          {isAr ? "اختر واحداً" : "Select one"}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {indices.map((idx) => {
                         const addon = inlineAddons[idx];
@@ -264,11 +264,16 @@ export function AddToCartModal({
                           <button
                             key={idx}
                             onClick={() => {
-                              setSelectedItemAddonIndices((prev) =>
-                                prev.includes(idx)
-                                  ? prev.filter((i) => i !== idx)
-                                  : [...prev, idx]
-                              );
+                              if (isSingleSelect) {
+                                setSelectedItemAddonIndices((prev) => {
+                                  const withoutSection = prev.filter(i => !indices.includes(i));
+                                  return prev.includes(idx) ? withoutSection : [...withoutSection, idx];
+                                });
+                              } else {
+                                setSelectedItemAddonIndices((prev) =>
+                                  prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]
+                                );
+                              }
                             }}
                             className={`rounded-xl text-xs font-medium transition-all flex items-center gap-2 px-3 py-2 ${
                               selected
@@ -294,7 +299,8 @@ export function AddToCartModal({
                       })}
                     </div>
                   </div>
-                ));
+                  );
+                });
               })()}
             </div>
           )}
