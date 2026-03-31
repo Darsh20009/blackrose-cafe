@@ -2303,6 +2303,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/coffee-items/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
       const updated = await CoffeeItemModel.findOneAndUpdate({ id: req.params.id }, { $set: req.body }, { new: true });
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      invalidateCoffeeItemsCache(tenantId);
       res.json(serializeDoc(updated));
     } catch (error) {
       res.status(500).json({ error: "فشل في تحديث حالة المنتج" });
