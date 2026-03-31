@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Coffee, LogOut, ShoppingCart, ClipboardList, User, ChefHat, Warehouse, Eye, Calendar, FileText, BarChart3, Lock, Utensils } from "lucide-react";
+import {
+  Coffee, LogOut, ShoppingCart, ClipboardList, User, ChefHat,
+  Warehouse, Eye, Calendar, FileText, BarChart3, Lock, Utensils,
+  ChevronLeft
+} from "lucide-react";
 import type { Employee } from "@shared/schema";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { useTranslate } from "@/lib/useTranslate";
@@ -42,126 +44,121 @@ export default function EmployeeHome() {
   const isManager = employee.role === "manager" || employee.role === "admin";
 
   const employeeQuickAccess = [
-    { title: tc("نقطة البيع", "POS"), description: tc("إدارة الطلبات", "Manage orders"), icon: ShoppingCart, path: "/employee/pos", color: "from-green-500 to-green-600", testId: "button-pos" },
-    { title: tc("الطلبات", "Orders"), description: tc("عرض وإدارة الطلبات", "View and manage orders"), icon: ClipboardList, path: "/employee/orders", color: "from-blue-500 to-blue-600", testId: "button-orders" },
-    { title: tc("الحضور", "Attendance"), description: tc("تسجيل الحضور والانصراف", "Record attendance"), icon: Calendar, path: "/employee/attendance", color: "from-purple-500 to-purple-600", testId: "button-attendance" },
-    { title: tc("طلب إجازة", "Leave Request"), description: tc("تقديم طلب إجازة", "Submit a leave request"), icon: FileText, path: "/employee/leave-request", color: "from-primary to-primary/80", testId: "button-leave" },
-    { title: tc("المطبخ", "Kitchen"), description: tc("إدارة طلبات المطبخ", "Manage kitchen orders"), icon: ChefHat, path: "/employee/kitchen", color: "from-red-500 to-red-600", testId: "button-kitchen" },
-    { title: tc("الموارد البشرية", "HR"), description: tc("معلومات الموظف", "Employee information"), icon: User, path: "/employee/dashboard", color: "from-indigo-500 to-indigo-600", testId: "button-hr" },
+    { title: tc("نقطة البيع", "Point of Sale"), icon: ShoppingCart, path: "/employee/pos", testId: "button-pos" },
+    { title: tc("الطلبات", "Orders"), icon: ClipboardList, path: "/employee/orders", testId: "button-orders" },
+    { title: tc("الحضور", "Attendance"), icon: Calendar, path: "/employee/attendance", testId: "button-attendance" },
+    { title: tc("طلب إجازة", "Leave Request"), icon: FileText, path: "/employee/leave-request", testId: "button-leave" },
+    { title: tc("المطبخ", "Kitchen"), icon: ChefHat, path: "/employee/kitchen", testId: "button-kitchen" },
+    { title: tc("ملفي الشخصي", "My Profile"), icon: User, path: "/employee/dashboard", testId: "button-hr" },
   ];
 
   const managerAccess = [
-    { title: tc("إدارة المشروبات", "Drinks Management"), description: tc("إضافة وتعديل قائمة المشروبات", "Add and edit drinks menu"), icon: Coffee, path: "/employee/menu-management", color: "from-primary to-primary/80", testId: "button-menu-mgmt" },
-    { title: tc("إدارة الطعام", "Food Management"), description: tc("إضافة وتعديل قائمة الطعام", "Add and edit food menu"), icon: Utensils, path: "/employee/menu-management?type=food", color: "from-primary to-primary/80", testId: "button-food-mgmt" },
-    { title: tc("المواد الخام", "Ingredients"), description: tc("إدارة المواد الخام والمخزون", "Manage raw materials and inventory"), icon: Warehouse, path: "/employee/ingredients", color: "from-cyan-500 to-cyan-600", testId: "button-ingredients-mgmt" },
-    { title: tc("لوحة التحكم", "Dashboard"), description: tc("إحصائيات وتقارير", "Stats and reports"), icon: BarChart3, path: "/employee/dashboard", color: "from-teal-500 to-teal-600", testId: "button-dashboard" },
-    { title: tc("إدارة الموظفين", "Employees"), description: tc("إضافة وتعديل الموظفين", "Add and edit employees"), icon: Lock, path: "/manager/employees", color: "from-pink-500 to-pink-600", testId: "button-employees" },
-    { title: tc("الطاولات والحجوزات", "Tables & Reservations"), description: tc("إدارة الطاولات", "Manage tables"), icon: Eye, path: "/employee/tables", color: "from-lime-500 to-lime-600", testId: "button-tables" },
+    { title: tc("إدارة المشروبات", "Drinks Menu"), icon: Coffee, path: "/employee/menu-management", testId: "button-menu-mgmt" },
+    { title: tc("إدارة الطعام", "Food Menu"), icon: Utensils, path: "/employee/menu-management?type=food", testId: "button-food-mgmt" },
+    { title: tc("المواد الخام", "Ingredients"), icon: Warehouse, path: "/employee/ingredients", testId: "button-ingredients-mgmt" },
+    { title: tc("لوحة التحكم", "Dashboard"), icon: BarChart3, path: "/employee/dashboard", testId: "button-dashboard" },
+    { title: tc("إدارة الموظفين", "Employees"), icon: Lock, path: "/manager/employees", testId: "button-employees" },
+    { title: tc("الطاولات", "Tables"), icon: Eye, path: "/employee/tables", testId: "button-tables" },
   ];
 
-  return (
-    <div className="min-h-screen pb-16 sm:pb-0 bg-gray-50" dir="rtl">
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-5">
-          <div className="flex items-center justify-between mb-3 sm:mb-5">
-            <div className="flex items-center gap-2 sm:gap-4">
-              <div className="w-8 h-8 sm:w-12 sm:h-12 flex-shrink-0">
-                <img src={blackroseLogo} alt="BLACK ROSE" className="w-full h-full object-contain rounded-xl" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-              </div>
-              <div>
-                <h1 className="text-base sm:text-2xl font-bold text-primary">{tc("لوحة التحكم", "Control Panel")}</h1>
-                <p className="text-gray-500 text-xs sm:text-sm">{tc("مرحباً", "Welcome")}, {employee.fullName}</p>
-              </div>
-            </div>
-            <Button variant="outline" size="sm" className="border-red-400 text-red-500 hover:bg-red-50 text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3" onClick={handleLogout} data-testid="button-logout">
-              <LogOut className="w-3 h-3 sm:w-4 sm:h-4 sm:ml-2" />
-              <span className="hidden sm:inline">{tc("تسجيل الخروج", "Sign Out")}</span>
-            </Button>
-          </div>
+  const initials = (employee.fullName || "?").split(" ").map((w: string) => w[0]).slice(0, 2).join("");
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-4">
-            <Card className="bg-white border-gray-200">
-              <CardContent className="pt-3 pb-3 px-3 sm:pt-5 sm:pb-4 sm:px-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-500 text-xs">{tc("المسمى الوظيفي", "Job Title")}</p>
-                    <p className="text-gray-900 font-bold text-sm sm:text-base truncate max-w-[100px] sm:max-w-none">{employee.jobTitle || employee.role}</p>
-                  </div>
-                  <Badge className="bg-primary/20 text-primary text-xs">
-                    {employee.role === "manager" ? tc("مدير", "Manager") : tc("موظف", "Employee")}
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-white border-gray-200">
-              <CardContent className="pt-3 pb-3 px-3 sm:pt-5 sm:pb-4 sm:px-4">
-                <div>
-                  <p className="text-gray-500 text-xs">{tc("الفرع", "Branch")}</p>
-                  <p className="text-gray-900 font-bold text-sm sm:text-base truncate">{employee.branchId || tc("جميع الفروع", "All Branches")}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-white border-gray-200 hidden md:block">
-              <CardContent className="pt-3 pb-3 px-3 sm:pt-5 sm:pb-4 sm:px-4">
-                <div>
-                  <p className="text-gray-500 text-xs">{tc("رقم الموظف", "Employee ID")}</p>
-                  <p className="text-gray-900 font-bold text-sm sm:text-base">{employee.id?.slice(0, 8)}</p>
-                </div>
-              </CardContent>
-            </Card>
+  return (
+    <div className="min-h-screen bg-background pb-20" dir="rtl">
+
+      {/* Header */}
+      <div className="bg-card border-b border-border px-4 py-4">
+        <div className="max-w-2xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src={blackroseLogo} alt="BLACK ROSE" className="w-9 h-9 object-contain rounded-lg" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <div>
+              <p className="text-xs text-muted-foreground leading-none mb-0.5">BLACK ROSE CAFE</p>
+              <h1 className="text-sm font-bold text-foreground leading-none">{tc("بوابة الموظفين", "Employee Portal")}</h1>
+            </div>
           </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors py-1.5 px-3 rounded-lg hover:bg-destructive/10"
+            data-testid="button-logout"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            {tc("خروج", "Sign Out")}
+          </button>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        <div className="mb-4 sm:mb-8">
-          <h2 className="text-base sm:text-xl font-bold text-primary mb-3 sm:mb-4">{tc("الوصول السريع", "Quick Access")}</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
+      <div className="max-w-2xl mx-auto px-4 py-5 space-y-6">
+
+        {/* Employee Card */}
+        <div className="bg-card border border-border rounded-2xl p-4 flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <span className="text-primary font-black text-base">{initials}</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-bold text-foreground text-base truncate">{employee.fullName}</h2>
+            <p className="text-muted-foreground text-xs mt-0.5">{employee.jobTitle || employee.role}</p>
+          </div>
+          <Badge variant="outline" className="text-xs border-primary/30 text-primary shrink-0">
+            {tc("موظف", "Employee")}
+          </Badge>
+        </div>
+
+        {/* Quick Access */}
+        <div className="space-y-3">
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
+            {tc("الخدمات", "Services")}
+          </h2>
+          <div className="bg-card border border-border rounded-2xl overflow-hidden divide-y divide-border">
             {employeeQuickAccess.map((item) => {
               const Icon = item.icon;
               return (
-                <Button key={item.path} onClick={() => setLocation(item.path)}
-                  className={`bg-gradient-to-br ${item.color} hover:opacity-90 h-auto p-3 sm:p-5 text-right justify-start rounded-xl`}
+                <button
+                  key={item.path}
+                  onClick={() => setLocation(item.path)}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/50 transition-colors text-right group"
                   data-testid={item.testId}
                 >
-                  <div className="text-right w-full">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                      <span className="font-bold text-sm sm:text-base leading-tight">{item.title}</span>
-                    </div>
-                    <p className="text-white/70 text-xs hidden sm:block">{item.description}</p>
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Icon className="w-4 h-4 text-primary" />
                   </div>
-                </Button>
+                  <span className="flex-1 text-sm font-medium text-foreground">{item.title}</span>
+                  <ChevronLeft className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                </button>
               );
             })}
           </div>
         </div>
 
+        {/* Manager Access */}
         {isManager && (
-          <div>
-            <h2 className="text-base sm:text-xl font-bold text-primary mb-3 sm:mb-4">{tc("صلاحيات المدير", "Manager Permissions")}</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
+          <div className="space-y-3">
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
+              {tc("إدارة", "Management")}
+            </h2>
+            <div className="bg-card border border-border rounded-2xl overflow-hidden divide-y divide-border">
               {managerAccess.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <Button key={item.path} onClick={() => setLocation(item.path)}
-                    className={`bg-gradient-to-br ${item.color} hover:opacity-90 h-auto p-3 sm:p-5 text-right justify-start rounded-xl`}
+                  <button
+                    key={item.path}
+                    onClick={() => setLocation(item.path)}
+                    className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/50 transition-colors text-right group"
                     data-testid={item.testId}
                   >
-                    <div className="text-right w-full">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Icon className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                        <span className="font-bold text-sm sm:text-base leading-tight">{item.title}</span>
-                      </div>
-                      <p className="text-white/70 text-xs hidden sm:block">{item.description}</p>
+                    <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                      <Icon className="w-4 h-4 text-muted-foreground" />
                     </div>
-                  </Button>
+                    <span className="flex-1 text-sm font-medium text-foreground">{item.title}</span>
+                    <ChevronLeft className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                  </button>
                 );
               })}
             </div>
           </div>
         )}
+
       </div>
+
       <MobileBottomNav employeeRole={employee?.role} onLogout={handleLogout} />
     </div>
   );
