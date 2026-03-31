@@ -5,6 +5,7 @@ import { useCartStore } from "@/lib/cart-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PWAInstallButton } from "@/components/pwa-install";
+import { NotificationBell } from "@/components/notification-bell";
 import { useCustomer } from "@/contexts/CustomerContext";
 import { useLocation } from "wouter";
 import { 
@@ -517,6 +518,16 @@ export default function MenuPage() {
             >
               <Sparkles className="w-4 h-4" />
             </Button>
+          )}
+
+          {isAuthenticated && customer && (
+            <div className="[&>div>button]:h-9 [&>div>button]:w-9 [&>div>button]:rounded-xl [&>div>button]:bg-white/10 [&>div>button]:hover:bg-white/20 [&>div>button]:text-white [&>div>button]:border [&>div>button]:border-white/10 [&>div>button:hover]:border-white/20">
+              <NotificationBell
+                userId={(customer as any)?.id || (customer as any)?._id}
+                userType="customer"
+                clientType="customer"
+              />
+            </div>
           )}
 
           <Button 

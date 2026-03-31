@@ -251,8 +251,9 @@ export default function PaymentMethods({
           >
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-muted text-primary flex-shrink-0">
-                  <CreditCard className="w-5 h-5" />
+                {/* Card network logos replace the icon */}
+                <div className="flex-shrink-0 rounded-xl bg-muted p-1.5 flex items-center justify-center">
+                  <img src="/card-logos.png" alt="مدى، فيزا، ماستر كارد" className="h-8 w-auto object-contain" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
@@ -263,10 +264,7 @@ export default function PaymentMethods({
                       </div>
                     )}
                   </div>
-                  {/* Card network logos */}
-                  <div className="flex items-center gap-2 mt-2">
-                    <img src="/card-logos.png" alt="مدى، فيزا، ماستر كارد" className="h-6 w-auto object-contain" />
-                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">مدى · فيزا · ماستر كارد</p>
                 </div>
               </div>
             </CardContent>
