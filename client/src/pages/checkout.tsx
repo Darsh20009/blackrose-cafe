@@ -931,8 +931,7 @@ export default function CheckoutPage() {
     };
 
     const handleNavigateToBranch = () => {
-      const query = encodeURIComponent("BLACK ROSE CAFE blackrose.sa");
-      window.open(`https://www.google.com/maps/search/${query}`, "_blank");
+      window.open("https://maps.app.goo.gl/zhHFfQVjWRxVKEBn6?g_st=ic", "_blank");
     };
 
     return (
@@ -1008,6 +1007,36 @@ export default function CheckoutPage() {
                 <span>الإجمالي</span>
                 <span className="text-primary">{orderTotal.toFixed(2)} <SarIcon /></span>
               </div>
+            </div>
+          </div>
+
+          {/* Contact Card */}
+          <div className="bg-white dark:bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
+            <div className="flex items-center divide-x divide-x-reverse divide-border">
+              <a
+                href="tel:+966566507666"
+                className="flex-1 flex flex-col items-center gap-1.5 py-4 px-2 hover:bg-muted/50 transition-colors"
+                data-testid="link-call-cafe"
+              >
+                <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.63 3.45 2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6 6l1.06-1.06a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.73 16z"/></svg>
+                </div>
+                <span className="text-[11px] font-semibold text-center">اتصل بنا</span>
+                <span className="text-[10px] text-muted-foreground ltr:direction-ltr" dir="ltr">+966 56 650 7666</span>
+              </a>
+              <a
+                href="https://maps.app.goo.gl/zhHFfQVjWRxVKEBn6?g_st=ic"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 flex flex-col items-center gap-1.5 py-4 px-2 hover:bg-muted/50 transition-colors"
+                data-testid="link-maps-cafe"
+              >
+                <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                </div>
+                <span className="text-[11px] font-semibold text-center">موقعنا</span>
+                <span className="text-[10px] text-muted-foreground text-center">عرض على الخريطة</span>
+              </a>
             </div>
           </div>
 
