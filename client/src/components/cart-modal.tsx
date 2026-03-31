@@ -77,7 +77,8 @@ const CartModal = memo(() => {
                               const size = item.coffeeItem.availableSizes.find(s => s.nameAr === item.selectedSize);
                               if (size) itemPrice = size.price;
                             }
-                            return (Number(itemPrice) * item.quantity).toFixed(2);
+                            const inlineAddonPrices = ((item as any).selectedItemAddons || []).reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
+                            return ((Number(itemPrice) + inlineAddonPrices) * item.quantity).toFixed(2);
                           })()} <SarIcon />
                         </p>
                       </div>
