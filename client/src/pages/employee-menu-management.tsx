@@ -66,6 +66,7 @@ export default function EmployeeMenuManagement() {
  const [editableSizes, setEditableSizes] = useState<Array<{nameAr: string; price: number}>>([]);
  const [editableAddons, setEditableAddons] = useState<Array<{nameAr: string; nameEn?: string; price: number; imageUrl?: string; category?: string; section?: string; selectionType?: 'single' | 'multiple'}>>([]);
  const [addEditableAddons, setAddEditableAddons] = useState<Array<{nameAr: string; nameEn?: string; price: number; imageUrl?: string; category?: string; section?: string; selectionType?: 'single' | 'multiple'}>>([]);
+const [addEditableSizes, setAddEditableSizes] = useState<Array<{nameAr: string; price: number}>>([]);
  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
  const [isImageLibraryOpen, setIsImageLibraryOpen] = useState(false);
  const [imageLibraryContext, setImageLibraryContext] = useState<'add' | 'edit' | 'add-addon' | 'edit-addon'>('add');
@@ -559,7 +560,7 @@ const [aiEditDescription, setAiEditDescription] = useState("");
     imageUrls: addImageUrls.length > 0 ? addImageUrls : (step1Data?.imageUrls || []),
      branchAvailability: selectedBranches.length > 0 ? selectedBranches : undefined,
      isGiftable: false, // Default value, will be updated by UI if needed
-     availableSizes: step1Data?.availableSizes || [],
+     availableSizes: addEditableSizes.filter(s => s.nameAr.trim()),
      addons: addEditableAddons.filter(a => a.nameAr.trim()),
    });
    setAddStep(2);
@@ -843,6 +844,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
     setSelectedIngredients([]);
     setAddImageUrls([]);
     setAddEditableAddons([]);
+    setAddEditableSizes([]);
     setSelectedCategory(defaultCategory);
     setSelectedCoffeeStrength("classic");
   }
@@ -1039,6 +1041,62 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
  </div>
 
  {/* Inline Addons Section - Grouped by Section */}
+{/* Sizes for add form */}
+<div className="space-y-2">
+  <Label className="text-gray-300">الأحجام المتاحة</Label>
+  <div className="space-y-2">
+    {addEditableSizes.map((size, idx) => (
+      <div key={idx} className="flex gap-2 items-end">
+        <Input
+          type="text"
+          placeholder="اسم الحجم (مثال: صغير)"
+          value={size.nameAr}
+          onChange={(e) => {
+            const next = [...addEditableSizes];
+            next[idx].nameAr = e.target.value;
+            setAddEditableSizes(next);
+          }}
+          className="bg-gray-50 border-gray-300 text-gray-900 flex-1"
+          data-testid={`input-add-size-name-${idx}`}
+        />
+        <Input
+          type="number"
+          placeholder="السعر"
+          value={size.price}
+          onChange={(e) => {
+            const next = [...addEditableSizes];
+            next[idx].price = parseFloat(e.target.value) || 0;
+            setAddEditableSizes(next);
+          }}
+          className="bg-gray-50 border-gray-300 text-gray-900 w-24"
+          data-testid={`input-add-size-price-${idx}`}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setAddEditableSizes(addEditableSizes.filter((_, i) => i !== idx))}
+          className="border-red-500/30 text-red-500"
+          data-testid={`button-remove-size-${idx}`}
+        >
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+    ))}
+  </div>
+  <Button
+    type="button"
+    size="sm"
+    variant="outline"
+    onClick={() => setAddEditableSizes([...addEditableSizes, { nameAr: '', price: 0 }])}
+    className="border-green-500/30 text-green-400 w-full"
+    data-testid="button-add-size"
+  >
+    <Plus className="w-4 h-4 ml-1" />
+    إضافة حجم
+  </Button>
+</div>
+
 <div className="space-y-2">
   <Label className="text-gray-300">الإضافات المتاحة (مع السعر)</Label>
   {(() => {
