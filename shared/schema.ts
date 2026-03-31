@@ -707,6 +707,10 @@ export interface IBusinessConfig extends Document {
     enableScheduledPickup?: boolean;
     enableTakeaway?: boolean;
   };
+  serviceFeeEnabled?: boolean;
+  serviceFeeAmount?: number;
+  serviceFeeLowOrderThreshold?: number;
+  serviceFeeLowOrderAmount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -812,6 +816,10 @@ const BusinessConfigSchema = new Schema<IBusinessConfig>({
       enableTakeaway: true,
     })
   },
+  serviceFeeEnabled: { type: Boolean, default: true },
+  serviceFeeAmount: { type: Number, default: 0.70 },
+  serviceFeeLowOrderThreshold: { type: Number, default: 5.00 },
+  serviceFeeLowOrderAmount: { type: Number, default: 0.35 },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

@@ -250,6 +250,11 @@ export default function CheckoutPage() {
     staleTime: 60000,
   });
 
+  const { data: businessConfig } = useQuery<any>({
+    queryKey: ["/api/business-config"],
+    staleTime: 60000,
+  });
+
   const pointsPerSar: number = loyaltySettings?.pointsPerSar ?? 20;
   const minPointsForRedemption: number = loyaltySettings?.minPointsForRedemption ?? 100;
   const loyaltyPoints: number = loyaltyCard?.points || 0;
@@ -277,7 +282,18 @@ export default function CheckoutPage() {
 
   const giftCardDiscount = appliedGiftCard ? Math.min(appliedGiftCard.applied, getFinalTotalWithPoints()) : 0;
   const orderDeliveryFee = deliveryInfo?.type === 'delivery' ? (deliveryInfo?.deliveryFee || 0) : 0;
-  const getFinalAmount = () => Math.max(0, getFinalTotalWithPoints() - giftCardDiscount) + orderDeliveryFee;
+
+  const getServiceFee = () => {
+    if (!businessConfig?.serviceFeeEnabled) return 0;
+    const subtotal = getFinalTotal();
+    const threshold = businessConfig?.serviceFeeLowOrderThreshold ?? 5;
+    const lowFee = businessConfig?.serviceFeeLowOrderAmount ?? 0.35;
+    const normalFee = businessConfig?.serviceFeeAmount ?? 0.70;
+    return subtotal < threshold ? lowFee : normalFee;
+  };
+
+  const serviceFee = getServiceFee();
+  const getFinalAmount = () => Math.max(0, getFinalTotalWithPoints() - giftCardDiscount) + orderDeliveryFee + serviceFee;
 
   const handleCheckGiftCard = async (code?: string) => {
     const codeToUse = code || giftCardCode.trim();
@@ -1177,6 +1193,15 @@ export default function CheckoutPage() {
                     <span className="font-bold">+{orderDeliveryFee.toFixed(2)} <SarIcon /></span>
                   </div>
                 )}
+                {serviceFee > 0 && (
+                  <div className="flex justify-between items-center gap-2 text-sm text-amber-700 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2 rounded">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3.5 h-3.5 text-center">⚙</span>
+                      رسوم الخدمة
+                    </span>
+                    <span className="font-bold">+{serviceFee.toFixed(2)} <SarIcon /></span>
+                  </div>
+                )}
                 <div className="pt-4 border-t font-bold text-xl flex justify-between gap-2">
                   <span>{t("cart.total")}:</span>
                   <span className={getFinalAmount() === 0 ? 'text-green-600' : 'text-primary'}>
@@ -1612,7 +1637,7 @@ export default function CheckoutPage() {
           </DialogHeader>
           <div className="py-4 text-center space-y-2">
             <p className="text-lg">{t("checkout.confirm_question")}</p>
-            {(usePointsAsDiscount && pointsDiscountSAR > 0) || (appliedGiftCard && giftCardDiscount > 0) || orderDeliveryFee > 0 ? (
+            {(usePointsAsDiscount && pointsDiscountSAR > 0) || (appliedGiftCard && giftCardDiscount > 0) || orderDeliveryFee > 0 || serviceFee > 0 ? (
               <>
                 <p className="text-sm text-muted-foreground">{(usePointsAsDiscount && pointsDiscountSAR > 0) || (appliedGiftCard && giftCardDiscount > 0) ? 'قبل الخصم' : 'إجمالي الطلب'}: {getBaseTotal().toFixed(2)} <SarIcon /></p>
                 {usePointsAsDiscount && pointsDiscountSAR > 0 && (
@@ -1623,6 +1648,9 @@ export default function CheckoutPage() {
                 )}
                 {orderDeliveryFee > 0 && (
                   <p className="text-sm text-green-600 font-semibold">رسوم التوصيل: +{orderDeliveryFee.toFixed(2)} <SarIcon /></p>
+                )}
+                {serviceFee > 0 && (
+                  <p className="text-sm text-amber-600 font-semibold">رسوم الخدمة: +{serviceFee.toFixed(2)} <SarIcon /></p>
                 )}
                 <p className="text-3xl font-black text-primary">{getFinalAmount().toFixed(2)} <SarIcon /></p>
                 {getFinalAmount() === 0 && <p className="text-sm text-green-600 font-bold">تغطية كاملة!</p>}

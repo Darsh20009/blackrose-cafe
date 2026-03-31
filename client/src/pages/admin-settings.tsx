@@ -273,6 +273,11 @@ export default function AdminSettings() {
     }
   }, [config]);
 
+  const [serviceFeeEnabled, setServiceFeeEnabled] = useState(true);
+  const [serviceFeeAmount, setServiceFeeAmount] = useState(0.70);
+  const [serviceFeeLowOrderThreshold, setServiceFeeLowOrderThreshold] = useState(5.00);
+  const [serviceFeeLowOrderAmount, setServiceFeeLowOrderAmount] = useState(0.35);
+
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(true);
   const [pointsPerDrink, setPointsPerDrink] = useState(10);
   const [pointsPerSar, setPointsPerSar] = useState(20);
@@ -305,6 +310,10 @@ export default function AdminSettings() {
   const [pointsRedemptionMinPoints, setPointsRedemptionMinPoints] = useState(100);
 
   useEffect(() => {
+    setServiceFeeEnabled(config?.serviceFeeEnabled ?? true);
+    setServiceFeeAmount(config?.serviceFeeAmount ?? 0.70);
+    setServiceFeeLowOrderThreshold(config?.serviceFeeLowOrderThreshold ?? 5.00);
+    setServiceFeeLowOrderAmount(config?.serviceFeeLowOrderAmount ?? 0.35);
     if (config?.loyaltyConfig) {
       setLoyaltyEnabled(config.loyaltyConfig.enabled ?? true);
       setPointsPerDrink(config.loyaltyConfig.pointsPerDrink ?? 10);
@@ -2257,6 +2266,95 @@ export default function AdminSettings() {
                 انتقال إلى إدارة الفروع والتراخيص →
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Service Fee Settings */}
+        <Card className="hover-elevate border-orange-100 dark:border-orange-900/30 md:col-span-2 shadow-lg">
+          <CardHeader className="bg-orange-50/50 dark:bg-orange-900/10 border-b">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-orange-100 dark:bg-orange-900/20 rounded-lg">
+                  <span className="text-xl">⚙️</span>
+                </div>
+                <div>
+                  <CardTitle className="text-xl font-bold">رسوم الخدمة</CardTitle>
+                  <CardDescription>رسوم تُضاف تلقائياً على كل طلب عند الدفع</CardDescription>
+                </div>
+              </div>
+              <Button
+                onClick={() => mutation.mutate({
+                  serviceFeeEnabled,
+                  serviceFeeAmount,
+                  serviceFeeLowOrderThreshold,
+                  serviceFeeLowOrderAmount,
+                })}
+                disabled={mutation.isPending}
+                data-testid="button-save-service-fee"
+              >
+                {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
+                حفظ رسوم الخدمة
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-6 space-y-6">
+            <div className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-900/10 rounded-lg border border-orange-100 dark:border-orange-900/30">
+              <div>
+                <Label htmlFor="service-fee-enabled" className="text-sm font-bold cursor-pointer">تفعيل رسوم الخدمة</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">عند التفعيل تُضاف رسوم تلقائياً لكل طلب في صفحة الدفع</p>
+              </div>
+              <Switch
+                id="service-fee-enabled"
+                checked={serviceFeeEnabled}
+                onCheckedChange={setServiceFeeEnabled}
+                data-testid="switch-service-fee-enabled"
+              />
+            </div>
+            {serviceFeeEnabled && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-orange-700 dark:text-orange-400">رسوم الخدمة العادية (ريال)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={serviceFeeAmount}
+                    onChange={(e) => setServiceFeeAmount(parseFloat(e.target.value) || 0)}
+                    data-testid="input-service-fee-amount"
+                  />
+                  <p className="text-[10px] text-muted-foreground">الرسوم الافتراضية على الطلبات العادية</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-orange-700 dark:text-orange-400">حد الطلب المنخفض (ريال)</Label>
+                  <Input
+                    type="number"
+                    step="0.50"
+                    min="0"
+                    value={serviceFeeLowOrderThreshold}
+                    onChange={(e) => setServiceFeeLowOrderThreshold(parseFloat(e.target.value) || 0)}
+                    data-testid="input-service-fee-threshold"
+                  />
+                  <p className="text-[10px] text-muted-foreground">الطلبات أقل من هذا المبلغ تحصل على رسوم مخفضة</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-orange-700 dark:text-orange-400">رسوم الطلب المنخفض (ريال)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={serviceFeeLowOrderAmount}
+                    onChange={(e) => setServiceFeeLowOrderAmount(parseFloat(e.target.value) || 0)}
+                    data-testid="input-service-fee-low-amount"
+                  />
+                  <p className="text-[10px] text-muted-foreground">الرسوم للطلبات المنخفضة</p>
+                </div>
+              </div>
+            )}
+            {serviceFeeEnabled && (
+              <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-3 border">
+                مثال: طلب بقيمة 8 ريال → رسوم {serviceFeeAmount.toFixed(2)} ريال | طلب بقيمة {(serviceFeeLowOrderThreshold - 0.01).toFixed(2)} ريال → رسوم {serviceFeeLowOrderAmount.toFixed(2)} ريال
+              </div>
+            )}
           </CardContent>
         </Card>
 
