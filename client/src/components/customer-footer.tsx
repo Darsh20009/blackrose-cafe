@@ -66,12 +66,13 @@ export function CustomerFooter() {
               />
             </div>
             <a 
-              href="https://qr.saudibusiness.gov.sa/viewcr?nCrNumber=9AhyCS491ZPTmJxSxD96YA==" 
+              href="https://qr.saudibusiness.gov.sa/viewcr?nCrNumber=opQsRLgqEFrL8PpAgImEew==" 
               target="_blank" 
               rel="noreferrer" 
               className="text-xs text-muted-foreground hover:text-primary transition-colors font-ibm-arabic"
+              data-testid="link-cr-saudi-business"
             >
-              {t("legal.cr")}
+              {t("legal.cr")} — 1163184110
             </a>
           </div>
 
@@ -87,7 +88,7 @@ export function CustomerFooter() {
               <div className="text-xs font-bold text-primary font-ibm-arabic">{t("legal.vat")}</div>
             </div>
             <div className="text-[10px] text-muted-foreground/60 text-center font-ibm-arabic leading-relaxed">
-              جميع الأسعار تشمل ضريبة القيمة المضافة<br/>رقم التسجيل: 311099187300003
+              جميع الأسعار تشمل ضريبة القيمة المضافة<br/>رقم التسجيل: 312718675800003
             </div>
           </div>
         </div>

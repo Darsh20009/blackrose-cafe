@@ -38,10 +38,10 @@ interface TaxInvoiceProps {
   branchAddress?: string;
 }
 
-const VAT_NUMBER = "311234567890003";
+const VAT_NUMBER = "312718675800003";
 const COMPANY_NAME = brand.shortNameAr;
 const COMPANY_NAME_EN = brand.nameEn;
-const COMPANY_CR = "1010123456";
+const COMPANY_CR = "1163184110";
 const COMPANY_VAT_NAME = "شركة بلاك روز للخدمات الغذائية"; // Added for ZATCA compliance
 const DEFAULT_BRANCH = "الفرع الرئيسي - ينبع"; // Default branch
 const DEFAULT_ADDRESS = "ينبع، المملكة العربية السعودية"; // Default address
