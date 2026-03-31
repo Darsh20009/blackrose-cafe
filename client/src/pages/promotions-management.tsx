@@ -12,8 +12,14 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Tag, Percent, Package, ShoppingBag, Loader2, ArrowLeft } from "lucide-react";
+import { Plus, Pencil, Trash2, Tag, Percent, Package, ShoppingBag, Loader2, ArrowLeft, ImageIcon, X, Check } from "lucide-react";
 import { useLocation } from "wouter";
+
+interface BundleItem {
+  coffeeItemId: string;
+  quantity: number;
+  sizeOption?: string;
+}
 
 interface PromoOffer {
   _id: string;
@@ -21,16 +27,27 @@ interface PromoOffer {
   nameAr: string;
   nameEn?: string;
   description?: string;
+  imageUrl?: string;
   offerType: "bundle" | "discount" | "bogo";
   originalPrice: number;
   offerPrice: number;
   isActive: number;
   startDate?: string;
   endDate?: string;
+  items?: BundleItem[];
+}
+
+interface CoffeeItem {
+  id: string;
+  nameAr: string;
+  nameEn?: string;
+  price: number;
+  imageUrl?: string;
+  category: string;
+  isAvailable: number;
 }
 
 function SarIcon() {
-  const tc = useTranslate();
   return <span className="font-arabic text-xs font-bold">ر.س</span>;
 }
 
@@ -44,12 +61,14 @@ const defaultForm = {
   nameAr: "",
   nameEn: "",
   description: "",
+  imageUrl: "",
   offerType: "bundle" as "bundle" | "discount" | "bogo",
   originalPrice: "",
   offerPrice: "",
   startDate: "",
   endDate: "",
   isActive: 1,
+  items: [] as BundleItem[],
 };
 
 export default function PromotionsManagement() {
@@ -59,10 +78,20 @@ export default function PromotionsManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...defaultForm });
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [itemSearch, setItemSearch] = useState("");
 
   const { data: offers = [], isLoading } = useQuery<PromoOffer[]>({
     queryKey: ["/api/admin/promo-offers"],
   });
+
+  const { data: coffeeItems = [] } = useQuery<CoffeeItem[]>({
+    queryKey: ["/api/coffee-items"],
+  });
+
+  const availableItems = (coffeeItems as CoffeeItem[]).filter(i =>
+    i.isAvailable === 1 &&
+    (!itemSearch || i.nameAr.includes(itemSearch) || (i.nameEn || "").toLowerCase().includes(itemSearch.toLowerCase()))
+  );
 
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -116,6 +145,7 @@ export default function PromotionsManagement() {
   const openCreate = () => {
     setEditingId(null);
     setForm({ ...defaultForm });
+    setItemSearch("");
     setShowDialog(true);
   };
 
@@ -125,14 +155,35 @@ export default function PromotionsManagement() {
       nameAr: offer.nameAr,
       nameEn: offer.nameEn || "",
       description: offer.description || "",
+      imageUrl: offer.imageUrl || "",
       offerType: offer.offerType,
       originalPrice: String(offer.originalPrice),
       offerPrice: String(offer.offerPrice),
       startDate: offer.startDate ? offer.startDate.slice(0, 10) : "",
       endDate: offer.endDate ? offer.endDate.slice(0, 10) : "",
       isActive: offer.isActive,
+      items: offer.items || [],
     });
+    setItemSearch("");
     setShowDialog(true);
+  };
+
+  const toggleItem = (itemId: string) => {
+    setForm(f => {
+      const exists = f.items.find(i => i.coffeeItemId === itemId);
+      if (exists) {
+        return { ...f, items: f.items.filter(i => i.coffeeItemId !== itemId) };
+      } else {
+        return { ...f, items: [...f.items, { coffeeItemId: itemId, quantity: 1 }] };
+      }
+    });
+  };
+
+  const updateItemQty = (itemId: string, qty: number) => {
+    setForm(f => ({
+      ...f,
+      items: f.items.map(i => i.coffeeItemId === itemId ? { ...i, quantity: Math.max(1, qty) } : i)
+    }));
   };
 
   const handleSubmit = () => {
@@ -142,18 +193,25 @@ export default function PromotionsManagement() {
       nameAr: form.nameAr,
       nameEn: form.nameEn,
       description: form.description,
+      imageUrl: form.imageUrl,
       offerType: form.offerType,
       originalPrice: parseFloat(form.originalPrice),
       offerPrice: parseFloat(form.offerPrice),
       startDate: form.startDate || undefined,
       endDate: form.endDate || undefined,
       isActive: form.isActive,
+      items: form.items,
     });
   };
 
   const discountPct = (offer: PromoOffer) => {
     if (!offer.originalPrice || offer.originalPrice === 0) return 0;
     return Math.round(((offer.originalPrice - offer.offerPrice) / offer.originalPrice) * 100);
+  };
+
+  const getItemName = (itemId: string) => {
+    const item = (coffeeItems as CoffeeItem[]).find(i => i.id === itemId);
+    return item ? item.nameAr : itemId;
   };
 
   return (
@@ -164,8 +222,8 @@ export default function PromotionsManagement() {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-black text-foreground">{tc("إدارة العروض الترويجية", "Promotions Management")}</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">{tc("باقات، خصومات، اشتر واحد واحصل على واحد", "Bundles, discounts, buy one get one")}</p>
+            <h1 className="text-2xl font-black text-foreground">{tc("إدارة العروض والباقات", "Promotions & Bundles Management")}</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">{tc("أنشئ عروضاً وباقات تظهر في قسم عروضنا للعملاء", "Create offers & bundles shown in the customer offers section")}</p>
           </div>
         </div>
         <Button onClick={openCreate} data-testid="button-create-offer">
@@ -193,7 +251,17 @@ export default function PromotionsManagement() {
             const TypeIcon = typeInfo.icon;
             const pct = discountPct(offer);
             return (
-              <Card key={offer._id || offer.id} className={`transition-all ${!offer.isActive ? 'opacity-50' : ''}`} data-testid={`card-offer-${offer._id}`}>
+              <Card key={offer._id || offer.id} className={`transition-all overflow-hidden ${!offer.isActive ? 'opacity-50' : ''}`} data-testid={`card-offer-${offer._id}`}>
+                {offer.imageUrl && (
+                  <div className="relative h-40 overflow-hidden bg-muted">
+                    <img src={offer.imageUrl} alt={offer.nameAr} className="w-full h-full object-cover" />
+                    {pct > 0 && (
+                      <div className="absolute top-2 right-2 bg-primary text-white text-xs font-black px-2 py-1 rounded-full shadow">
+                        -{pct}%
+                      </div>
+                    )}
+                  </div>
+                )}
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
@@ -211,16 +279,24 @@ export default function PromotionsManagement() {
                       <TypeIcon className="w-3 h-3 ml-1" />
                       {typeInfo.label}
                     </Badge>
-                    {pct > 0 && (
-                      <Badge className="bg-primary text-white border-0 text-xs font-black">
-                        -{pct}%
-                      </Badge>
+                    {!offer.imageUrl && pct > 0 && (
+                      <Badge className="bg-primary text-white border-0 text-xs font-black">-{pct}%</Badge>
                     )}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {offer.description && (
                     <p className="text-sm text-muted-foreground line-clamp-2">{offer.description}</p>
+                  )}
+                  {offer.items && offer.items.length > 0 && (
+                    <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-2 space-y-0.5">
+                      {offer.items.map(bi => (
+                        <div key={bi.coffeeItemId} className="flex justify-between">
+                          <span>{getItemName(bi.coffeeItemId)}</span>
+                          <span className="font-bold">×{bi.quantity}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                   <div className="flex items-center gap-3">
                     {offer.originalPrice !== offer.offerPrice && (
@@ -252,11 +328,13 @@ export default function PromotionsManagement() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={v => { setShowDialog(v); if (!v) { setEditingId(null); setForm({ ...defaultForm }); } }}>
-        <DialogContent className="max-w-lg" dir="rtl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
           <DialogHeader>
-            <DialogTitle>{editingId ? tc("تعديل العرض", "Edit Offer") : tc("إنشاء عرض جديد", "Create New Offer")}</DialogTitle>
+            <DialogTitle>{editingId ? tc("تعديل العرض", "Edit Offer") : tc("إنشاء عرض / باقة جديدة", "Create New Offer / Bundle")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-5 py-2">
+
+            {/* Basic Info */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>{tc("اسم العرض (عربي) *", "Offer Name (Arabic) *")}</Label>
@@ -267,10 +345,32 @@ export default function PromotionsManagement() {
                 <Input value={form.nameEn} onChange={e => setForm(f => ({ ...f, nameEn: e.target.value }))} placeholder="Morning Bundle" data-testid="input-offer-nameEn" />
               </div>
             </div>
+
             <div>
               <Label>{tc("الوصف", "Description")}</Label>
               <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="وصف مختصر للعرض..." rows={2} data-testid="input-offer-description" />
             </div>
+
+            {/* Image URL */}
+            <div>
+              <Label className="flex items-center gap-1.5 mb-1.5">
+                <ImageIcon className="w-3.5 h-3.5" />
+                {tc("رابط صورة العرض", "Offer Image URL")}
+              </Label>
+              <Input
+                value={form.imageUrl}
+                onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))}
+                placeholder="https://example.com/image.jpg"
+                data-testid="input-offer-imageUrl"
+              />
+              {form.imageUrl && (
+                <div className="mt-2 rounded-xl overflow-hidden h-32 bg-muted">
+                  <img src={form.imageUrl} alt="preview" className="w-full h-full object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
+                </div>
+              )}
+            </div>
+
+            {/* Offer Type + Prices */}
             <div>
               <Label>{tc("نوع العرض", "Offer Type")}</Label>
               <Select value={form.offerType} onValueChange={v => setForm(f => ({ ...f, offerType: v as any }))}>
@@ -278,12 +378,13 @@ export default function PromotionsManagement() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="bundle">باقة (Bundle)</SelectItem>
-                  <SelectItem value="discount">خصم بالنسبة (Discount)</SelectItem>
-                  <SelectItem value="bogo">اشتر واحد واحصل على واحد (BOGO)</SelectItem>
+                  <SelectItem value="bundle">📦 باقة (Bundle)</SelectItem>
+                  <SelectItem value="discount">🏷️ خصم بالنسبة (Discount)</SelectItem>
+                  <SelectItem value="bogo">🎁 اشتر واحد واحصل على واحد (BOGO)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>السعر الأصلي (ر.س) *</Label>
@@ -294,6 +395,71 @@ export default function PromotionsManagement() {
                 <Input type="number" min="0" step="0.01" value={form.offerPrice} onChange={e => setForm(f => ({ ...f, offerPrice: e.target.value }))} placeholder="0.00" data-testid="input-offer-offerPrice" />
               </div>
             </div>
+
+            {/* Items Picker */}
+            <div>
+              <Label className="flex items-center gap-1.5 mb-2">
+                <Package className="w-3.5 h-3.5" />
+                {tc("محتويات الباقة", "Bundle Items")}
+                {form.items.length > 0 && (
+                  <Badge className="bg-primary text-white text-[10px] px-1.5">{form.items.length} منتج</Badge>
+                )}
+              </Label>
+
+              {/* Selected items summary */}
+              {form.items.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {form.items.map(bi => (
+                    <div key={bi.coffeeItemId} className="flex items-center gap-1 bg-primary/10 text-primary rounded-lg px-2 py-1 text-xs">
+                      <span>{getItemName(bi.coffeeItemId)}</span>
+                      <div className="flex items-center gap-0.5">
+                        <button onClick={() => updateItemQty(bi.coffeeItemId, bi.quantity - 1)} className="w-4 h-4 rounded-full bg-primary/20 hover:bg-primary/30 flex items-center justify-center text-[10px] font-bold">-</button>
+                        <span className="font-bold px-0.5">{bi.quantity}</span>
+                        <button onClick={() => updateItemQty(bi.coffeeItemId, bi.quantity + 1)} className="w-4 h-4 rounded-full bg-primary/20 hover:bg-primary/30 flex items-center justify-center text-[10px] font-bold">+</button>
+                      </div>
+                      <button onClick={() => toggleItem(bi.coffeeItemId)} className="hover:text-red-500"><X className="w-3 h-3" /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <Input
+                placeholder="ابحث عن منتج..."
+                value={itemSearch}
+                onChange={e => setItemSearch(e.target.value)}
+                className="mb-2"
+                data-testid="input-item-search"
+              />
+              <div className="border rounded-xl max-h-48 overflow-y-auto divide-y">
+                {availableItems.slice(0, 30).map(item => {
+                  const selected = form.items.some(i => i.coffeeItemId === item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => toggleItem(item.id)}
+                      className={`w-full flex items-center gap-3 px-3 py-2 text-sm transition-colors hover:bg-muted ${selected ? 'bg-primary/5' : ''}`}
+                      data-testid={`btn-toggle-item-${item.id}`}
+                    >
+                      {item.imageUrl && <img src={item.imageUrl} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />}
+                      {!item.imageUrl && <div className="w-8 h-8 rounded-lg bg-muted flex-shrink-0" />}
+                      <div className="flex-1 text-right">
+                        <div className="font-medium">{item.nameAr}</div>
+                        <div className="text-xs text-muted-foreground">{item.price.toFixed(2)} ر.س</div>
+                      </div>
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${selected ? 'bg-primary border-primary' : 'border-border'}`}>
+                        {selected && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                    </button>
+                  );
+                })}
+                {availableItems.length === 0 && (
+                  <div className="py-6 text-center text-muted-foreground text-sm">لا توجد منتجات</div>
+                )}
+              </div>
+            </div>
+
+            {/* Dates + Active */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>تاريخ البداية</Label>
@@ -304,15 +470,17 @@ export default function PromotionsManagement() {
                 <Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} data-testid="input-offer-endDate" />
               </div>
             </div>
+
             <div className="flex items-center gap-3">
               <Switch checked={!!form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v ? 1 : 0 }))} data-testid="switch-offer-isActive" />
-              <Label>نشط</Label>
+              <Label>نشط (يظهر في قسم عروضنا للعملاء)</Label>
             </div>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>إلغاء</Button>
             <Button onClick={handleSubmit} disabled={saveMutation.isPending} data-testid="button-save-offer">
-              {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : editingId ? "حفظ التغييرات" : "إنشاء"}
+              {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : editingId ? "حفظ التغييرات" : "إنشاء العرض"}
             </Button>
           </DialogFooter>
         </DialogContent>

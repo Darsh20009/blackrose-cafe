@@ -682,47 +682,126 @@ export default function MenuPage() {
 
           {promoOffers.length > 0 && (
             <section className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Gift className="w-5 h-5 text-accent" />
-                <h2 className="text-xl font-bold text-foreground">{t("menu.offers")}</h2>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">🎁</span>
+                  <h2 className="text-xl font-black text-foreground">عروضنا</h2>
+                </div>
+                <Badge variant="outline" className="text-xs text-primary border-primary/30 font-bold">
+                  {promoOffers.length} عرض
+                </Badge>
               </div>
-              <div className="flex gap-4 overflow-x-auto no-scrollbar snap-x snap-mandatory -mx-4 px-4 pb-2">
-                {promoOffers.map((offer) => (
-                  <motion.div 
-                    key={offer.id} 
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="flex-shrink-0 w-[200px] snap-start bg-gradient-to-br from-accent/10 to-primary/10 rounded-2xl border-2 border-accent/30 p-3 space-y-3 shadow-sm cursor-pointer group relative overflow-hidden"
-                    data-testid={`card-offer-${offer.id}`}
-                  >
-                    <div className="absolute top-2 left-2 z-10">
-                      <Badge className="bg-accent text-white border-0 px-2 py-0.5 text-[10px]">
-                        <Tag className="w-3 h-3 ml-1" />
-                        {t("menu.offer_badge")}
-                      </Badge>
-                    </div>
-                    {offer.imageUrl && (
-                      <div className="aspect-video rounded-xl overflow-hidden bg-secondary">
-                        <img 
-                          src={offer.imageUrl} 
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
-                          alt={i18n.language === 'ar' ? offer.nameAr : offer.nameEn || offer.nameAr}
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                        />
+              <div className="flex gap-4 overflow-x-auto no-scrollbar snap-x snap-mandatory -mx-4 px-4 pb-3">
+                {promoOffers.map((offer: any) => {
+                  const discountPct = offer.originalPrice > offer.offerPrice
+                    ? Math.round(((offer.originalPrice - offer.offerPrice) / offer.originalPrice) * 100)
+                    : 0;
+                  const offerName = i18n.language === 'ar' ? offer.nameAr : (offer.nameEn || offer.nameAr);
+
+                  const handleOrderBundle = () => {
+                    if (!isStoreOpen()) {
+                      toast({ title: i18n.language === 'ar' ? "المتجر مغلق" : "Store Closed", variant: "destructive" });
+                      return;
+                    }
+                    const items: Array<{coffeeItemId: string; quantity: number}> = offer.items || [];
+                    if (items.length > 0) {
+                      items.forEach((bi: {coffeeItemId: string; quantity: number}) => {
+                        addToCart(bi.coffeeItemId, bi.quantity || 1);
+                      });
+                      toast({
+                        title: `✅ ${offerName}`,
+                        description: i18n.language === 'ar' ? "تمت إضافة الباقة للسلة" : "Bundle added to cart",
+                        duration: 3000,
+                      });
+                    } else {
+                      toast({
+                        title: `🎁 ${offerName}`,
+                        description: i18n.language === 'ar' ? `سعر الباقة: ${offer.offerPrice} ر.س` : `Bundle price: ${offer.offerPrice} SAR`,
+                        duration: 4000,
+                      });
+                    }
+                  };
+
+                  return (
+                    <motion.div
+                      key={offer.id}
+                      whileTap={{ scale: 0.97 }}
+                      className="flex-shrink-0 w-[260px] snap-start rounded-2xl overflow-hidden border border-border/50 shadow-sm bg-card group"
+                      data-testid={`card-offer-${offer.id}`}
+                    >
+                      {/* Image */}
+                      <div className="relative h-36 bg-gradient-to-br from-primary/10 to-accent/10 overflow-hidden">
+                        {offer.imageUrl ? (
+                          <img
+                            src={offer.imageUrl}
+                            alt={offerName}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-5xl">🎁</div>
+                        )}
+                        {/* Discount badge */}
+                        {discountPct > 0 && (
+                          <div className={`absolute top-2 ${i18n.language === 'ar' ? 'left-2' : 'right-2'} bg-primary text-white text-xs font-black px-2.5 py-1 rounded-full shadow-lg`}>
+                            -{discountPct}%
+                          </div>
+                        )}
+                        {/* Type badge */}
+                        <div className={`absolute top-2 ${i18n.language === 'ar' ? 'right-2' : 'left-2'} bg-black/50 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-full`}>
+                          {offer.offerType === 'bundle' ? '📦 باقة' : offer.offerType === 'bogo' ? '🎁 اشتر+احصل' : '🏷️ خصم'}
+                        </div>
                       </div>
-                    )}
-                    <div className="space-y-1.5">
-                      <h3 className="text-sm font-semibold text-foreground">{i18n.language === 'ar' ? offer.nameAr : offer.nameEn || offer.nameAr}</h3>
-                      {offer.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2">{offer.description}</p>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <span className="text-accent font-bold">{offer.offerPrice} <small className="text-xs font-normal"><SarIcon /></small></span>
-                        <span className="text-xs text-muted-foreground line-through">{offer.originalPrice} <SarIcon /></span>
+
+                      {/* Content */}
+                      <div className="p-3 space-y-2">
+                        <h3 className="font-bold text-foreground text-sm leading-tight line-clamp-1">{offerName}</h3>
+                        {offer.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{offer.description}</p>
+                        )}
+
+                        {/* Items list */}
+                        {offer.items && offer.items.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {offer.items.slice(0, 3).map((bi: any, idx: number) => {
+                              const item = coffeeItems.find((c: any) => c.id === bi.coffeeItemId);
+                              return item ? (
+                                <span key={idx} className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-md">
+                                  {item.nameAr} {bi.quantity > 1 ? `×${bi.quantity}` : ''}
+                                </span>
+                              ) : null;
+                            })}
+                            {offer.items.length > 3 && (
+                              <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-md">+{offer.items.length - 3}</span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Price */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-black text-primary">
+                            {offer.offerPrice.toFixed(2)} <span className="text-xs font-normal">ر.س</span>
+                          </span>
+                          {offer.originalPrice !== offer.offerPrice && (
+                            <span className="text-xs text-muted-foreground line-through">
+                              {offer.originalPrice.toFixed(2)} ر.س
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Order button */}
+                        <button
+                          onClick={handleOrderBundle}
+                          disabled={!isStoreOpen()}
+                          className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground text-xs font-bold py-2 rounded-xl transition-all active:scale-95"
+                          data-testid={`btn-order-bundle-${offer.id}`}
+                        >
+                          {i18n.language === 'ar' ? 'اطلب الباقة' : 'Order Bundle'}
+                        </button>
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  );
+                })}
               </div>
             </section>
           )}
