@@ -2362,8 +2362,8 @@ export default function AdminSettings() {
                   <span className="text-xl">⚙️</span>
                 </div>
                 <div>
-                  <CardTitle className="text-xl font-bold">رسوم الخدمة</CardTitle>
-                  <CardDescription>رسوم تُضاف تلقائياً على كل طلب عند الدفع</CardDescription>
+                  <CardTitle className="text-xl font-bold">رسوم الخدمة <span className="text-sm font-normal text-orange-600 dark:text-orange-400">(الطلبات الأونلاين فقط)</span></CardTitle>
+                  <CardDescription>رسوم تُضاف تلقائياً على طلبات الأونلاين فقط — لا تُطبَّق على نقاط البيع</CardDescription>
                 </div>
               </div>
               <Button
@@ -2384,8 +2384,8 @@ export default function AdminSettings() {
           <CardContent className="p-6 space-y-6">
             <div className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-900/10 rounded-lg border border-orange-100 dark:border-orange-900/30">
               <div>
-                <Label htmlFor="service-fee-enabled" className="text-sm font-bold cursor-pointer">تفعيل رسوم الخدمة</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">عند التفعيل تُضاف رسوم تلقائياً لكل طلب في صفحة الدفع</p>
+                <Label htmlFor="service-fee-enabled" className="text-sm font-bold cursor-pointer">تفعيل رسوم الخدمة للأونلاين</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">تُضاف تلقائياً على طلبات الأونلاين فقط — نقاط البيع معفاة دائماً</p>
               </div>
               <Switch
                 id="service-fee-enabled"
@@ -2435,8 +2435,14 @@ export default function AdminSettings() {
               </div>
             )}
             {serviceFeeEnabled && (
-              <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-3 border">
-                مثال: طلب بقيمة 8 ريال → رسوم {serviceFeeAmount.toFixed(2)} ريال | طلب بقيمة {(serviceFeeLowOrderThreshold - 0.01).toFixed(2)} ريال → رسوم {serviceFeeLowOrderAmount.toFixed(2)} ريال
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-3 border">
+                  مثال: طلب بقيمة 8 ريال → رسوم {serviceFeeAmount.toFixed(2)} ريال | طلب بقيمة {(serviceFeeLowOrderThreshold - 0.01).toFixed(2)} ريال → رسوم {serviceFeeLowOrderAmount.toFixed(2)} ريال
+                </div>
+                <div className="flex items-center gap-2 text-xs text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/10 rounded-lg p-2.5 border border-orange-200 dark:border-orange-900/30">
+                  <span>🌐</span>
+                  <span>تُطبَّق على الأونلاين فقط — طلبات نقاط البيع <strong>لا تشمل</strong> رسوم الخدمة</span>
+                </div>
               </div>
             )}
           </CardContent>
