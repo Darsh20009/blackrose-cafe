@@ -1,4 +1,4 @@
-import cardBg from "@assets/black-rose-card-bg.png";
+import cardBg from "@assets/Screenshot_2026-04-01_133140_1775039553998.png";
 
 interface BlackRoseCardProps {
   phone?: string;
@@ -46,17 +46,16 @@ export default function BlackRoseCard({
       }}
       data-testid="loyalty-card"
     >
-      {/* ── Card background: zoom in by ~12% to crop the transparent border ── */}
+      {/* ── Card background image ── */}
       <img
         src={cardBg}
         alt="Black Rose Cafe loyalty card"
         style={{
           position: "absolute",
-          top: "-6%",
-          left: "-6%",
-          width: "112%",
-          height: "112%",
-          objectFit: "contain",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
           objectPosition: "center",
           display: "block",
           pointerEvents: "none",
