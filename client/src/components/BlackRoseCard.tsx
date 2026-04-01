@@ -8,6 +8,98 @@ interface BlackRoseCardProps {
   className?: string;
 }
 
+/* ── Floral SVG decoration (bottom-left, mimics botanical illustration) ── */
+function FloralDecoration() {
+  return (
+    <svg
+      viewBox="0 0 160 130"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ position: "absolute", bottom: 0, left: 0, width: "38%", opacity: 0.45, pointerEvents: "none" }}
+    >
+      {/* Stem */}
+      <path d="M30 130 Q45 95 55 70 Q65 45 60 20" stroke="#4a7c59" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+      <path d="M55 70 Q70 55 85 60" stroke="#4a7c59" strokeWidth="2" fill="none" strokeLinecap="round"/>
+      <path d="M45 95 Q30 80 20 85" stroke="#4a7c59" strokeWidth="2" fill="none" strokeLinecap="round"/>
+
+      {/* Leaves */}
+      <ellipse cx="80" cy="65" rx="18" ry="9" fill="#3d6b48" transform="rotate(-30 80 65)"/>
+      <ellipse cx="22" cy="82" rx="15" ry="7" fill="#4a7c59" transform="rotate(20 22 82)"/>
+      <ellipse cx="65" cy="45" rx="12" ry="6" fill="#5a8c69" transform="rotate(-50 65 45)"/>
+
+      {/* Big flower (white/pale blue petals) */}
+      <g transform="translate(55 22)">
+        {[0,45,90,135,180,225,270,315].map((angle, i) => (
+          <ellipse
+            key={i}
+            cx={Math.cos((angle * Math.PI) / 180) * 13}
+            cy={Math.sin((angle * Math.PI) / 180) * 13}
+            rx="7"
+            ry="4"
+            fill="#cce8dc"
+            transform={`rotate(${angle} ${Math.cos((angle * Math.PI) / 180) * 13} ${Math.sin((angle * Math.PI) / 180) * 13})`}
+          />
+        ))}
+        <circle cx="0" cy="0" r="6" fill="#f0e68c" opacity="0.9"/>
+        <circle cx="0" cy="0" r="3" fill="#c8a020"/>
+      </g>
+
+      {/* Small flower */}
+      <g transform="translate(25 88)">
+        {[0,60,120,180,240,300].map((angle, i) => (
+          <ellipse
+            key={i}
+            cx={Math.cos((angle * Math.PI) / 180) * 9}
+            cy={Math.sin((angle * Math.PI) / 180) * 9}
+            rx="5"
+            ry="3"
+            fill="#b8ddd0"
+            transform={`rotate(${angle} ${Math.cos((angle * Math.PI) / 180) * 9} ${Math.sin((angle * Math.PI) / 180) * 9})`}
+          />
+        ))}
+        <circle cx="0" cy="0" r="4" fill="#e8d870" opacity="0.85"/>
+        <circle cx="0" cy="0" r="2" fill="#b8900a"/>
+      </g>
+
+      {/* Berries / dots */}
+      <circle cx="70" cy="18" r="3" fill="#c9a96e" opacity="0.7"/>
+      <circle cx="75" cy="12" r="2" fill="#c9a96e" opacity="0.5"/>
+      <circle cx="63" cy="13" r="2.5" fill="#c9a96e" opacity="0.6"/>
+    </svg>
+  );
+}
+
+/* ── NFC / Contactless symbol ── */
+function NfcIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="2" fill="#C9A96E"/>
+      <path d="M8.5 8.5 A5 5 0 0 0 8.5 15.5" stroke="#C9A96E" strokeWidth="1.6" strokeLinecap="round" fill="none"/>
+      <path d="M6 6 A8.5 8.5 0 0 0 6 18" stroke="#C9A96E" strokeWidth="1.6" strokeLinecap="round" fill="none" opacity="0.75"/>
+      <path d="M3.5 3.5 A12 12 0 0 0 3.5 20.5" stroke="#C9A96E" strokeWidth="1.6" strokeLinecap="round" fill="none" opacity="0.5"/>
+    </svg>
+  );
+}
+
+/* ── Credit Card Chip ── */
+function CardChip({ width = 44 }: { width?: number }) {
+  const h = width * 0.72;
+  return (
+    <div style={{ width, height: h, borderRadius: 4, overflow: "hidden", position: "relative",
+      background: "linear-gradient(135deg, #e8c86a 0%, #c9a030 30%, #f0d46a 55%, #b08010 80%, #d4a520 100%)",
+      boxShadow: "0 2px 6px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.25)" }}>
+      {/* horizontal lines */}
+      <div style={{ position:"absolute", left:"20%", right:"20%", top:"28%", height:1, background:"rgba(0,0,0,0.2)" }}/>
+      <div style={{ position:"absolute", left:"20%", right:"20%", bottom:"28%", height:1, background:"rgba(0,0,0,0.2)" }}/>
+      {/* vertical lines */}
+      <div style={{ position:"absolute", top:"20%", bottom:"20%", left:"28%", width:1, background:"rgba(0,0,0,0.18)" }}/>
+      <div style={{ position:"absolute", top:"20%", bottom:"20%", right:"28%", width:1, background:"rgba(0,0,0,0.18)" }}/>
+      {/* center pad */}
+      <div style={{ position:"absolute", top:"28%", bottom:"28%", left:"28%", right:"28%",
+        background:"rgba(180,130,0,0.35)", border:"1px solid rgba(0,0,0,0.15)", borderRadius:2 }}/>
+    </div>
+  );
+}
+
 export default function BlackRoseCard({
   phone,
   points = 0,
@@ -16,255 +108,131 @@ export default function BlackRoseCard({
   className = "",
 }: BlackRoseCardProps) {
   const displayPhone = phone
-    ? phone.replace(/^(\+966|00966|0)/, "966")
+    ? phone.replace(/^\+?966|^00966|^0/, "966")
     : "966XXXXXXXXX";
 
-  const displaySar =
-    sarValue !== undefined
-      ? typeof sarValue === "number"
-        ? sarValue.toLocaleString("ar-SA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        : sarValue
-      : (points * 0.02).toLocaleString("ar-SA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const sarNum = typeof sarValue === "number"
+    ? sarValue
+    : typeof sarValue === "string"
+      ? parseFloat(sarValue)
+      : points * 0.02;
+
+  const displaySar = sarNum.toLocaleString("en-SA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div
-      className={`relative rounded-2xl overflow-hidden select-none ${className}`}
+      className={`relative overflow-hidden select-none ${className}`}
       style={{
-        background: "linear-gradient(145deg, #111111 0%, #1c1c1c 40%, #0e0e0e 100%)",
-        aspectRatio: "1.586 / 1",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(201,169,110,0.15)",
+        borderRadius: "16px",
+        background: "linear-gradient(160deg, #141414 0%, #1e1e1e 45%, #0c0c0c 100%)",
+        aspectRatio: "85.6 / 53.98",
+        boxShadow: "0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(201,169,110,0.12), inset 0 1px 0 rgba(255,255,255,0.04)",
+        width: "100%",
       }}
       data-testid="loyalty-card"
     >
-      {/* ─── subtle gold shimmer overlay ─── */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(ellipse at 70% 15%, rgba(201,169,110,0.07) 0%, transparent 55%), radial-gradient(ellipse at 20% 80%, rgba(201,169,110,0.04) 0%, transparent 40%)",
-        }}
-      />
+      {/* ── subtle shimmer ── */}
+      <div style={{ position:"absolute", inset:0, pointerEvents:"none",
+        background:"radial-gradient(ellipse 60% 40% at 75% 10%, rgba(201,169,110,0.08) 0%, transparent 100%)" }}/>
 
-      {/* ─── NFC icon — top left ─── */}
-      <div
-        className="absolute"
-        style={{ top: "9%", left: "6%", color: "#C9A96E" }}
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-          <path
-            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"
-            fill="currentColor"
-            opacity="0"
-          />
-          <path
-            d="M6.5 12c0-3.04 2.46-5.5 5.5-5.5"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            fill="none"
-            opacity="0.5"
-          />
-          <path
-            d="M5 12c0-3.87 3.13-7 7-7"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            fill="none"
-            opacity="0.75"
-          />
-          <path
-            d="M3.5 12C3.5 7.31 7.31 3.5 12 3.5"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            fill="none"
-            opacity="1"
-          />
-          <circle cx="12" cy="12" r="1.2" fill="currentColor" />
-        </svg>
+      {/* ── Floral decoration (bottom-left) ── */}
+      <FloralDecoration />
+
+      {/* ── NFC icon (top-left) ── */}
+      <div style={{ position:"absolute", top:"10%", left:"6%", transform:"scaleX(-1)" }}>
+        <NfcIcon size={22} />
       </div>
 
-      {/* ─── Logo — top right ─── */}
-      <div
-        className="absolute flex flex-col items-center"
-        style={{ top: "7%", right: "6%" }}
-      >
+      {/* ── Chip (left, below NFC) ── */}
+      <div style={{ position:"absolute", top:"30%", left:"6%" }}>
+        <CardChip width={44} />
+      </div>
+
+      {/* ── Logo (top-right) ── */}
+      <div style={{ position:"absolute", top:"8%", right:"6%", display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
         <img
           src={blackroseLogo}
           alt="Black Rose"
-          style={{
-            width: "clamp(24px, 8%, 36px)",
-            height: "clamp(24px, 8%, 36px)",
-            objectFit: "contain",
-            filter:
-              "sepia(1) saturate(2.5) hue-rotate(5deg) brightness(1.15)",
-          }}
+          style={{ width:28, height:28, objectFit:"contain",
+            filter:"sepia(1) saturate(2.8) hue-rotate(5deg) brightness(1.2)" }}
         />
-        <p
-          className="font-black tracking-[0.18em] leading-none mt-1"
-          style={{ color: "#C9A96E", fontSize: "clamp(7px, 1.8%, 11px)" }}
-        >
+        <span style={{ color:"#C9A96E", fontWeight:900, fontSize:9, letterSpacing:"0.18em", lineHeight:1.2, textAlign:"center" }}>
           BLACK ROSE
-        </p>
-        <p
-          className="tracking-[0.4em]"
-          style={{ color: "#B89A5E", fontSize: "clamp(5px, 1.2%, 8px)" }}
-        >
+        </span>
+        <span style={{ color:"#9a7a42", fontSize:7, letterSpacing:"0.4em", lineHeight:1 }}>
           CAFE
-        </p>
+        </span>
       </div>
 
-      {/* ─── Gold chip — left, below NFC ─── */}
-      <div
-        className="absolute"
-        style={{ top: "27%", left: "6%" }}
-      >
-        <div
-          style={{
-            width: "clamp(28px, 9%, 44px)",
-            height: "clamp(20px, 6.5%, 32px)",
-            background:
-              "linear-gradient(135deg, #e8c96a 0%, #c9a030 30%, #f0d878 50%, #b8860b 70%, #d4a820 100%)",
-            borderRadius: "4px",
-            position: "relative",
-            boxShadow: "0 1px 4px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.3)",
-          }}
-        >
-          {/* chip grid lines */}
-          <div
-            style={{
-              position: "absolute",
-              inset: "20%",
-              borderLeft: "1px solid rgba(0,0,0,0.25)",
-              borderRight: "1px solid rgba(0,0,0,0.25)",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              inset: "20%",
-              borderTop: "1px solid rgba(0,0,0,0.25)",
-              borderBottom: "1px solid rgba(0,0,0,0.25)",
-            }}
-          />
-          {/* center rectangle */}
-          <div
-            style={{
-              position: "absolute",
-              top: "30%",
-              left: "25%",
-              right: "25%",
-              bottom: "30%",
-              border: "1px solid rgba(0,0,0,0.2)",
-              borderRadius: "1px",
-              background: "rgba(180,130,0,0.3)",
-            }}
-          />
-        </div>
-      </div>
-
-      {/* ─── Phone number — center ─── */}
-      <div
-        className="absolute"
-        style={{
-          top: "50%",
-          left: "6%",
-          right: "6%",
-          transform: "translateY(-50%)",
-        }}
-      >
+      {/* ── Phone number (center, card number style) ── */}
+      <div style={{ position:"absolute", top:"50%", left:"6%", right:"6%", transform:"translateY(-50%)" }}>
         <p
-          className="font-mono font-bold tracking-[0.12em]"
           dir="ltr"
           style={{
-            color: "#C9A96E",
-            fontSize: "clamp(13px, 4.2%, 24px)",
-            letterSpacing: "0.14em",
-            textShadow: "0 0 20px rgba(201,169,110,0.3)",
+            color:"#C9A96E",
+            fontFamily:"'Courier New', Courier, monospace",
+            fontWeight:700,
+            fontSize:"clamp(14px, 3.8vw, 22px)",
+            letterSpacing:"0.16em",
+            margin:0,
+            textShadow:"0 0 18px rgba(201,169,110,0.25)",
           }}
           data-testid="text-phone-display"
         >
           {displayPhone}
         </p>
         {customerName && (
-          <p
-            className="mt-1 font-medium truncate"
-            style={{
-              color: "#C9A96E80",
-              fontSize: "clamp(9px, 2.2%, 13px)",
-            }}
-          >
+          <p style={{ color:"#C9A96E66", fontSize:"clamp(9px,2vw,12px)", margin:"3px 0 0", letterSpacing:"0.05em" }}>
             {customerName}
           </p>
         )}
       </div>
 
-      {/* ─── Floral decoration — bottom left ─── */}
-      <div
-        className="absolute pointer-events-none"
-        style={{
-          bottom: "-2%",
-          left: "-1%",
-          fontSize: "clamp(44px, 14%, 70px)",
-          lineHeight: 1,
-          opacity: 0.22,
-          transform: "rotate(10deg)",
-          filter: "hue-rotate(100deg) saturate(0.7) brightness(0.9)",
-        }}
+      {/* ── Small floral decoration (bottom-right corner, behind points) ── */}
+      <svg
+        viewBox="0 0 80 90"
+        xmlns="http://www.w3.org/2000/svg"
+        style={{ position:"absolute", bottom:0, right:0, width:"20%", opacity:0.35, pointerEvents:"none" }}
       >
-        🌿
-      </div>
-      <div
-        className="absolute pointer-events-none"
-        style={{
-          bottom: "4%",
-          left: "6%",
-          fontSize: "clamp(30px, 9%, 48px)",
-          lineHeight: 1,
-          opacity: 0.2,
-          transform: "rotate(-5deg)",
-          filter: "hue-rotate(100deg) saturate(0.6)",
-        }}
-      >
-        🌸
-      </div>
+        <path d="M60 90 Q50 65 45 45" stroke="#4a7c59" strokeWidth="2" fill="none" strokeLinecap="round"/>
+        <ellipse cx="40" cy="42" rx="12" ry="6" fill="#3d6b48" transform="rotate(-40 40 42)"/>
+        <g transform="translate(45 28)">
+          {[0,60,120,180,240,300].map((angle, i) => (
+            <ellipse
+              key={i}
+              cx={Math.cos((angle * Math.PI) / 180) * 8}
+              cy={Math.sin((angle * Math.PI) / 180) * 8}
+              rx="4.5"
+              ry="2.5"
+              fill="#cce8dc"
+              transform={`rotate(${angle} ${Math.cos((angle * Math.PI) / 180) * 8} ${Math.sin((angle * Math.PI) / 180) * 8})`}
+            />
+          ))}
+          <circle cx="0" cy="0" r="3.5" fill="#e8d870" opacity="0.9"/>
+        </g>
+      </svg>
 
-      {/* ─── Points — bottom right ─── */}
-      <div
-        className="absolute text-right"
-        style={{ bottom: "8%", right: "6%" }}
-      >
-        <p
-          style={{
-            color: "#C9A96E",
-            fontSize: "clamp(8px, 2%, 11px)",
-            fontWeight: 700,
-            letterSpacing: "0.05em",
-            marginBottom: "1px",
-          }}
-        >
+      {/* ── Points block (bottom-right) ── */}
+      <div style={{ position:"absolute", bottom:"10%", right:"6%", textAlign:"right" }}>
+        <p style={{ color:"#C9A96E", fontSize:"clamp(9px,2vw,11px)", fontWeight:700,
+          letterSpacing:"0.08em", margin:0 }}>
           نقاطي
         </p>
         <p
-          className="font-black leading-none"
           style={{
-            color: "#C9A96E",
-            fontSize: "clamp(20px, 6%, 38px)",
-            textShadow: "0 0 24px rgba(201,169,110,0.4)",
+            color:"#C9A96E",
+            fontWeight:900,
+            fontSize:"clamp(22px,6vw,36px)",
+            lineHeight:1.05,
+            margin:0,
+            textShadow:"0 0 20px rgba(201,169,110,0.4)",
           }}
           data-testid="text-points"
         >
           {points.toLocaleString()}
         </p>
-        <p
-          style={{
-            color: "#B89A5E",
-            fontSize: "clamp(8px, 1.8%, 11px)",
-            marginTop: "1px",
-            letterSpacing: "0.05em",
-          }}
-          data-testid="text-sar-value"
-        >
+        <p style={{ color:"#a88a50", fontSize:"clamp(9px,2vw,11px)", margin:"2px 0 0", letterSpacing:"0.04em" }}
+          data-testid="text-sar-value">
           {displaySar} ريال
         </p>
       </div>
