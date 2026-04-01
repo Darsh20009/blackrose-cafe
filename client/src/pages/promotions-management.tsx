@@ -150,7 +150,7 @@ export default function PromotionsManagement() {
   };
 
   const openEdit = (offer: PromoOffer) => {
-    setEditingId(offer._id || offer.id);
+    setEditingId(offer.id || offer._id);
     setForm({
       nameAr: offer.nameAr,
       nameEn: offer.nameEn || "",
@@ -270,7 +270,7 @@ export default function PromotionsManagement() {
                     </div>
                     <Switch
                       checked={!!offer.isActive}
-                      onCheckedChange={v => toggleActive.mutate({ id: offer._id || offer.id, isActive: v ? 1 : 0 })}
+                      onCheckedChange={v => toggleActive.mutate({ id: offer.id || offer._id, isActive: v ? 1 : 0 })}
                       data-testid={`switch-offer-active-${offer._id}`}
                     />
                   </div>
@@ -315,7 +315,7 @@ export default function PromotionsManagement() {
                     <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(offer)} data-testid={`button-edit-offer-${offer._id}`}>
                       <Pencil className="w-3.5 h-3.5 ml-1" /> تعديل
                     </Button>
-                    <Button variant="outline" size="sm" className="text-red-500 hover:text-red-600 hover:border-red-300" onClick={() => setDeleteId(offer._id || offer.id)} data-testid={`button-delete-offer-${offer._id}`}>
+                    <Button variant="outline" size="sm" className="text-red-500 hover:text-red-600 hover:border-red-300" onClick={() => setDeleteId(offer.id || offer._id)} data-testid={`button-delete-offer-${offer._id}`}>
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>

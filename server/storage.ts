@@ -1229,7 +1229,11 @@ export class DBStorage implements IStorage {
   }
 
   async getLoyaltyCard(id: string): Promise<LoyaltyCard | undefined> {
-    const card = await LoyaltyCardModel.findOne({ id }).lean();
+    if (!id) return undefined;
+    let card = await LoyaltyCardModel.findOne({ id }).lean();
+    if (!card && id.match(/^[0-9a-fA-F]{24}$/)) {
+      card = await LoyaltyCardModel.findById(id).lean();
+    }
     return card ? serializeDoc(card) : undefined;
   }
 
@@ -1257,7 +1261,11 @@ export class DBStorage implements IStorage {
   }
 
   async updateLoyaltyCard(id: string, updates: Partial<LoyaltyCard>): Promise<LoyaltyCard | undefined> {
-    const card = await LoyaltyCardModel.findOneAndUpdate({ id }, { $set: updates }, { new: true }).lean();
+    if (!id) return undefined;
+    let card = await LoyaltyCardModel.findOneAndUpdate({ id }, { $set: updates }, { new: true }).lean();
+    if (!card && id.match(/^[0-9a-fA-F]{24}$/)) {
+      card = await LoyaltyCardModel.findByIdAndUpdate(id, { $set: updates }, { new: true }).lean();
+    }
     return card ? serializeDoc(card) : undefined;
   }
 

@@ -14843,18 +14843,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/promo-offers/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
       const { PromoOfferModel } = await import("@shared/schema");
-      
-      const offer = await PromoOfferModel.findOneAndUpdate(
-        { id: req.params.id },
-        { $set: { ...req.body, updatedAt: new Date() } },
-        { new: true }
-      );
-      
+      const pid = req.params.id;
+      const update = { $set: { ...req.body, updatedAt: new Date() } };
+      const opts = { new: true };
+
+      let offer = await PromoOfferModel.findOneAndUpdate({ id: pid }, update, opts);
+      if (!offer && pid.match(/^[0-9a-fA-F]{24}$/)) {
+        offer = await PromoOfferModel.findByIdAndUpdate(pid, update, opts);
+      }
+
       if (!offer) {
         return res.status(404).json({ error: "العرض غير موجود" });
       }
-      
-      res.json({ ...offer.toObject(), id: offer.id });
+
+      res.json({ ...offer.toObject(), id: offer.get('id') || offer.id });
     } catch (error: any) {
       res.status(500).json({ error: "فشل في تحديث العرض" });
     }
@@ -14864,7 +14866,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/promo-offers/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
       const { PromoOfferModel } = await import("@shared/schema");
-      await PromoOfferModel.deleteOne({ id: req.params.id });
+      const pid = req.params.id;
+      let result = await PromoOfferModel.deleteOne({ id: pid });
+      if (result.deletedCount === 0 && pid.match(/^[0-9a-fA-F]{24}$/)) {
+        result = await PromoOfferModel.deleteOne({ _id: pid });
+      }
       res.json({ success: true, message: "تم حذف العرض بنجاح" });
     } catch (error) {
       res.status(500).json({ error: "فشل في حذف العرض" });
