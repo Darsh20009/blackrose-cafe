@@ -711,6 +711,9 @@ export interface IBusinessConfig extends Document {
   serviceFeeAmount?: number;
   serviceFeeLowOrderThreshold?: number;
   serviceFeeLowOrderAmount?: number;
+  prepBaseMinutes?: number;
+  prepExtraMinutesPerItem?: number;
+  prepFreeItemCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -820,6 +823,9 @@ const BusinessConfigSchema = new Schema<IBusinessConfig>({
   serviceFeeAmount: { type: Number, default: 0.70 },
   serviceFeeLowOrderThreshold: { type: Number, default: 5.00 },
   serviceFeeLowOrderAmount: { type: Number, default: 0.35 },
+  prepBaseMinutes: { type: Number, default: 10 },
+  prepExtraMinutesPerItem: { type: Number, default: 3 },
+  prepFreeItemCount: { type: Number, default: 2 },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

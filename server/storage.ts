@@ -1047,6 +1047,22 @@ export class DBStorage implements IStorage {
     if (!order.items) throw new Error("Order items are missing in storage");
     if (!order.totalAmount && order.totalAmount !== 0) throw new Error("Order total amount is missing in storage");
 
+    // Auto-calculate prep time if not already set
+    if (!order.estimatedPrepTimeInMinutes) {
+      try {
+        const { BusinessConfigModel } = await import("@shared/schema");
+        const config = await BusinessConfigModel.findOne({ tenantId: order.tenantId || 'demo-tenant' }).lean();
+        const base = (config as any)?.prepBaseMinutes ?? 10;
+        const extra = (config as any)?.prepExtraMinutesPerItem ?? 3;
+        const freeCount = (config as any)?.prepFreeItemCount ?? 2;
+        const totalQty = Array.isArray(order.items)
+          ? order.items.reduce((s: number, i: any) => s + (Number(i.quantity) || 1), 0)
+          : 1;
+        const extraMins = totalQty > freeCount ? (totalQty - freeCount) * extra : 0;
+        order = { ...order, estimatedPrepTimeInMinutes: base + extraMins, prepTimeSetAt: new Date() };
+      } catch { /* use defaults */ }
+    }
+
     const MAX_RETRIES = 5;
     const COUNTER_WRAP_AT = 1000; // Reset counter after 1000 orders
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {

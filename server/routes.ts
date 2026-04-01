@@ -131,6 +131,20 @@ function invalidateCoffeeItemsCache(tenantId: string) {
   cache.invalidate('menu-items');
   cache.invalidate('product-addons:' + tenantId);
 }
+
+async function calcOrderPrepTime(tenantId: string, items: any[]): Promise<number> {
+  try {
+    const config = await BusinessConfigModel.findOne({ tenantId }).lean();
+    const base = (config as any)?.prepBaseMinutes ?? 10;
+    const extra = (config as any)?.prepExtraMinutesPerItem ?? 3;
+    const freeCount = (config as any)?.prepFreeItemCount ?? 2;
+    const totalQty = Array.isArray(items)
+      ? items.reduce((s: number, i: any) => s + (Number(i.quantity) || 1), 0)
+      : 1;
+    const extraMins = totalQty > freeCount ? (totalQty - freeCount) * extra : 0;
+    return base + extraMins;
+  } catch { return 10; }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 const __filename = fileURLToPath(import.meta.url);

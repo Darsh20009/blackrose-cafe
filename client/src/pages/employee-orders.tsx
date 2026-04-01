@@ -17,6 +17,7 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import SarIcon from "@/components/sar-icon";
 import { useTranslate } from "@/lib/useTranslate";
 import { PaymentReceiptDialog } from "@/components/PaymentReceiptDialog";
+import { PrepCountdown } from "@/components/PrepCountdown";
 
 export default function EmployeeOrders() {
   const { toast } = useToast();
@@ -459,6 +460,14 @@ export default function EmployeeOrders() {
                           </span>
                         )}
                       </div>
+
+                      {order.estimatedPrepTimeInMinutes && ['pending', 'in_progress', 'payment_confirmed', 'confirmed'].includes(order.status) && (
+                        <PrepCountdown
+                          estimatedPrepTimeInMinutes={order.estimatedPrepTimeInMinutes}
+                          prepTimeSetAt={order.prepTimeSetAt || order.createdAt}
+                          status={order.status}
+                        />
+                      )}
 
                       <Separator />
 

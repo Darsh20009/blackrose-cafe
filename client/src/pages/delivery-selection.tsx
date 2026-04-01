@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useCartStore } from '@/lib/cart-store';
 import { useToast } from '@/hooks/use-toast';
-import { Store, MapPin, ArrowRight, Phone, Map, Coffee, AlertCircle, Loader2, Navigation, Clock, Check, Car, Bookmark, ShoppingBag, Timer, ChevronLeft, Utensils, Truck, Zap, Star } from 'lucide-react';
+import { Store, MapPin, ArrowRight, Phone, Map, Coffee, AlertCircle, Loader2, Navigation, Clock, Check, Car, Bookmark, ShoppingBag, ChevronLeft, Utensils, Truck, Star } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTranslation } from 'react-i18next';
 
@@ -169,7 +169,7 @@ function CarSVG({ color, className = '' }: { color: string; className?: string }
   );
 }
 
-type OrderMethod = 'takeaway' | 'car-pickup' | 'dine-in' | 'scheduled' | 'delivery';
+type OrderMethod = 'takeaway' | 'car-pickup' | 'dine-in' | 'delivery';
 
 const DELIVERY_COUNTRIES: { value: string; label: string; governorates: string[] }[] = [
   {
@@ -254,7 +254,6 @@ export default function DeliverySelectionPage() {
   const [hasSavedCar] = useState(() => {
     try { return !!localStorage.getItem('qirox_saved_car'); } catch { return false; }
   });
-  const [scheduledPickupTime, setScheduledPickupTime] = useState<string>('');
   const [userLocation, setUserLocation] = useState<{latitude: number; longitude: number} | null>(null);
   const [locationError, setLocationError] = useState<string>('');
   const [isCheckingLocation, setIsCheckingLocation] = useState(false);
@@ -398,21 +397,6 @@ export default function DeliverySelectionPage() {
     }
   };
 
-  const calculateScheduledPrepTime = (pickupTime: string): { prepStartTime: string; holdMinutes: number } | null => {
-    if (!pickupTime) return null;
-    try {
-      const totalItems = cartItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
-      const holdMinutes = Math.max(10, 10 + (totalItems - 2) * 2);
-      const [hours, minutes] = pickupTime.split(':').map(Number);
-      const arrivalDate = new Date();
-      arrivalDate.setHours(hours, minutes, 0, 0);
-      const prepDate = new Date(arrivalDate.getTime() - holdMinutes * 60 * 1000);
-      return {
-        prepStartTime: `${prepDate.getHours().toString().padStart(2, '0')}:${prepDate.getMinutes().toString().padStart(2, '0')}`,
-        holdMinutes
-      };
-    } catch { return null; }
-  };
 
   const { data: branches = [], isLoading } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
@@ -425,7 +409,6 @@ export default function DeliverySelectionPage() {
   const orderMethods = businessConfig?.orderMethodsConfig || {};
   const enableDineIn = orderMethods.enableDineIn !== false;
   const enableCarPickup = orderMethods.enableCarPickup !== false;
-  const enableScheduledPickup = orderMethods.enableScheduledPickup !== false;
   const enableTakeaway = orderMethods.enableTakeaway !== false;
   const enableDelivery = orderMethods.enableDelivery !== false;
   const deliveryFeeAmount: number = orderMethods.deliveryFeeAmount ?? 15;
@@ -466,11 +449,6 @@ export default function DeliverySelectionPage() {
       }
     }
 
-    if (selectedMethod === 'scheduled' && !scheduledPickupTime) {
-      toast({ title: t("product.error"), description: "يرجى تحديد وقت وصولك المتوقع", variant: 'destructive' });
-      return;
-    }
-
     if (selectedMethod === 'delivery') {
       if (!selectedCountry) {
         toast({ title: t("product.error"), description: "يرجى اختيار الدولة", variant: 'destructive' });
@@ -488,7 +466,6 @@ export default function DeliverySelectionPage() {
 
     setDeliveryInfo({
       type: selectedMethod === 'car-pickup' ? 'car-pickup'
-          : selectedMethod === 'scheduled' ? 'scheduled-pickup'
           : selectedMethod === 'dine-in' ? 'dine-in'
           : selectedMethod === 'delivery' ? 'delivery'
           : 'pickup',
@@ -506,7 +483,6 @@ export default function DeliverySelectionPage() {
       tableId: selectedTableId || undefined,
       tableNumber: bookedTable?.tableNumber || undefined,
       arrivalTime: arrivalTime || undefined,
-      scheduledPickupTime: selectedMethod === 'scheduled' ? scheduledPickupTime : undefined,
       deliveryAddress: selectedMethod === 'delivery'
         ? [DELIVERY_COUNTRIES.find(c => c.value === selectedCountry)?.label, selectedGovernorate, detailedAddress.trim()].filter(Boolean).join(' - ')
         : undefined,
@@ -549,15 +525,6 @@ export default function DeliverySelectionPage() {
       color: 'from-orange-500 to-orange-600',
       ring: 'ring-orange-500',
       bg: 'bg-orange-50 dark:bg-orange-950/20',
-    },
-    enableScheduledPickup && {
-      id: 'scheduled' as OrderMethod,
-      icon: Timer,
-      label: 'طلب مجدول',
-      desc: 'حدد وقت وصولك',
-      color: 'from-teal-500 to-teal-600',
-      ring: 'ring-teal-500',
-      bg: 'bg-teal-50 dark:bg-teal-950/20',
     },
     enableDelivery && {
       id: 'delivery' as OrderMethod,
@@ -992,62 +959,6 @@ export default function DeliverySelectionPage() {
                       )}
                     </>
                   )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Scheduled Pickup Details */}
-            {selectedMethod === 'scheduled' && (
-              <Card className="border-teal-200 dark:border-teal-800">
-                <div className="bg-gradient-to-r from-teal-500 to-teal-600 p-4">
-                  <p className="text-white font-bold text-sm mb-1">طلب مجدول</p>
-                  <p className="text-teal-100 text-xs">سيبدأ تحضير طلبك قبل وصولك بوقت كافٍ ليكون جاهزاً تماماً</p>
-                </div>
-                <CardContent className="p-4 space-y-4">
-                  <div>
-                    <Label htmlFor="scheduled-pickup-time" className="text-sm font-bold mb-2 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-teal-500" />
-                      وقت وصولك المتوقع
-                    </Label>
-                    <Input
-                      id="scheduled-pickup-time"
-                      type="time"
-                      value={scheduledPickupTime}
-                      onChange={(e) => setScheduledPickupTime(e.target.value)}
-                      data-testid="input-scheduled-pickup-time"
-                      className="h-12 border-teal-300 dark:border-teal-700"
-                    />
-                  </div>
-
-                  {scheduledPickupTime && (() => {
-                    const calc = calculateScheduledPrepTime(scheduledPickupTime);
-                    if (!calc) return null;
-                    return (
-                      <div className="p-4 rounded-xl bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Zap className="w-4 h-4 text-teal-500" />
-                          <p className="text-sm font-bold text-teal-700 dark:text-teal-300">جدول تحضير طلبك</p>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded-lg">
-                            <span className="text-sm text-muted-foreground">يبدأ التحضير الساعة</span>
-                            <span className="font-bold text-teal-600 dark:text-teal-400" dir="ltr">{calc.prepStartTime}</span>
-                          </div>
-                          <div className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded-lg">
-                            <span className="text-sm text-muted-foreground">وقت وصولك</span>
-                            <span className="font-bold" dir="ltr">{scheduledPickupTime}</span>
-                          </div>
-                          <div className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded-lg">
-                            <span className="text-sm text-muted-foreground">مدة التحضير</span>
-                            <span className="font-medium">{calc.holdMinutes} دقيقة</span>
-                          </div>
-                        </div>
-                        <p className="text-xs text-teal-600 dark:text-teal-400 font-medium">
-                          طلبك سيكون جاهزاً تماماً عند وصولك!
-                        </p>
-                      </div>
-                    );
-                  })()}
                 </CardContent>
               </Card>
             )}
