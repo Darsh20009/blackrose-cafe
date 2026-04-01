@@ -1333,6 +1333,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const serialized = serializeDoc(config);
       if (!serialized.menuLayout) serialized.menuLayout = 'classic';
       if (!serialized.cashierLayout) serialized.cashierLayout = 'classic';
+      // Apply defaults for service fee fields (for documents created before these fields were added)
+      if (serialized.serviceFeeEnabled === undefined || serialized.serviceFeeEnabled === null) serialized.serviceFeeEnabled = true;
+      if (!serialized.serviceFeeAmount) serialized.serviceFeeAmount = 0.70;
+      if (!serialized.serviceFeeLowOrderThreshold) serialized.serviceFeeLowOrderThreshold = 5.00;
+      if (!serialized.serviceFeeLowOrderAmount) serialized.serviceFeeLowOrderAmount = 0.35;
 
       let subscription = null;
       try {

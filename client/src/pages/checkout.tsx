@@ -1145,12 +1145,13 @@ export default function CheckoutPage() {
                   </div>
                 )}
                 {serviceFee > 0 && (
-                  <div className="flex justify-between items-center gap-2 text-sm text-amber-700 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2 rounded">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-3.5 h-3.5 text-center">⚙</span>
+                  <div className="flex justify-between items-center gap-2 text-sm border rounded-lg p-2.5"
+                    style={{ background: 'linear-gradient(135deg, rgba(200,165,58,0.15) 0%, rgba(200,165,58,0.05) 100%)', borderColor: 'rgba(200,165,58,0.4)' }}>
+                    <span className="flex items-center gap-2 font-semibold" style={{ color: '#C8A53A' }}>
+                      <span className="text-base">⚙️</span>
                       رسوم الخدمة
                     </span>
-                    <span className="font-bold">+{serviceFee.toFixed(2)} <SarIcon /></span>
+                    <span className="font-black text-base" style={{ color: '#C8A53A' }}>+{serviceFee.toFixed(2)} <SarIcon /></span>
                   </div>
                 )}
                 <div className="pt-4 border-t font-bold text-xl flex justify-between gap-2">
@@ -1601,7 +1602,7 @@ export default function CheckoutPage() {
                   <p className="text-sm text-green-600 font-semibold">رسوم التوصيل: +{orderDeliveryFee.toFixed(2)} <SarIcon /></p>
                 )}
                 {serviceFee > 0 && (
-                  <p className="text-sm text-amber-600 font-semibold">رسوم الخدمة: +{serviceFee.toFixed(2)} <SarIcon /></p>
+                  <p className="text-sm font-bold" style={{ color: '#C8A53A' }}>⚙️ رسوم الخدمة: +{serviceFee.toFixed(2)} <SarIcon /></p>
                 )}
                 <p className="text-3xl font-black text-primary">{getFinalAmount().toFixed(2)} <SarIcon /></p>
                 {getFinalAmount() === 0 && <p className="text-sm text-green-600 font-bold">تغطية كاملة!</p>}
