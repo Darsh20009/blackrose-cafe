@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Bell, Download, Smartphone, Share2, PlusSquare, X, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import blackroseLogo from "@assets/blackrose-logo.png";
@@ -37,14 +37,14 @@ export function GlobalPrompts() {
   const [showIOSNotifBlocked, setShowIOSNotifBlocked] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isLeaving, setIsLeaving] = useState(false);
 
   useEffect(() => {
     if (isEmployeePage()) return;
     if (typeof window === "undefined") return;
 
+    // Delay longer — give user time to settle
     const notifTimer = setTimeout(() => {
-      // iOS in non-standalone mode: don't show notification prompt — it will fail
-      // Instead guide them to install first
       if (isIOS() && !isStandalone()) {
         const dismissed = localStorage.getItem(INSTALL_DISMISSED_KEY);
         if (dismissed && Date.now() - parseInt(dismissed) < 7 * 24 * 60 * 60 * 1000) return;
@@ -57,7 +57,7 @@ export function GlobalPrompts() {
       const dismissed = sessionStorage.getItem(NOTIF_DISMISSED_KEY);
       if (dismissed) return;
       setShowNotif(true);
-    }, 2500);
+    }, 5000); // increased from 2500ms to 5000ms
 
     return () => clearTimeout(notifTimer);
   }, []);
@@ -82,7 +82,7 @@ export function GlobalPrompts() {
       if (Notification.permission !== "default") {
         setShowInstall(true);
       }
-    }, 5000);
+    }, 8000); // delayed further
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handler);
@@ -113,12 +113,20 @@ export function GlobalPrompts() {
     return "visitor";
   }
 
+  const dismissNotif = (save = true) => {
+    setIsLeaving(true);
+    setTimeout(() => {
+      setShowNotif(false);
+      setIsLeaving(false);
+      if (save) sessionStorage.setItem(NOTIF_DISMISSED_KEY, "1");
+    }, 300);
+  };
+
   const handleNotifEnable = async () => {
     setNotifLoading(true);
     try {
-      // On iOS non-standalone: cannot subscribe — show guide instead
       if (isIOS() && !isStandalone()) {
-        setShowNotif(false);
+        dismissNotif(false);
         setShowIOSGuide(true);
         return;
       }
@@ -145,40 +153,25 @@ export function GlobalPrompts() {
             await fetch("/api/push/subscribe", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                subscription: subscription.toJSON(),
-                userType: "customer",
-                userId,
-              }),
+              body: JSON.stringify({ subscription: subscription.toJSON(), userType: "customer", userId }),
             });
           }
         } catch (e: any) {
           console.warn("[Push] Subscribe error:", e);
-          // If subscription failed on iOS standalone — show explanation
-          if (isIOS() && isStandalone()) {
-            setShowIOSNotifBlocked(true);
-          }
+          if (isIOS() && isStandalone()) setShowIOSNotifBlocked(true);
         }
       }
-      setShowNotif(false);
-      sessionStorage.setItem(NOTIF_DISMISSED_KEY, "1");
+      dismissNotif();
     } finally {
       setNotifLoading(false);
     }
-  };
-
-  const handleNotifDismiss = () => {
-    setShowNotif(false);
-    sessionStorage.setItem(NOTIF_DISMISSED_KEY, "1");
   };
 
   const handleInstall = async () => {
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === "accepted") {
-        setShowInstall(false);
-      }
+      if (outcome === "accepted") setShowInstall(false);
       setDeferredPrompt(null);
     } else if (isIOS()) {
       setShowIOSGuide(true);
@@ -200,92 +193,116 @@ export function GlobalPrompts() {
 
   return (
     <>
-      {/* Standard notification prompt — shown on Android/desktop when not iOS non-standalone */}
+      {/* ── Compact notification toast — slides in from bottom-left ── */}
       {showNotif && (
-        <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 backdrop-blur-sm" dir="rtl">
-          <div className="w-full max-w-md animate-in slide-in-from-bottom-8 duration-500 pb-safe">
-            <div className="bg-[#111827] rounded-t-3xl shadow-2xl border-t border-white/10 px-6 pt-5 pb-8">
-              <div className="flex justify-center mb-4">
-                <div className="w-10 h-1 rounded-full bg-white/20" />
-              </div>
+        <div
+          dir="rtl"
+          className={`fixed bottom-5 right-4 left-4 md:left-auto md:right-5 md:w-[340px] z-[200]
+            transition-all duration-300 ease-out
+            ${isLeaving
+              ? "opacity-0 translate-y-3 pointer-events-none"
+              : "opacity-100 translate-y-0 animate-in slide-in-from-bottom-3 duration-400"
+            }
+          `}
+        >
+          <div className="bg-[#0f1117] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+            {/* Top accent line */}
+            <div className="h-0.5 w-full bg-gradient-to-l from-[#C8A53A] via-[#C8A53A]/60 to-transparent" />
 
-              <div className="flex flex-col items-center text-center mb-6">
-                <div className="relative mb-3">
-                  <img src={blackroseLogo} alt="BLACK ROSE" className="w-20 h-20 rounded-3xl shadow-xl border border-white/10" />
-                  <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-[#2D9B6E] rounded-full flex items-center justify-center shadow-lg border-2 border-[#111827]">
-                    <Bell className="w-4 h-4 text-white" />
+            <div className="p-4">
+              {/* Header row */}
+              <div className="flex items-center gap-3 mb-3">
+                <div className="relative shrink-0">
+                  <img src={blackroseLogo} alt="BLACK ROSE" className="w-10 h-10 rounded-xl border border-white/10" />
+                  <div className="absolute -bottom-1 -left-1 w-5 h-5 bg-[#C8A53A] rounded-full flex items-center justify-center border border-[#0f1117]">
+                    <Bell className="w-2.5 h-2.5 text-black" />
                   </div>
                 </div>
-                <h2 className="text-xl font-black text-white mt-1">فعّل الإشعارات</h2>
-                <p className="text-sm text-white/60 mt-1 leading-relaxed max-w-xs">
-                  لمتابعة حالة طلبك لحظة بلحظة وتلقّي أحدث العروض الحصرية
-                </p>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-bold text-sm leading-tight">فعّل الإشعارات</p>
+                  <p className="text-white/50 text-[11px] mt-0.5 leading-tight">
+                    تابع طلبك لحظة بلحظة
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => dismissNotif()}
+                  className="p-1.5 rounded-full hover:bg-white/10 transition-colors shrink-0 text-white/30 hover:text-white/60"
+                  data-testid="button-notif-dismiss"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
 
-              <div className="space-y-3 mb-6">
+              {/* Benefits — compact chips */}
+              <div className="flex flex-wrap gap-1.5 mb-3">
                 {[
-                  { emoji: "📦", text: "تنبيه فوري عند قبول وتجهيز طلبك" },
-                  { emoji: "☕", text: "إشعار لحظي عند جاهزية طلبك" },
-                  { emoji: "🎁", text: "عروض حصرية ومكافآت خاصة لك" },
-                  { emoji: "⚡", text: "تحديثات فورية بدون فتح التطبيق" },
-                ].map((item) => (
-                  <div key={item.text} className="flex items-center gap-3 bg-white/5 rounded-2xl px-4 py-3">
-                    <span className="text-lg">{item.emoji}</span>
-                    <span className="text-sm text-white/80 font-medium">{item.text}</span>
-                  </div>
+                  { emoji: "📦", text: "جاهزية طلبك" },
+                  { emoji: "🎁", text: "عروض حصرية" },
+                  { emoji: "⚡", text: "تحديث فوري" },
+                ].map(item => (
+                  <span key={item.text} className="text-[11px] text-white/60 bg-white/5 rounded-full px-2.5 py-1 flex items-center gap-1">
+                    <span>{item.emoji}</span>
+                    <span>{item.text}</span>
+                  </span>
                 ))}
               </div>
 
-              <Button
-                onClick={handleNotifEnable}
-                disabled={notifLoading}
-                className="w-full h-14 rounded-2xl text-base font-black bg-[#2D9B6E] hover:bg-[#25845d] text-white shadow-lg shadow-[#2D9B6E]/30 gap-2"
-              >
-                {notifLoading ? (
-                  <><Loader2 className="w-5 h-5 animate-spin" /> جاري التفعيل...</>
-                ) : (
-                  <><Bell className="w-5 h-5" /> تفعيل الإشعارات</>
-                )}
-              </Button>
-
-              <button
-                onClick={handleNotifDismiss}
-                className="w-full text-center text-white/30 text-xs mt-3 py-2 hover:text-white/50 transition-colors"
-              >
-                ليس الآن
-              </button>
+              {/* Action buttons */}
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleNotifEnable}
+                  disabled={notifLoading}
+                  className="flex-1 h-9 rounded-xl text-xs font-bold bg-[#C8A53A] hover:bg-[#b8952f] text-black gap-1.5"
+                  data-testid="button-notif-enable"
+                >
+                  {notifLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Bell className="w-3.5 h-3.5" />
+                  )}
+                  {notifLoading ? "جاري التفعيل..." : "تفعيل الآن"}
+                </Button>
+                <button
+                  onClick={() => dismissNotif()}
+                  className="px-3 h-9 rounded-xl text-xs text-white/40 hover:text-white/60 hover:bg-white/5 transition-colors"
+                >
+                  لاحقاً
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Android install prompt (non-iOS) */}
+      {/* ── Android install prompt — compact card ── */}
       {showInstall && !showNotif && (
-        <div className="fixed bottom-20 left-3 right-3 z-[100] animate-in slide-in-from-bottom-6 duration-500" dir="rtl">
-          <div className="bg-[#111827] text-white rounded-3xl shadow-2xl border border-white/10 overflow-hidden">
-            <div className="flex items-center gap-3 p-4">
-              <img src={blackroseLogo} alt={brand.shortNameEn} className="w-12 h-12 rounded-2xl shrink-0 border border-white/10" />
+        <div className="fixed bottom-5 left-3 right-3 md:left-auto md:right-5 md:w-80 z-[100] animate-in slide-in-from-bottom-4 duration-400" dir="rtl">
+          <div className="bg-[#0f1117] border border-white/10 text-white rounded-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-center gap-3 p-3.5">
+              <img src={blackroseLogo} alt={brand.shortNameEn} className="w-10 h-10 rounded-xl shrink-0 border border-white/10" />
               <div className="flex-1 min-w-0">
-                <p className="font-black text-sm leading-tight">{brand.nameEn}</p>
-                <p className="text-[11px] text-white/60 mt-0.5">ثبّت التطبيق على جهازك</p>
+                <p className="font-bold text-sm leading-tight">{brand.nameEn}</p>
+                <p className="text-[11px] text-white/50 mt-0.5">ثبّت التطبيق على جهازك</p>
               </div>
               <Button
                 onClick={handleInstall}
                 size="sm"
-                className="bg-[#2D9B6E] hover:bg-[#25845d] text-white rounded-xl font-bold text-xs px-4 h-9 shrink-0 gap-1.5"
+                className="bg-[#C8A53A] hover:bg-[#b8952f] text-black rounded-xl font-bold text-xs px-3 h-8 shrink-0 gap-1"
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-3.5 h-3.5" />
                 حمّل
               </Button>
               <button onClick={handleInstallDismiss} className="p-1.5 rounded-full hover:bg-white/10 transition-colors shrink-0">
-                <X className="w-4 h-4 text-white/50" />
+                <X className="w-3.5 h-3.5 text-white/40" />
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* iOS Install Guide — shown immediately for iOS non-standalone users */}
+      {/* ── iOS Install Guide — full sheet (needs instructions) ── */}
       {showIOSGuide && (
         <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/60 backdrop-blur-sm" dir="rtl">
           <div className="w-full max-w-md bg-white rounded-t-3xl shadow-2xl animate-in slide-in-from-bottom-8 duration-400 pb-safe">
@@ -303,50 +320,28 @@ export function GlobalPrompts() {
                 </div>
               </div>
 
-              {/* iOS version warning */}
               {isIOS() && !isiOSVersionSupported() && (
                 <div className="mb-4 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
                   <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
                   <p className="text-xs text-amber-700 leading-relaxed">
-                    الإشعارات تتطلب iOS 16.4 أو أحدث. يبدو أن نسختك أقدم من ذلك.
+                    الإشعارات تتطلب iOS 16.4 أو أحدث.
                   </p>
                 </div>
               )}
 
               <div className="space-y-3 mb-5">
                 {[
-                  {
-                    step: "1",
-                    title: 'اضغط على أيقونة "مشاركة"',
-                    sub: 'الأيقونة في أسفل شاشة Safari',
-                    icon: Share2,
-                    highlight: true,
-                  },
-                  {
-                    step: "2",
-                    title: '"أضف إلى الشاشة الرئيسية"',
-                    sub: "مرّر لأسفل في القائمة واختر هذا الخيار",
-                    icon: PlusSquare,
-                    highlight: false,
-                  },
-                  {
-                    step: "3",
-                    title: 'اضغط "إضافة" للتأكيد',
-                    sub: "ثم افتح التطبيق من الشاشة الرئيسية وفعّل الإشعارات",
-                    icon: null,
-                    highlight: false,
-                  },
+                  { step: "1", title: 'اضغط على أيقونة "مشاركة"', sub: 'الأيقونة في أسفل شاشة Safari', icon: Share2 },
+                  { step: "2", title: '"أضف إلى الشاشة الرئيسية"', sub: "مرّر لأسفل في القائمة واختر هذا الخيار", icon: PlusSquare },
+                  { step: "3", title: 'اضغط "إضافة" للتأكيد', sub: "ثم افتح التطبيق من الشاشة الرئيسية وفعّل الإشعارات", icon: null },
                 ].map((item) => (
-                  <div
-                    key={item.step}
-                    className={`flex items-center gap-4 p-3 rounded-2xl ${item.highlight ? "bg-[#2D9B6E]/10 border border-[#2D9B6E]/20" : "bg-gray-50"}`}
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-[#2D9B6E]/10 flex items-center justify-center shrink-0">
-                      <span className="text-xl font-bold text-[#2D9B6E]">{item.step}</span>
+                  <div key={item.step} className="flex items-center gap-4 p-3 rounded-2xl bg-gray-50">
+                    <div className="w-10 h-10 rounded-xl bg-[#C8A53A]/15 flex items-center justify-center shrink-0">
+                      <span className="text-xl font-bold text-[#C8A53A]">{item.step}</span>
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
-                        {item.icon && <item.icon className="inline w-3.5 h-3.5 text-[#2D9B6E]" />}
+                        {item.icon && <item.icon className="inline w-3.5 h-3.5 text-[#C8A53A]" />}
                         {item.title}
                       </p>
                       <p className="text-xs text-gray-500 mt-0.5">{item.sub}</p>
@@ -355,15 +350,9 @@ export function GlobalPrompts() {
                 ))}
               </div>
 
-              <div className="bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3 mb-5">
-                <p className="text-xs text-blue-700 leading-relaxed text-center">
-                  💡 بعد إضافة التطبيق وفتحه من الشاشة الرئيسية، ستظهر نافذة تفعيل الإشعارات تلقائياً
-                </p>
-              </div>
-
               <Button
                 onClick={handleIOSGuideDismiss}
-                className="w-full rounded-2xl h-12 font-bold text-sm bg-[#2D9B6E] text-white"
+                className="w-full rounded-2xl h-12 font-bold text-sm bg-[#C8A53A] hover:bg-[#b8952f] text-black"
               >
                 فهمت، شكراً
               </Button>
@@ -372,7 +361,7 @@ export function GlobalPrompts() {
         </div>
       )}
 
-      {/* iOS Notification blocked explanation */}
+      {/* ── iOS Notification blocked ── */}
       {showIOSNotifBlocked && (
         <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/60 backdrop-blur-sm" dir="rtl">
           <div className="w-full max-w-md bg-white rounded-t-3xl shadow-2xl animate-in slide-in-from-bottom-8 duration-400 pb-safe">
@@ -388,16 +377,12 @@ export function GlobalPrompts() {
               </div>
               <Button
                 onClick={() => { setShowIOSNotifBlocked(false); setShowIOSGuide(true); }}
-                className="w-full rounded-2xl h-12 font-bold text-sm bg-[#2D9B6E] text-white mb-2"
+                className="w-full rounded-2xl h-12 font-bold text-sm bg-[#C8A53A] hover:bg-[#b8952f] text-black mb-2"
               >
                 <Smartphone className="w-4 h-4 mr-2" />
                 كيف أضيف التطبيق؟
               </Button>
-              <Button
-                variant="ghost"
-                onClick={() => setShowIOSNotifBlocked(false)}
-                className="w-full rounded-2xl h-10 text-sm text-gray-400"
-              >
+              <Button variant="ghost" onClick={() => setShowIOSNotifBlocked(false)} className="w-full rounded-2xl h-10 text-sm text-gray-400">
                 لاحقاً
               </Button>
             </div>
