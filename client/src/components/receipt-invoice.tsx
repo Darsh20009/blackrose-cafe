@@ -193,7 +193,7 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
         </div>` : ''}
         <div style="text-align:center;margin-top:10px;border-top:1px solid #000;padding-top:6px;font-size:10px;color:#555;">
           <div style="font-weight:bold;">شكراً لزيارتكم!</div>
-          <div>www.blackrose.sa</div>
+          <div>www.blackrose.com.sa</div>
         </div>
       </div>`;
 

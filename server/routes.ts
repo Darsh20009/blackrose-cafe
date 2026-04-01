@@ -477,7 +477,7 @@ function getOrderStatusMessage(status: string, orderNumber: string): string {
 // Maileroo Email Configuration - DISABLED IN FAVOR OF TURBOSMTP
 /*
 const mailerooApiKey = process.env.MAILEROO_API_KEY;
-const mailerooUser = process.env.MAILEROO_USER || 'cafe@blackrose.sa';
+const mailerooUser = process.env.MAILEROO_USER || 'cafe@blackrose.com.sa';
 */
 
 // Set transporter to null to satisfy the rest of the code that might reference it
@@ -623,7 +623,7 @@ function getAppBaseUrl(): string {
   if (process.env.SITE_URL) return process.env.SITE_URL;
   const domain = process.env.REPLIT_DEV_DOMAIN;
   if (domain) return `https://${domain}`;
-  return `https://www.blackrose.sa`;
+  return `https://www.blackrose.com.sa`;
 }
 
 function generateOrderNotificationSVG(
@@ -1068,8 +1068,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
 
-      // === Loyalty: ensure loyalty card exists and add pending points ===
-      // Skip earning points for orders where points were used (pointsRedeemed > 0)
+      // === Loyalty: ensure loyalty card exists and award points ===
+      // POS auto-confirmed orders: award actual points immediately (no pending phase needed)
+      // Online orders: add pending points to be confirmed when order is marked ready/completed
+      // Skip if customer used points for redemption on this order
       try {
         const customerPhone = body.customerPhone || body.customerInfo?.customerPhone;
         const orderUsedPoints = Number(body.pointsRedeemed) > 0;
@@ -1088,11 +1090,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const itemPrice = Number(item.price) || 0;
             return itemPrice > 1 ? sum + (Number(item.quantity) || 1) : sum;
           }, 0);
-          const pendingPts = eligibleDrinks * pointsPerDrinkCfg;
+          const earnedPts = eligibleDrinks * pointsPerDrinkCfg;
 
           let card = await mongoose.model('LoyaltyCard').findOne({ phoneNumber: { $in: phoneVariants } });
           const customerName = body.customerName || body.customerInfo?.customerName || 'عميل';
-          // Also try to link by customerId if available
           if (!card && body.customerId) {
             card = await mongoose.model('LoyaltyCard').findOne({ customerId: body.customerId });
           }
@@ -1104,16 +1105,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
             } as any);
             console.log(`[LOYALTY] Created new card for ${cleanPhone}`);
           }
-          // Ensure customerId is linked
           if (card && body.customerId && !card.customerId) {
             await mongoose.model('LoyaltyCard').findByIdAndUpdate(card._id, { $set: { customerId: body.customerId } });
           }
-          if (card && pendingPts > 0) {
-            await mongoose.model('LoyaltyCard').findByIdAndUpdate(card._id, {
-              $inc: { pendingPoints: pendingPts },
-              $set: { lastUsedAt: new Date() },
-            });
-            console.log(`[LOYALTY] Added ${pendingPts} pending points to card ${card.id} (${cleanPhone})`);
+          if (card && earnedPts > 0) {
+            if (shouldAutoConfirm) {
+              // POS order: award actual points immediately and mark order as awarded
+              await mongoose.model('LoyaltyCard').findByIdAndUpdate(card._id, {
+                $inc: { points: earnedPts },
+                $set: { lastUsedAt: new Date() },
+              });
+              // Also update Customer document if linked
+              if (body.customerId) {
+                await CustomerModel.findOneAndUpdate({ id: body.customerId }, { $inc: { points: earnedPts } });
+              }
+              await OrderModel.findOneAndUpdate({ id: order.id }, { pointsAwarded: true });
+              console.log(`[LOYALTY] POS: Awarded ${earnedPts} actual points to card ${card.id} (${cleanPhone})`);
+            } else {
+              // Online order: add pending points — converted when order reaches ready/completed
+              await mongoose.model('LoyaltyCard').findByIdAndUpdate(card._id, {
+                $inc: { pendingPoints: earnedPts },
+                $set: { lastUsedAt: new Date() },
+              });
+              console.log(`[LOYALTY] Online: Added ${earnedPts} pending points to card ${card.id} (${cleanPhone})`);
+            }
           }
         }
       } catch (loyaltyErr) {
@@ -1741,7 +1756,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const branchName = branch ? branch.nameAr : "فرع غير معروف";
 
       // Use production domain for QR codes so they work after deployment
-      const PRODUCTION_DOMAIN = "https://www.blackrose.sa";
+      const PRODUCTION_DOMAIN = "https://www.blackrose.com.sa";
       const tableUrl = `${PRODUCTION_DOMAIN}/table-menu/${table.qrToken}`;
 
       res.json({
@@ -2833,7 +2848,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               billing_data: {
                 first_name: (customerName || 'Guest').split(' ')[0] || 'Guest',
                 last_name: (customerName || 'Guest').split(' ').slice(1).join(' ') || 'Guest',
-                email: customerEmail || 'guest@blackrose.sa',
+                email: customerEmail || 'guest@blackrose.com.sa',
                 phone_number: customerPhone || '0500000000',
                 street: 'N/A', building: 'N/A', floor: 'N/A',
                 apartment: 'N/A', city: 'Yanbu', country: 'SAU',
@@ -2842,15 +2857,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               customer: {
                 first_name: (customerName || 'Guest').split(' ')[0] || 'Guest',
                 last_name: (customerName || 'Guest').split(' ').slice(1).join(' ') || 'Guest',
-                email: customerEmail || 'guest@blackrose.sa',
+                email: customerEmail || 'guest@blackrose.com.sa',
                 phone_number: customerPhone || '0500000000',
               },
               extras: { order_ref: orderId || internalSessionId },
               special_reference: orderId || internalSessionId,
-              notification_url: `${process.env.SITE_URL || 'https://www.blackrose.sa'}/api/payments/paymob/webhook`,
+              notification_url: `${process.env.SITE_URL || 'https://www.blackrose.com.sa'}/api/payments/paymob/webhook`,
               redirection_url: returnUrl
                 ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}session=${internalSessionId}`
-                : `${process.env.SITE_URL || 'https://www.blackrose.sa'}/payment-return-iframe?session=${internalSessionId}&orderRef=${encodeURIComponent(orderId || internalSessionId)}`,
+                : `${process.env.SITE_URL || 'https://www.blackrose.com.sa'}/payment-return-iframe?session=${internalSessionId}&orderRef=${encodeURIComponent(orderId || internalSessionId)}`,
             };
 
             const intentRes = await fetch(`${baseUrl}/v1/intention/`, {
@@ -17840,7 +17855,7 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
   });
 
   // ─── QIROX Studio External API Proxy ───────────────────────────────────────
-  const QIROX_STUDIO_BASE = "https://www.blackrose.sa/api/v1";
+  const QIROX_STUDIO_BASE = "https://www.blackrose.com.sa/api/v1";
   const qiroxStudioHeaders = () => ({
     Authorization: `Bearer ${process.env.QIROX_STUDIO_API_KEY || ""}`,
     "Content-Type": "application/json",

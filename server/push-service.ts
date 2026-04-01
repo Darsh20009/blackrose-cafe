@@ -21,7 +21,7 @@ export const PushSubscriptionModel =
 export function initWebPush() {
   const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
   const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
-  const vapidSubject = process.env.VAPID_SUBJECT || "mailto:cafe@blackrose.sa";
+  const vapidSubject = process.env.VAPID_SUBJECT || "mailto:cafe@blackrose.com.sa";
 
   if (!vapidPublicKey || !vapidPrivateKey) {
     console.warn("[PUSH] VAPID keys not configured. Web Push notifications disabled.");

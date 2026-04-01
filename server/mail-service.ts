@@ -11,7 +11,7 @@ async function loadSmtpSecrets() {
     smtpUser: process.env.SMTP_USER,
     smtpPass: process.env.SMTP_PASS,
     smtp2goApiKey: process.env.SMTP2GO_API_KEY,
-    smtpFrom: process.env.SMTP_FROM || "noreply@blackrose.sa",
+    smtpFrom: process.env.SMTP_FROM || "noreply@blackrose.com.sa",
   };
 }
 
@@ -117,7 +117,7 @@ async function sendMail(options: {
   html?: string;
   text?: string;
 }): Promise<boolean> {
-  const from = options.from || process.env.SMTP_FROM || "noreply@blackrose.sa";
+  const from = options.from || process.env.SMTP_FROM || "noreply@blackrose.com.sa";
 
   // 1. Try HTTP API (works on Render, Vercel, etc.)
   if (process.env.SMTP2GO_API_KEY) {
