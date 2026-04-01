@@ -37,6 +37,7 @@ function LoyaltyCheckoutCard({
   onApplyPoints,
   onCancelPoints,
   baseTotal,
+  pointsNeededForFree,
 }: {
   loyaltyCard: any;
   loyaltyPoints: number;
@@ -46,12 +47,16 @@ function LoyaltyCheckoutCard({
   onApplyPoints: (pts: number) => void;
   onCancelPoints: () => void;
   baseTotal: number;
+  pointsNeededForFree: number;
 }) {
   const isApplied = pointsToRedeem > 0;
   const totalPointsValue = parseFloat((loyaltyPoints / pointsPerSar).toFixed(2));
   const appliedDiscount = parseFloat((pointsToRedeem / pointsPerSar).toFixed(2));
 
   const canRedeem = loyaltyPoints >= minPointsForRedemption;
+  const canMakeOrderFree = loyaltyPoints >= pointsNeededForFree;
+  // Slider max: cap at points needed for free order (remaining stay with customer)
+  const sliderMax = canMakeOrderFree ? pointsNeededForFree : loyaltyPoints;
   const [inputVal, setInputVal] = useState(() =>
     canRedeem ? minPointsForRedemption : 0
   );
@@ -105,33 +110,50 @@ function LoyaltyCheckoutCard({
               <input
                 type="range"
                 min={minPointsForRedemption}
-                max={loyaltyPoints}
-                step={Math.max(1, Math.floor(loyaltyPoints / 100))}
-                value={inputVal}
+                max={sliderMax}
+                step={Math.max(1, Math.floor(sliderMax / 100))}
+                value={Math.min(inputVal, sliderMax)}
                 onChange={e => setInputVal(Number(e.target.value))}
                 className="flex-1 accent-amber-500"
                 data-testid="slider-points"
               />
               <div className="text-right min-w-[80px]">
-                <p className="text-sm font-black text-amber-700 dark:text-amber-400">{inputVal.toLocaleString()}</p>
+                <p className="text-sm font-black text-amber-700 dark:text-amber-400">{Math.min(inputVal, sliderMax).toLocaleString()}</p>
                 <p className="text-[10px] text-amber-600/70">{tc("نقطة", "pts")}</p>
               </div>
             </div>
             <div className="flex items-center justify-between text-xs px-1">
               <span className="text-muted-foreground">{minPointsForRedemption} (الحد الأدنى)</span>
               <span className="font-bold text-amber-700 dark:text-amber-400">
-                = {parseFloat((inputVal / pointsPerSar).toFixed(2)).toFixed(2)} ريال خصم
+                = {parseFloat((Math.min(inputVal, sliderMax) / pointsPerSar).toFixed(2)).toFixed(2)} ريال خصم
               </span>
             </div>
+            {canMakeOrderFree && loyaltyPoints > pointsNeededForFree && (
+              <p className="text-[11px] text-center text-green-600 dark:text-green-400 font-medium">
+                يُخصم {pointsNeededForFree.toLocaleString()} نقطة فقط • يبقى لك {(loyaltyPoints - pointsNeededForFree).toLocaleString()} نقطة
+              </p>
+            )}
           </div>
+
+          {canMakeOrderFree && (
+            <Button
+              variant="outline"
+              className="w-full border-green-500 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/30 font-bold h-9 gap-2 text-sm"
+              onClick={() => onApplyPoints(pointsNeededForFree)}
+              data-testid="button-free-order"
+            >
+              <Star className="w-4 h-4" />
+              اجعل الطلب مجانياً ({pointsNeededForFree.toLocaleString()} نقطة)
+            </Button>
+          )}
 
           <Button
             className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-10 gap-2"
-            onClick={() => onApplyPoints(inputVal)}
+            onClick={() => onApplyPoints(Math.min(inputVal, sliderMax))}
             data-testid="button-apply-points"
           >
             <Coins className="w-4 h-4" />
-            طبّق خصم {parseFloat((inputVal / pointsPerSar).toFixed(2)).toFixed(2)} ريال
+            طبّق خصم {parseFloat((Math.min(inputVal, sliderMax) / pointsPerSar).toFixed(2)).toFixed(2)} ريال
           </Button>
         </div>
       )}
@@ -223,15 +245,6 @@ export default function CheckoutPage() {
     ? parseFloat((pointsToRedeem / pointsPerSar).toFixed(2))
     : 0;
 
-  const getFinalTotalWithPoints = () => {
-    const base = getBaseTotal();
-    if (usePointsAsDiscount && pointsDiscountSAR > 0) {
-      return Math.max(0, base - pointsDiscountSAR);
-    }
-    return base;
-  };
-
-  const giftCardDiscount = appliedGiftCard ? Math.min(appliedGiftCard.applied, getFinalTotalWithPoints()) : 0;
   const orderDeliveryFee = deliveryInfo?.type === 'delivery' ? (deliveryInfo?.deliveryFee || 0) : 0;
 
   const getServiceFee = () => {
@@ -244,7 +257,27 @@ export default function CheckoutPage() {
   };
 
   const serviceFee = getServiceFee();
-  const getFinalAmount = () => Math.max(0, getFinalTotalWithPoints() - giftCardDiscount) + orderDeliveryFee + serviceFee;
+
+  // Points can cover products + service fee (delivery is never covered by points)
+  const totalCoverableByPoints = parseFloat((getBaseTotal() + serviceFee).toFixed(2));
+  // Effective discount capped so we never deduct more points than needed
+  const effectivePointsDiscountSAR = Math.min(pointsDiscountSAR, totalCoverableByPoints);
+  // Actual points that will be deducted (may be less than selected if order is cheaper)
+  const effectivePointsUsed = Math.round(effectivePointsDiscountSAR * pointsPerSar);
+  // Points needed to make the whole order free (for smart button)
+  const pointsNeededForFree = Math.ceil(totalCoverableByPoints * pointsPerSar);
+
+  const getFinalTotalWithPoints = () => {
+    const base = getBaseTotal();
+    if (usePointsAsDiscount && pointsDiscountSAR > 0) {
+      return Math.max(0, base + serviceFee - pointsDiscountSAR);
+    }
+    return base + serviceFee;
+  };
+
+  const giftCardDiscount = appliedGiftCard ? Math.min(appliedGiftCard.applied, getFinalTotalWithPoints()) : 0;
+
+  const getFinalAmount = () => Math.max(0, getFinalTotalWithPoints() - giftCardDiscount) + orderDeliveryFee;
 
   const handleCheckGiftCard = async (code?: string) => {
     const codeToUse = code || giftCardCode.trim();
@@ -666,8 +699,8 @@ export default function CheckoutPage() {
                : deliveryInfo?.type || 'pickup',
       customerNotes,
       discountCode: appliedDiscount?.code,
-      pointsRedeemed: usePointsAsDiscount ? pointsToRedeem : 0,
-      pointsValue: usePointsAsDiscount ? Math.min(pointsDiscountSAR, getBaseTotal()) : 0,
+      pointsRedeemed: usePointsAsDiscount ? effectivePointsUsed : 0,
+      pointsValue: usePointsAsDiscount ? effectivePointsDiscountSAR : 0,
       bypassPointsVerification: true,
       ...(appliedGiftCard && giftCardDiscount > 0 ? { giftCardCode: appliedGiftCard.code, giftCardAmount: giftCardDiscount } : {}),
       ...(deliveryInfo?.type === 'car-pickup' && deliveryInfo?.carInfo ? {
@@ -796,8 +829,8 @@ export default function CheckoutPage() {
                : deliveryInfo?.type || 'pickup',
       customerNotes: customerNotes,
       discountCode: appliedDiscount?.code,
-      pointsRedeemed: usePointsAsDiscount ? pointsToRedeem : 0,
-      pointsValue: usePointsAsDiscount ? Math.min(pointsDiscountSAR, getBaseTotal()) : 0,
+      pointsRedeemed: usePointsAsDiscount ? effectivePointsUsed : 0,
+      pointsValue: usePointsAsDiscount ? effectivePointsDiscountSAR : 0,
       bypassPointsVerification: true,
       // Gift card — server will validate + deduct atomically
       ...(appliedGiftCard && giftCardDiscount > 0 ? {
@@ -1123,7 +1156,7 @@ export default function CheckoutPage() {
                 {usePointsAsDiscount && pointsDiscountSAR > 0 && (
                   <div className="flex justify-between items-center gap-2 text-sm text-amber-700 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2 rounded">
                     <span className="flex items-center gap-1.5">خصم النقاط ({pointsToRedeem.toLocaleString()} نقطة)</span>
-                    <span className="font-bold">-{Math.min(pointsDiscountSAR, getBaseTotal()).toFixed(2)} <SarIcon /></span>
+                    <span className="font-bold">-{effectivePointsDiscountSAR.toFixed(2)} <SarIcon /></span>
                   </div>
                 )}
                 {appliedGiftCard && giftCardDiscount > 0 && (
@@ -1146,12 +1179,26 @@ export default function CheckoutPage() {
                 )}
                 {serviceFee > 0 && (
                   <div className="flex justify-between items-center gap-2 text-sm border rounded-lg p-2.5"
-                    style={{ background: 'linear-gradient(135deg, rgba(200,165,58,0.15) 0%, rgba(200,165,58,0.05) 100%)', borderColor: 'rgba(200,165,58,0.4)' }}>
-                    <span className="flex items-center gap-2 font-semibold" style={{ color: '#C8A53A' }}>
+                    style={{
+                      background: usePointsAsDiscount && effectivePointsDiscountSAR >= totalCoverableByPoints
+                        ? 'linear-gradient(135deg, rgba(34,197,94,0.1) 0%, rgba(34,197,94,0.05) 100%)'
+                        : 'linear-gradient(135deg, rgba(200,165,58,0.15) 0%, rgba(200,165,58,0.05) 100%)',
+                      borderColor: usePointsAsDiscount && effectivePointsDiscountSAR >= totalCoverableByPoints
+                        ? 'rgba(34,197,94,0.4)'
+                        : 'rgba(200,165,58,0.4)'
+                    }}>
+                    <span className="flex items-center gap-2 font-semibold"
+                      style={{ color: usePointsAsDiscount && effectivePointsDiscountSAR >= totalCoverableByPoints ? '#16a34a' : '#C8A53A' }}>
                       <span className="text-base">⚙️</span>
                       رسوم الخدمة
+                      {usePointsAsDiscount && effectivePointsDiscountSAR >= totalCoverableByPoints && (
+                        <span className="text-xs font-bold text-green-600">(مشمولة بالنقاط ✓)</span>
+                      )}
                     </span>
-                    <span className="font-black text-base" style={{ color: '#C8A53A' }}>+{serviceFee.toFixed(2)} <SarIcon /></span>
+                    <span className="font-black text-base"
+                      style={{ color: usePointsAsDiscount && effectivePointsDiscountSAR >= totalCoverableByPoints ? '#16a34a' : '#C8A53A' }}>
+                      {usePointsAsDiscount && effectivePointsDiscountSAR >= totalCoverableByPoints ? '0.00' : `+${serviceFee.toFixed(2)}`} <SarIcon />
+                    </span>
                   </div>
                 )}
                 <div className="pt-4 border-t font-bold text-xl flex justify-between gap-2">
@@ -1460,7 +1507,8 @@ export default function CheckoutPage() {
                       setDiscountCode("");
                     }}
                     onCancelPoints={() => setPointsToRedeem(0)}
-                    baseTotal={getBaseTotal()}
+                    baseTotal={totalCoverableByPoints}
+                    pointsNeededForFree={pointsNeededForFree}
                   />
                 )}
 
@@ -1591,9 +1639,12 @@ export default function CheckoutPage() {
             <p className="text-lg">{t("checkout.confirm_question")}</p>
             {(usePointsAsDiscount && pointsDiscountSAR > 0) || (appliedGiftCard && giftCardDiscount > 0) || orderDeliveryFee > 0 || serviceFee > 0 ? (
               <>
-                <p className="text-sm text-muted-foreground">{(usePointsAsDiscount && pointsDiscountSAR > 0) || (appliedGiftCard && giftCardDiscount > 0) ? 'قبل الخصم' : 'إجمالي الطلب'}: {getBaseTotal().toFixed(2)} <SarIcon /></p>
+                <p className="text-sm text-muted-foreground">{(usePointsAsDiscount && pointsDiscountSAR > 0) || (appliedGiftCard && giftCardDiscount > 0) ? 'قبل الخصم' : 'إجمالي الطلب'}: {(getBaseTotal() + (serviceFee > 0 && !(usePointsAsDiscount && effectivePointsDiscountSAR >= totalCoverableByPoints) ? serviceFee : 0)).toFixed(2)} <SarIcon /></p>
                 {usePointsAsDiscount && pointsDiscountSAR > 0 && (
-                  <p className="text-sm text-amber-600 font-semibold">خصم النقاط: -{Math.min(pointsDiscountSAR, getBaseTotal()).toFixed(2)} <SarIcon /></p>
+                  <p className="text-sm text-amber-600 font-semibold">
+                    خصم النقاط ({effectivePointsUsed.toLocaleString()} نقطة): -{effectivePointsDiscountSAR.toFixed(2)} <SarIcon />
+                    {effectivePointsDiscountSAR >= totalCoverableByPoints && <span className="text-green-600 font-bold mr-1">· شامل رسوم الخدمة</span>}
+                  </p>
                 )}
                 {appliedGiftCard && giftCardDiscount > 0 && (
                   <p className="text-sm text-primary font-semibold">بطاقة هدية: -{giftCardDiscount.toFixed(2)} <SarIcon /></p>
@@ -1601,11 +1652,11 @@ export default function CheckoutPage() {
                 {orderDeliveryFee > 0 && (
                   <p className="text-sm text-green-600 font-semibold">رسوم التوصيل: +{orderDeliveryFee.toFixed(2)} <SarIcon /></p>
                 )}
-                {serviceFee > 0 && (
+                {serviceFee > 0 && !(usePointsAsDiscount && effectivePointsDiscountSAR >= totalCoverableByPoints) && (
                   <p className="text-sm font-bold" style={{ color: '#C8A53A' }}>⚙️ رسوم الخدمة: +{serviceFee.toFixed(2)} <SarIcon /></p>
                 )}
                 <p className="text-3xl font-black text-primary">{getFinalAmount().toFixed(2)} <SarIcon /></p>
-                {getFinalAmount() === 0 && <p className="text-sm text-green-600 font-bold">تغطية كاملة!</p>}
+                {getFinalAmount() === 0 && <p className="text-sm text-green-600 font-bold">🎉 تغطية كاملة بالنقاط!</p>}
               </>
             ) : (
               <p className="text-2xl font-bold text-primary">{getFinalAmount().toFixed(2)} <SarIcon /></p>
