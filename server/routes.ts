@@ -958,12 +958,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       // ─────────────────────────────────────────────────────────────────────
 
+      // Auto-calculate preparation time based on business config settings
+      let autoPrepTimeMinutes = 10;
+      try {
+        const { BusinessConfigModel: BizCfgPrep } = await import("@shared/schema");
+        const bizCfgPrep = await BizCfgPrep.findOne({ tenantId }).lean() as any;
+        const baseMins = Number(bizCfgPrep?.prepBaseMinutes) || 10;
+        const extraPerItem = Number(bizCfgPrep?.prepExtraMinutesPerItem) || 3;
+        const freeItemCount = Number(bizCfgPrep?.prepFreeItemCount) || 2;
+        const orderItems: any[] = body.items || [];
+        const totalItems = orderItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 1), 0);
+        const extraItems = Math.max(0, totalItems - freeItemCount);
+        autoPrepTimeMinutes = baseMins + (extraItems * extraPerItem);
+      } catch (err) {
+        console.error('[PrepTime] Failed to calculate auto prep time:', err);
+        autoPrepTimeMinutes = 10;
+      }
+
       const orderData = {
         ...body,
         tenantId,
         totalAmount: (body.totalAmount !== undefined && body.totalAmount !== null) ? Number(body.totalAmount) : (body.total || 0),
         paymentMethod: mappedPaymentMethod,
         status: shouldAutoConfirm ? 'payment_confirmed' : (body.status || 'pending'),
+        estimatedPrepTimeInMinutes: autoPrepTimeMinutes,
+        prepTimeSetAt: new Date(),
         customerInfo: body.customerInfo || {
           customerName: body.customerName,
           customerPhone: body.customerPhone,

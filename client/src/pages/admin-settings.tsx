@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Shield, Bell, Palette, Database, Plus, Store, Utensils, Coffee, AlertTriangle, Layout, ShieldAlert, Users, Loader2, Trash2, FolderTree, Flame, Snowflake, Star, Cake, Sparkles, GripVertical, Pencil, CreditCard, Wifi, WifiOff, Eye, EyeOff, ExternalLink, CheckCircle, XCircle, Banknote, Smartphone, Gift, Percent, Tag, Ticket, Download, Globe, Package, ChevronDown, ChevronUp, MonitorSmartphone, MapPin, Navigation, FlaskConical, ShoppingBag, Truck, Timer, Car } from 'lucide-react';
+import { Save, Shield, Bell, Palette, Database, Plus, Store, Utensils, Coffee, AlertTriangle, Layout, ShieldAlert, Users, Loader2, Trash2, FolderTree, Flame, Snowflake, Star, Cake, Sparkles, GripVertical, Pencil, CreditCard, Wifi, WifiOff, Eye, EyeOff, ExternalLink, CheckCircle, XCircle, Banknote, Smartphone, Gift, Percent, Tag, Ticket, Download, Globe, Package, ChevronDown, ChevronUp, MonitorSmartphone, MapPin, Navigation, FlaskConical, ShoppingBag, Truck, Timer, Car, Clock } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -1152,7 +1152,6 @@ export default function AdminSettings() {
               { key: 'enableTakeaway', icon: Store, label: tc('استلام من الفرع','Branch Pickup'), desc: tc('الاستلام المباشر من الفرع','Direct pickup from branch'), color: 'text-blue-600' },
               { key: 'enableDineIn', icon: Utensils, label: tc('داخل المطعم (طاولة)','Dine-in (Table)'), desc: tc('الجلوس والطلب من الطاولة','Sit and order at the table'), color: 'text-orange-600' },
               { key: 'enableCarPickup', icon: Car, label: tc('استلام من السيارة','Car Pickup'), desc: tc('توصيل الطلب للسيارة أمام الفرع','Deliver order to car in front of branch'), color: 'text-purple-600' },
-              { key: 'enableScheduledPickup', icon: Timer, label: tc('طلب مجدول','Scheduled Order'), desc: tc('تحديد وقت استلام مسبق','Set a pre-arranged pickup time'), color: 'text-teal-600' },
               { key: 'enableDelivery', icon: Truck, label: tc('توصيل للمنزل','Home Delivery'), desc: tc('توصيل الطلب لعنوان العميل','Deliver order to customer address'), color: 'text-red-600' },
             ].map(({ key, icon: Icon, label, desc, color }) => (
               <div key={key} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border">
@@ -1212,6 +1211,91 @@ export default function AdminSettings() {
                 </div>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Prep Time Settings */}
+        <Card className="hover-elevate border-amber-100 dark:border-amber-900/30">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-100 dark:bg-amber-900/20 rounded-lg">
+                <Timer className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <CardTitle className="text-lg font-bold">{tc('إعدادات وقت التحضير','Preparation Time Settings')}</CardTitle>
+                <CardDescription>{tc('حدد وقت التحضير الأساسي والإضافي لكل طلب','Set base and extra preparation time per order')}</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border space-y-2">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <p className="text-sm font-semibold">{tc('وقت التحضير الأساسي','Base Prep Time')}</p>
+                </div>
+                <p className="text-xs text-muted-foreground">{tc('المدة الافتراضية لأي طلب (بالدقائق)','Default time for any order (minutes)')}</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    max="60"
+                    className="w-20 text-center h-9"
+                    defaultValue={config?.prepBaseMinutes ?? 10}
+                    onBlur={(e) => mutation.mutate({ prepBaseMinutes: Number(e.target.value) || 10 })}
+                    data-testid="input-prep-base-minutes"
+                  />
+                  <span className="text-sm text-muted-foreground">{tc('دقيقة','min')}</span>
+                </div>
+              </div>
+              <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border space-y-2">
+                <div className="flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-amber-600" />
+                  <p className="text-sm font-semibold">{tc('المنتجات المجانية','Free Item Count')}</p>
+                </div>
+                <p className="text-xs text-muted-foreground">{tc('عدد المنتجات قبل إضافة وقت إضافي','Items before extra time is added')}</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    max="20"
+                    className="w-20 text-center h-9"
+                    defaultValue={config?.prepFreeItemCount ?? 2}
+                    onBlur={(e) => mutation.mutate({ prepFreeItemCount: Number(e.target.value) || 2 })}
+                    data-testid="input-prep-free-items"
+                  />
+                  <span className="text-sm text-muted-foreground">{tc('منتج','items')}</span>
+                </div>
+              </div>
+              <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border space-y-2">
+                <div className="flex items-center gap-2">
+                  <Timer className="w-4 h-4 text-amber-600" />
+                  <p className="text-sm font-semibold">{tc('وقت المنتج الإضافي','Extra Time per Item')}</p>
+                </div>
+                <p className="text-xs text-muted-foreground">{tc('دقائق تُضاف لكل منتج زائد','Minutes added per extra item')}</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    max="30"
+                    className="w-20 text-center h-9"
+                    defaultValue={config?.prepExtraMinutesPerItem ?? 3}
+                    onBlur={(e) => mutation.mutate({ prepExtraMinutesPerItem: Number(e.target.value) || 3 })}
+                    data-testid="input-prep-extra-per-item"
+                  />
+                  <span className="text-sm text-muted-foreground">{tc('دقيقة','min')}</span>
+                </div>
+              </div>
+            </div>
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                <span className="font-bold">{tc('مثال: ','Example: ')}</span>
+                {tc(
+                  `طلب يحتوي على ${(config?.prepFreeItemCount ?? 2) + 2} منتجات = ${config?.prepBaseMinutes ?? 10} + (2 × ${config?.prepExtraMinutesPerItem ?? 3}) = ${(config?.prepBaseMinutes ?? 10) + 2 * (config?.prepExtraMinutesPerItem ?? 3)} دقيقة`,
+                  `Order with ${(config?.prepFreeItemCount ?? 2) + 2} items = ${config?.prepBaseMinutes ?? 10} + (2 × ${config?.prepExtraMinutesPerItem ?? 3}) = ${(config?.prepBaseMinutes ?? 10) + 2 * (config?.prepExtraMinutesPerItem ?? 3)} min`
+                )}
+              </p>
+            </div>
           </CardContent>
         </Card>
 

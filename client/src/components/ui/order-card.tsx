@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge, DeliveryTypeBadge, TimerBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 import { Play, Check, Printer, Clock, Coffee, MapPin, User, AlertTriangle, Flame, Timer, UtensilsCrossed, Car, ShoppingBag, Bell } from "lucide-react";
+import { PrepCountdown } from "@/components/PrepCountdown";
 
 interface OrderItem {
   coffeeItemId: string;
@@ -55,7 +56,9 @@ interface OrderCardProps {
     customerArrivedAt?: string;
     branchId?: string;
     estimatedPrepTimeMinutes?: number;
+    estimatedPrepTimeInMinutes?: number;
     prepStartedAt?: string;
+    prepTimeSetAt?: string;
     priority?: 'normal' | 'rush' | 'vip';
   };
   variant?: "compact" | "detailed" | "kds";
@@ -206,11 +209,13 @@ export function OrderCard({
   }
 
   if (variant === "kds") {
-    const hasPrepMetadata = !!(order.estimatedPrepTimeMinutes || order.prepStartedAt);
+    const effectivePrepMins = order.estimatedPrepTimeMinutes || order.estimatedPrepTimeInMinutes;
+    const effectivePrepStart = order.prepStartedAt || order.prepTimeSetAt;
+    const hasPrepMetadata = !!(effectivePrepMins || effectivePrepStart);
     const slaStatus = hasPrepMetadata 
-      ? getSlaStatus(elapsedMinutes, order.estimatedPrepTimeMinutes) 
+      ? getSlaStatus(elapsedMinutes, effectivePrepMins) 
       : (isDelayed ? 'overdue' : isWarning ? 'warning' : 'on-track');
-    const prepTimeRemaining = hasPrepMetadata ? getPrepTimeRemaining(order) : null;
+    const prepTimeRemaining = hasPrepMetadata ? getPrepTimeRemaining({ prepStartedAt: effectivePrepStart, estimatedPrepTimeMinutes: effectivePrepMins }) : null;
     const stations = getUniqueStations(order.items);
     const orderHasAllergens = hasAllergens(order.items);
     const allergensList = getAllAllergens(order.items);
@@ -339,17 +344,14 @@ export function OrderCard({
             </div>
           )}
           
-          {prepTimeRemaining !== null && displayStatus === "in_progress" && (
-            <div className={cn(
-              "flex items-center gap-1 mt-2 p-1.5 rounded text-xs font-medium",
-              prepTimeRemaining <= 0 ? "bg-red-500/10 text-red-600" : 
-              prepTimeRemaining <= 2 ? "bg-amber-500/10 text-amber-600" : 
-              "bg-green-500/10 text-green-600"
-            )}>
-              <Timer className="h-3.5 w-3.5" />
-              {prepTimeRemaining <= 0 
-                ? `متأخر ${Math.abs(prepTimeRemaining)} دقيقة` 
-                : `متبقي ${prepTimeRemaining} دقيقة`}
+          {(order.estimatedPrepTimeInMinutes || order.estimatedPrepTimeMinutes) && (
+            <div className="mt-2">
+              <PrepCountdown
+                estimatedPrepTimeInMinutes={order.estimatedPrepTimeInMinutes || order.estimatedPrepTimeMinutes}
+                prepTimeSetAt={order.prepTimeSetAt || order.prepStartedAt || order.createdAt}
+                status={displayStatus}
+                compact={false}
+              />
             </div>
           )}
         </CardHeader>

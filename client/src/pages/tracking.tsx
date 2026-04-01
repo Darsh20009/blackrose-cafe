@@ -267,10 +267,10 @@ export default function OrderTrackingPage() {
                   </div>
                 </div>
 
-                {order.status === 'in_progress' && order.estimatedPrepTimeInMinutes && (
+                {['pending', 'payment_confirmed', 'confirmed', 'in_progress'].includes(order.status) && order.estimatedPrepTimeInMinutes && (
                   <CountdownTimer 
                     estimatedMinutes={order.estimatedPrepTimeInMinutes} 
-                    startTime={order.prepTimeSetAt || order.updatedAt || order.createdAt} 
+                    startTime={(order as any).prepTimeSetAt || order.updatedAt || order.createdAt} 
                     t={t}
                   />
                 )}
