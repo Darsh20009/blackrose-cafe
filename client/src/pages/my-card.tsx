@@ -10,6 +10,7 @@ import {
   ArrowDownRight, ArrowUpRight, Clock, Star, Crown, Award, Medal,
   Wallet, Sparkles, CheckCircle2, ChevronDown, ChevronUp, Send, AlertCircle
 } from "lucide-react";
+import blackroseLogo from "@assets/blackrose-logo.png";
 import { useCustomer } from "@/contexts/CustomerContext";
 import { useLocation } from "wouter";
 import { CustomerLayout } from "@/components/layouts/CustomerLayout";
@@ -74,7 +75,7 @@ export default function MyCardPage() {
   const nextTier = getNextTier(tier);
   const nextTierCfg = nextTier ? getTierConfig(nextTier, tc) : null;
 
-  const pointsValueInSar = settings?.pointsValueInSar ?? 0.05;
+  const pointsValueInSar = settings?.pointsValueInSar ?? 0.02;
   const sarValue = (points * pointsValueInSar).toFixed(2);
   const sarValueNum = parseFloat(sarValue);
   const pointsPerSar = Math.round(1 / pointsValueInSar);
@@ -158,53 +159,76 @@ export default function MyCardPage() {
           <h1 className="text-xl font-black text-primary">{tc("بطاقة مكافآتي","My Rewards Card")}</h1>
         </div>
 
-        {/* ── Main Loyalty Card ─────────────────────────────────── */}
+        {/* ── Main Loyalty Card — Black Rose Design ─────────────── */}
         <div
-          className={`relative rounded-3xl bg-gradient-to-br ${tierCfg.color} text-white shadow-2xl overflow-hidden`}
+          className="relative rounded-3xl overflow-hidden shadow-2xl"
+          style={{ background: 'linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 50%, #0a0a0a 100%)', minHeight: '200px' }}
           data-testid="loyalty-card"
         >
-          <div className="absolute -top-12 -left-12 w-40 h-40 bg-white/10 rounded-full" />
-          <div className="absolute -bottom-8 -right-8 w-32 h-32 bg-white/10 rounded-full" />
+          {/* Subtle texture overlay */}
+          <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, #C9A96E 0%, transparent 50%), radial-gradient(circle at 80% 20%, #C9A96E 0%, transparent 40%)' }} />
 
-          <div className="relative z-10 p-5 space-y-4">
-            {/* Name + tier */}
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs opacity-70">{tc("أهلاً","Welcome")}</p>
-                <p className="font-black text-xl">{customer?.name || tc("عميل","Customer")}</p>
-              </div>
-              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${tierCfg.badge} bg-opacity-80`}>
-                <TierIcon className="w-3.5 h-3.5" />
-                <span className="text-xs font-bold">{tierCfg.label}</span>
+          {/* Floral decoration — bottom left */}
+          <div className="absolute bottom-0 left-0 w-28 h-28 opacity-25 pointer-events-none select-none" style={{ fontSize: '80px', lineHeight: 1, transform: 'rotate(15deg) translate(-10px, 20px)' }}>
+            🌸
+          </div>
+          {/* Floral decoration — bottom right */}
+          <div className="absolute bottom-0 right-0 w-28 h-28 opacity-25 pointer-events-none select-none" style={{ fontSize: '80px', lineHeight: 1, transform: 'rotate(-15deg) translate(10px, 20px)' }}>
+            🌸
+          </div>
+          {/* Leaf — top right */}
+          <div className="absolute top-2 right-4 opacity-15 pointer-events-none select-none" style={{ fontSize: '40px', transform: 'rotate(30deg)' }}>
+            🌿
+          </div>
+
+          <div className="relative z-10 p-5 pb-6">
+            {/* Logo + brand name */}
+            <div className="flex flex-col items-center gap-1.5 mb-4">
+              <img src={blackroseLogo} alt="Black Rose" className="w-10 h-10 object-contain opacity-90" style={{ filter: 'sepia(1) saturate(2) hue-rotate(5deg) brightness(1.1)' }} />
+              <div className="text-center">
+                <p className="font-black tracking-[0.2em] text-sm" style={{ color: '#C9A96E' }}>BLACK ROSE</p>
+                <p className="text-[9px] tracking-[0.35em]" style={{ color: '#B89A5E' }}>CAFE</p>
               </div>
             </div>
 
-            {/* Points + SAR balance */}
-            <div className="text-center py-1">
-              <p className="text-xs opacity-70 mb-0.5">{tc("رصيد نقاطي","My Points Balance")}</p>
-              <p className="text-5xl font-black" data-testid="text-points">{points.toLocaleString()}</p>
-              <p className="text-sm opacity-90 mt-1 font-bold bg-white/20 rounded-full px-3 py-0.5 inline-block">
-                ≈ {sarValue} {tc("ريال","SAR")}
+            {/* Phone number */}
+            <div className="text-center mb-5">
+              <p className="font-mono text-lg font-bold tracking-widest" style={{ color: '#C9A96E' }} data-testid="text-phone-display" dir="ltr">
+                {customer?.phone ? `+966 ${customer.phone.replace(/^0/, '').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3')}` : '+966 5XX XXX XXXX'}
               </p>
             </div>
 
-            {/* Card number + QR button */}
-            <div className="flex items-center justify-between">
-              <p className="font-mono text-xs opacity-70 tracking-widest" data-testid="text-card-number">
-                {card?.cardNumber?.replace(/(.{4})/g,"$1 ")?.trim() || "**** **** ****"}
-              </p>
-              {qrCodeUrl && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="bg-white/20 hover:bg-white/30 border-none text-white gap-1.5 text-xs"
-                  onClick={() => setShowQr(true)}
-                  data-testid="button-show-qr"
-                >
-                  <QrCode className="w-4 h-4" />
-                  {tc("رمز QR","QR Code")}
-                </Button>
-              )}
+            {/* Bottom row: tier badge + points block */}
+            <div className="flex items-end justify-between">
+              {/* Tier badge */}
+              <div className="flex flex-col gap-1">
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full ${tierCfg.badge} bg-opacity-80`}>
+                  <TierIcon className="w-3 h-3 text-white" />
+                  <span className="text-[10px] font-bold text-white">{tierCfg.label}</span>
+                </div>
+                {qrCodeUrl && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 gap-1 text-[10px] hover:bg-white/10"
+                    style={{ color: '#C9A96E' }}
+                    onClick={() => setShowQr(true)}
+                    data-testid="button-show-qr"
+                  >
+                    <QrCode className="w-3 h-3" />
+                    {tc("رمز QR","QR")}
+                  </Button>
+                )}
+              </div>
+
+              {/* Points + SAR */}
+              <div className="text-right">
+                <p className="text-xs font-bold mb-0.5" style={{ color: '#C9A96E' }}>{tc("نقاطي","My Points")}</p>
+                <p className="text-4xl font-black leading-none" style={{ color: '#C9A96E' }} data-testid="text-points">{points.toLocaleString()}</p>
+                <p className="text-xs mt-1" style={{ color: '#B89A5E' }}>
+                  {sarValue} {tc("ريال","SAR")}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -248,8 +272,8 @@ export default function MyCardPage() {
             <p className="font-semibold text-foreground text-sm">{tc("كيف أستخدم رصيدي؟","How to use my balance?")}</p>
             <p>• {tc("عند الدفع أخبر الكاشير باسمك أو رقم جوالك","At checkout tell the cashier your name or phone number")}</p>
             <p>• {tc("أو أعرض رمز QR ليخصم الكاشير تلقائياً","Or show QR code for automatic deduction")}</p>
-            <p>• {tc(`${pointsPerSar} نقطة = 1 ريال خصم`,`${pointsPerSar} pts = 1 SAR discount`)}</p>
-            <p>• {tc("إذا ساوى خصمك ثمن المشروب كاملاً فهو مجاناً","If discount covers the drink price — it's free!")}</p>
+            <p>• {tc("50 نقطة = 1 ريال خصم","50 pts = 1 SAR discount")}</p>
+            <p>• {tc("الحد الأدنى للصرف 100 نقطة","Minimum 100 points to redeem")}</p>
           </div>
         </div>
 
@@ -347,15 +371,15 @@ export default function MyCardPage() {
           <div className="grid grid-cols-1 gap-1.5 text-sm text-amber-800 dark:text-amber-300">
             <div className="flex items-start gap-1.5">
               <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" />
-              <span>{tc(`كل طلب تكسب نقاط تتراكم في رصيدك`,`Every order earns points added to your balance`)}</span>
+              <span>{tc("كل مشروب بسعر فوق ريال = 10 نقاط تُضاف لرصيدك","Every drink over 1 SAR earns 10 points")}</span>
             </div>
             <div className="flex items-start gap-1.5">
               <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" />
-              <span>{pointsPerSar} {tc("نقطة = 1 ريال خصم","points = 1 SAR discount")}</span>
+              <span>{tc("50 نقطة = 1 ريال خصم على طلبك","50 points = 1 SAR discount on your order")}</span>
             </div>
             <div className="flex items-start gap-1.5">
               <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" />
-              <span>{tc("إذا غطّى الخصم ثمن المشروب كاملاً — المشروب مجاناً","If discount covers drink price fully — it's free!")}</span>
+              <span>{tc("تحتاج 100 نقطة على الأقل لبدء صرف النقاط","Minimum 100 points required to start redeeming")}</span>
             </div>
             <div className="flex items-start gap-1.5">
               <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" />

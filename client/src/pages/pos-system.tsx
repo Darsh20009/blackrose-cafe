@@ -93,6 +93,8 @@ export default function PosSystem() {
   const [showCustomerInfo, setShowCustomerInfo] = useState(false);
   const [isLookingUpCustomer, setIsLookingUpCustomer] = useState(false);
   const [customerLookupFound, setCustomerLookupFound] = useState<boolean | null>(null);
+  const [customerPoints, setCustomerPoints] = useState(0);
+  const [usePoints, setUsePoints] = useState(false);
   const [splitViewMode, setSplitViewMode] = useState(false);
   const [mobilePanelView, setMobilePanelView] = useState<'products' | 'cart'>('products');
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundEnabled('pos'));
@@ -220,6 +222,8 @@ export default function PosSystem() {
       if (customerPhone.length === 0) {
         setCustomerLookupFound(null);
         setCustomerName("");
+        setCustomerPoints(0);
+        setUsePoints(false);
       }
       return;
     }
@@ -239,7 +243,9 @@ export default function PosSystem() {
             setCustomerName(data.customer.name || data.customer.customerName || '');
             setCustomerLookupFound(true);
             setShowCustomerInfo(true);
-            const pts = data.customer.points || data.customer.loyaltyPoints || 0;
+            const pts = data.loyaltyCard?.points ?? data.customer.points ?? data.customer.loyaltyPoints ?? 0;
+            setCustomerPoints(Number(pts));
+            setUsePoints(false);
             toast({
               title: i18n.language === 'ar' ? 'تم العثور على العميل' : 'Customer Found',
               description: `${data.customer.name || data.customer.customerName}${pts > 0 ? ` — ${pts} ${i18n.language === 'ar' ? 'نقطة' : 'pts'}` : ''}`,
@@ -481,6 +487,14 @@ export default function PosSystem() {
     }, 0);
   }, [orderItems]);
 
+  const pointsDiscount = useMemo(() => {
+    if (!usePoints || customerPoints < 100) return 0;
+    const maxDiscount = parseFloat((customerPoints / 50).toFixed(2));
+    return Math.min(maxDiscount, calculateTotal);
+  }, [usePoints, customerPoints, calculateTotal]);
+
+  const calculateTotalAfterPoints = useMemo(() => Math.max(0, calculateTotal - pointsDiscount), [calculateTotal, pointsDiscount]);
+
   const calculateSubtotal = useMemo(() => calculateTotal / 1.15, [calculateTotal]);
 
   const buildDisplayPayload = (items: any[], event: string, extra?: any) => {
@@ -541,16 +555,19 @@ export default function PosSystem() {
     
     try {
       setSyncing(true);
-      const total = calculateTotal;
+      const rawTotal = calculateTotal;
+      const discount = usePoints && customerPoints >= 100 ? pointsDiscount : 0;
+      const total = Math.max(0, rawTotal - discount);
       const subtotal = calculateSubtotal;
-      const tax = total - subtotal;
+      const tax = rawTotal - subtotal;
+      const pointsUsed = discount > 0 ? Math.round(discount * 50) : 0;
 
       broadcastToDisplay("payment_processing", {
         items: orderItems.map(i => ({ nameAr: i.coffeeItem.nameAr, price: Number(i.coffeeItem.price), quantity: i.quantity })),
         subtotal, tax, total,
       });
 
-      const orderData = {
+      const orderData: any = {
         items: orderItems.map(item => {
           const addonsPrice = (item.customization?.selectedItemAddons || []).reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
           return {
@@ -581,7 +598,12 @@ export default function PosSystem() {
         tenantId: employee?.tenantId || "demo-tenant",
         employeeId: employee?.id,
         channel: "pos",
-        notes: orderNote || undefined
+        notes: orderNote || undefined,
+        ...(pointsUsed > 0 ? {
+          pointsRedeemed: pointsUsed,
+          pointsValue: discount,
+          bypassPointsVerification: true,
+        } : {}),
       };
 
       // If offline, queue the order locally
@@ -687,6 +709,8 @@ export default function PosSystem() {
       setCarTypeInput("");
       setCarColorInput("");
       setCarPlateInput("");
+      setCustomerPoints(0);
+      setUsePoints(false);
       
       queryClient.invalidateQueries({ queryKey: ["/api/orders/live"] });
     } catch (error) {
@@ -1292,9 +1316,52 @@ export default function PosSystem() {
               <Separator />
               <div className="flex justify-between items-center pt-1">
                 <span className="font-black text-sm sm:text-base">{t('pos.total')}</span>
-                <span className="font-black text-base sm:text-xl text-primary">{calculateTotal.toFixed(2)} {t('pos.currency')}</span>
+                <span className={`font-black text-base sm:text-xl ${usePoints && pointsDiscount > 0 ? 'line-through text-muted-foreground text-sm sm:text-base' : 'text-primary'}`}>{calculateTotal.toFixed(2)} {t('pos.currency')}</span>
               </div>
+              {usePoints && pointsDiscount > 0 && (
+                <div className="flex justify-between text-[10px] sm:text-sm text-amber-600">
+                  <span className="font-bold">{i18n.language === 'ar' ? 'خصم بطاقة بلاك روز' : 'Black Rose Card'}</span>
+                  <span className="font-bold">- {pointsDiscount.toFixed(2)} {t('pos.currency')}</span>
+                </div>
+              )}
+              {usePoints && pointsDiscount > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="font-black text-sm sm:text-base">{i18n.language === 'ar' ? 'الإجمالي بعد الخصم' : 'Total After Discount'}</span>
+                  <span className="font-black text-base sm:text-xl text-primary">{calculateTotalAfterPoints.toFixed(2)} {t('pos.currency')}</span>
+                </div>
+              )}
             </div>
+
+            {/* Points discount toggle — only when customer found with ≥100 pts */}
+            {customerLookupFound === true && customerPoints >= 100 && (
+              <div className={`rounded-xl border-2 p-3 transition-colors ${usePoints ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30' : 'border-muted bg-muted/30'}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Wallet className="w-4 h-4 text-amber-600 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-black text-amber-700 dark:text-amber-300 leading-none">
+                        {i18n.language === 'ar' ? 'استخدام النقاط' : 'Use Points'}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {customerPoints} {i18n.language === 'ar' ? 'نقطة' : 'pts'} = {(customerPoints / 50).toFixed(2)} {t('pos.currency')}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={usePoints}
+                    onCheckedChange={setUsePoints}
+                    data-testid="toggle-use-points"
+                  />
+                </div>
+                {usePoints && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300 font-bold mt-2 border-t border-amber-200 dark:border-amber-700 pt-2">
+                    {i18n.language === 'ar'
+                      ? `سيُخصم ${pointsDiscount.toFixed(2)} ريال (${Math.round(pointsDiscount * 50)} نقطة) من الطلب`
+                      : `${pointsDiscount.toFixed(2)} SAR (${Math.round(pointsDiscount * 50)} pts) will be deducted`}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Offline / Queue Indicator */}
             {(!isOnline || offlineQueueCount > 0) && (
@@ -1711,8 +1778,20 @@ export default function PosSystem() {
               <Separator />
               <div className="flex justify-between items-center pt-1">
                 <span className="font-black text-base">{t('pos.total')}</span>
-                <span className="font-black text-xl text-primary">{calculateTotal.toFixed(2)} {t('pos.currency')}</span>
+                <span className={`font-black text-xl ${usePoints && pointsDiscount > 0 ? 'line-through text-muted-foreground text-base' : 'text-primary'}`}>{calculateTotal.toFixed(2)} {t('pos.currency')}</span>
               </div>
+              {usePoints && pointsDiscount > 0 && (
+                <div className="flex justify-between text-sm text-amber-600">
+                  <span className="font-bold">{i18n.language === 'ar' ? 'خصم بطاقة بلاك روز' : 'Black Rose Card Discount'}</span>
+                  <span className="font-bold">- {pointsDiscount.toFixed(2)} {t('pos.currency')}</span>
+                </div>
+              )}
+              {usePoints && pointsDiscount > 0 && (
+                <div className="flex justify-between items-center pt-1 border-t">
+                  <span className="font-black text-base">{i18n.language === 'ar' ? 'الإجمالي النهائي' : 'Final Total'}</span>
+                  <span className="font-black text-xl text-primary">{calculateTotalAfterPoints.toFixed(2)} {t('pos.currency')}</span>
+                </div>
+              )}
             </div>
 
             {/* Order note */}

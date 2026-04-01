@@ -921,39 +921,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isPosChannel = body.channel === 'pos';
       const shouldAutoConfirm = isPosChannel && autoConfirmMethods.includes(mappedPaymentMethod);
 
-      // ── QAHWA CARD VALIDATION ─────────────────────────────────────────────
-      // Must have sufficient loyalty points before we create the order
-      if (mappedPaymentMethod === 'qahwa-card') {
+      // ── QAHWA CARD / POINTS DISCOUNT VALIDATION ───────────────────────────
+      // Validate points redemption when pointsRedeemed is sent in the order body
+      const pointsRedeemedInBody = Number(body.pointsRedeemed) || 0;
+      if (pointsRedeemedInBody > 0 || mappedPaymentMethod === 'qahwa-card') {
         const cardPhone = body.customerPhone || body.customerInfo?.customerPhone;
-        if (!cardPhone) {
-          return res.status(400).json({ error: "رقم الهاتف مطلوب للدفع ببطاقة الولاء" });
+        if (cardPhone) {
+          const cPhone = cardPhone.replace(/\D/g, '').replace(/^966/, '0').replace(/^9665/, '05');
+          const phoneVariants = [cPhone, cardPhone, `+966${cPhone.slice(1)}`, `966${cPhone.slice(1)}`];
+          const { LoyaltyCardModel: LCM } = await import("@shared/schema");
+          const loyCard = await LCM.findOne({ phoneNumber: { $in: phoneVariants } });
+          if (loyCard) {
+            const availPts = Number(loyCard.points) || 0;
+            const minPtsForRedemption = 100;
+            if (pointsRedeemedInBody > 0 && availPts < minPtsForRedemption) {
+              return res.status(400).json({
+                error: `رصيد النقاط غير كافٍ للصرف`,
+                details: `لديك ${availPts} نقطة، والحد الأدنى للصرف ${minPtsForRedemption} نقطة`,
+                currentPoints: availPts,
+                requiredPoints: minPtsForRedemption,
+              });
+            }
+            const pointsToUse = Math.min(pointsRedeemedInBody, availPts);
+            const discountSar = parseFloat((pointsToUse / 50).toFixed(2));
+            body.pointsRedeemed = pointsToUse;
+            body.pointsValue = discountSar;
+          }
         }
-        const cPhone = cardPhone.replace(/\D/g, '').replace(/^966/, '0').replace(/^9665/, '05');
-        const phoneVariants = [cPhone, cardPhone, `+966${cPhone.slice(1)}`, `966${cPhone.slice(1)}`];
-        const { BusinessConfigModel: BizCfg, LoyaltyCardModel: LCM } = await import("@shared/schema");
-        const bizCfg = await BizCfg.findOne({ tenantId }).lean() as any;
-        const ptsPerSar = Number(bizCfg?.loyaltyConfig?.pointsPerSar) || 20;
-        const cfgFallback = Number(bizCfg?.loyaltyConfig?.pointsForFreeDrink) || 500;
-        const ptsForFree = await calcFreeDrinkThreshold(tenantId, ptsPerSar, cfgFallback);
-        const loyCard = await LCM.findOne({ phoneNumber: { $in: phoneVariants } });
-        if (!loyCard) {
-          return res.status(400).json({ error: "لا توجد بطاقة ولاء مرتبطة بهذا الرقم" });
-        }
-        const availPts = Number(loyCard.points) || 0;
-        const hasFreeCup = (Number(loyCard.freeCupsEarned) || 0) > (Number(loyCard.freeCupsRedeemed) || 0);
-        if (availPts < ptsForFree && !hasFreeCup) {
-          return res.status(400).json({
-            error: `رصيد البطاقة غير كافٍ`,
-            details: `لديك ${availPts} نقطة، وتحتاج ${ptsForFree} نقطة للحصول على مشروب مجاني`,
-            currentPoints: availPts,
-            requiredPoints: ptsForFree,
-          });
-        }
-        // Force total to 0 for free drink payment
-        body.totalAmount = 0;
-        body.freeDrinkRedeemed = true;
-        if (!body.pointsRedeemed || Number(body.pointsRedeemed) === 0) {
-          body.pointsRedeemed = availPts >= ptsForFree ? ptsForFree : 0;
+        if (mappedPaymentMethod === 'qahwa-card') {
+          body.totalAmount = Math.max(0, (Number(body.total) || Number(body.totalAmount) || 0) - (Number(body.pointsValue) || 0));
         }
       }
       // ─────────────────────────────────────────────────────────────────────
@@ -1073,9 +1069,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // === Loyalty: ensure loyalty card exists and add pending points ===
+      // Skip earning points for orders where points were used (pointsRedeemed > 0)
       try {
         const customerPhone = body.customerPhone || body.customerInfo?.customerPhone;
-        if (customerPhone) {
+        const orderUsedPoints = Number(body.pointsRedeemed) > 0;
+        if (customerPhone && !orderUsedPoints) {
           const cleanPhone = customerPhone.replace(/\D/g, '').replace(/^966/, '0').replace(/^9665/, '05');
           const phoneVariants = [cleanPhone, customerPhone, `+966${cleanPhone.slice(1)}`, `966${cleanPhone.slice(1)}`];
 
@@ -1084,9 +1082,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const bizCfg = await BizCfg.findOne({ tenantId }).lean();
           const pointsPerDrinkCfg = Number(bizCfg?.loyaltyConfig?.pointsPerDrink) || 10;
 
+          // Only earn points for items with price > 1 SAR
           const itemsArr = Array.isArray(body.items) ? body.items : [];
-          const totalDrinks = itemsArr.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 1), 0);
-          const pendingPts = totalDrinks * pointsPerDrinkCfg;
+          const eligibleDrinks = itemsArr.reduce((sum: number, item: any) => {
+            const itemPrice = Number(item.price) || 0;
+            return itemPrice > 1 ? sum + (Number(item.quantity) || 1) : sum;
+          }, 0);
+          const pendingPts = eligibleDrinks * pointsPerDrinkCfg;
 
           let card = await mongoose.model('LoyaltyCard').findOne({ phoneNumber: { $in: phoneVariants } });
           const customerName = body.customerName || body.customerInfo?.customerName || 'عميل';
@@ -2004,18 +2006,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (cached) return res.json(cached);
       const config = await storage.getBusinessConfig(tenantId);
       const loyaltyConfig = (config as any)?.loyaltyConfig || {};
-      const pointsPerSar = loyaltyConfig.pointsPerSar ?? 20;
-      const cfgFallback = loyaltyConfig.pointsForFreeDrink ?? 500;
-      const pointsForFreeDrink = await calcFreeDrinkThreshold(tenantId, pointsPerSar, cfgFallback);
+      const pointsPerSar = loyaltyConfig.pointsPerSar ?? 50;
       const result = {
         enabled: loyaltyConfig.enabled ?? true,
         pointsPerDrink: loyaltyConfig.pointsPerDrink ?? 10,
         pointsPerSar,
         pointsEarnedPerSar: loyaltyConfig.pointsEarnedPerSar ?? 1,
         minPointsForRedemption: loyaltyConfig.minPointsForRedemption ?? 100,
-        pointsValueInSar: loyaltyConfig.pointsValueInSar ?? 0.05,
-        redemptionRate: loyaltyConfig.redemptionRate ?? 100,
-        pointsForFreeDrink,
+        pointsValueInSar: loyaltyConfig.pointsValueInSar ?? 0.02,
+        redemptionRate: 50,
       };
       cache.set(ck, result, CACHE_TTL.LOYALTY_SETTINGS);
       res.json(result);
@@ -2023,12 +2022,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         enabled: true,
         pointsPerDrink: 10,
-        pointsPerSar: 20,
+        pointsPerSar: 50,
         pointsEarnedPerSar: 1,
         minPointsForRedemption: 100,
-        pointsValueInSar: 0.05,
-        redemptionRate: 100,
-        pointsForFreeDrink: 500,
+        pointsValueInSar: 0.02,
+        redemptionRate: 50,
       });
     }
   });
@@ -2041,18 +2039,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (cached) return res.json(cached);
       const config = await storage.getBusinessConfig(tenantId);
       const loyaltyConfig = (config as any)?.loyaltyConfig || {};
-      const pointsPerSar = loyaltyConfig.pointsPerSar ?? 20;
-      const cfgFallback = loyaltyConfig.pointsForFreeDrink ?? 500;
-      const pointsForFreeDrink = await calcFreeDrinkThreshold(tenantId, pointsPerSar, cfgFallback);
+      const pointsPerSar = loyaltyConfig.pointsPerSar ?? 50;
       const loyaltyResult = {
         enabled: loyaltyConfig.enabled ?? true,
         pointsPerDrink: loyaltyConfig.pointsPerDrink ?? 10,
         pointsPerSar,
         pointsEarnedPerSar: loyaltyConfig.pointsEarnedPerSar ?? 1,
         minPointsForRedemption: loyaltyConfig.minPointsForRedemption ?? 100,
-        pointsValueInSar: loyaltyConfig.pointsValueInSar ?? 0.05,
-        redemptionRate: loyaltyConfig.redemptionRate ?? 100,
-        pointsForFreeDrink,
+        pointsValueInSar: loyaltyConfig.pointsValueInSar ?? 0.02,
+        redemptionRate: 50,
       };
       cache.set(ck, loyaltyResult, CACHE_TTL.LOYALTY_SETTINGS);
       res.json(loyaltyResult);
@@ -2060,12 +2055,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         enabled: true,
         pointsPerDrink: 10,
-        pointsPerSar: 20,
+        pointsPerSar: 50,
         pointsEarnedPerSar: 1,
         minPointsForRedemption: 100,
-        pointsValueInSar: 0.05,
-        redemptionRate: 100,
-        pointsForFreeDrink: 500,
+        pointsValueInSar: 0.02,
+        redemptionRate: 50,
       });
     }
   });

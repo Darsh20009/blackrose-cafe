@@ -70,34 +70,36 @@ function LoyaltyCheckoutCard({
 
   return (
     <div className="space-y-3" data-testid="loyalty-checkout-section">
-      {/* Main card */}
-      <div className={`relative rounded-2xl overflow-hidden bg-gradient-to-br ${tierStyle.gradient} text-white shadow-xl`}>
-        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, white 0%, transparent 50%)' }} />
-        <div className="absolute top-3 left-3 text-white/20 text-7xl font-black select-none pointer-events-none leading-none">◈</div>
+      {/* Main card — Black Rose Design */}
+      <div className="relative rounded-2xl overflow-hidden shadow-xl" style={{ background: 'linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 50%, #0a0a0a 100%)' }}>
+        <div className="absolute bottom-0 left-0 opacity-20 pointer-events-none select-none" style={{ fontSize: '60px', lineHeight: 1, transform: 'rotate(15deg) translate(-8px, 16px)' }}>🌸</div>
+        <div className="absolute bottom-0 right-0 opacity-20 pointer-events-none select-none" style={{ fontSize: '60px', lineHeight: 1, transform: 'rotate(-15deg) translate(8px, 16px)' }}>🌸</div>
         <div className="p-5 relative z-10">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <span className="font-bold text-base tracking-wide">{tc("بطاقة كوبي", "COPY Card")}</span>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white/20 flex items-center gap-1">
-                  {tierStyle.icon} {tierStyle.name}
-                </span>
+                <span className="font-black text-sm tracking-[0.15em]" style={{ color: '#C9A96E' }}>BLACK ROSE</span>
+                <span className="text-[9px] tracking-[0.3em]" style={{ color: '#B89A5E' }}>CAFE</span>
               </div>
-              <p className="text-sm opacity-80 truncate">{loyaltyCard?.customerName}</p>
+              <p className="text-xs truncate" style={{ color: '#C9A96E99' }}>{loyaltyCard?.customerName}</p>
+              <div className="flex items-center gap-1.5 mt-1.5 px-2 py-0.5 rounded-full w-fit" style={{ background: '#C9A96E20', border: '1px solid #C9A96E40' }}>
+                <span className="text-[10px]">{tierStyle.icon}</span>
+                <span className="text-[10px] font-bold" style={{ color: '#C9A96E' }}>{tierStyle.name}</span>
+              </div>
             </div>
             <div className="text-right flex-shrink-0">
-              <p className="text-4xl font-black leading-none" data-testid="text-loyalty-points">{loyaltyPoints.toLocaleString()}</p>
-              <p className="text-[11px] opacity-70 mt-0.5">{tc("نقطة", "pts")}</p>
+              <p className="text-4xl font-black leading-none" style={{ color: '#C9A96E' }} data-testid="text-loyalty-points">{loyaltyPoints.toLocaleString()}</p>
+              <p className="text-[11px] mt-0.5" style={{ color: '#B89A5E' }}>{tc("نقطة", "pts")}</p>
             </div>
           </div>
 
           {/* Points value */}
-          <div className="mt-3 pt-3 border-t border-white/20 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs opacity-80">
+          <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: '1px solid #C9A96E30' }}>
+            <div className="flex items-center gap-1.5 text-xs" style={{ color: '#C9A96E80' }}>
               <Coins className="w-3.5 h-3.5" />
               <span>{tc("قيمة نقاطك", "Your Points Value")}</span>
             </div>
-            <span className="text-lg font-black">{totalPointsValue.toFixed(2)} ريال</span>
+            <span className="text-lg font-black" style={{ color: '#C9A96E' }}>{totalPointsValue.toFixed(2)} ريال</span>
           </div>
 
           {/* Tier progress */}
@@ -255,7 +257,7 @@ export default function CheckoutPage() {
     staleTime: 60000,
   });
 
-  const pointsPerSar: number = loyaltySettings?.pointsPerSar ?? 20;
+  const pointsPerSar: number = loyaltySettings?.pointsPerSar ?? 50;
   const minPointsForRedemption: number = loyaltySettings?.minPointsForRedemption ?? 100;
   const loyaltyPoints: number = loyaltyCard?.points || 0;
 
