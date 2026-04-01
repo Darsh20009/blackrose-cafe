@@ -1068,6 +1068,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
 
+      // === Loyalty: Deduct points at order creation for free/cash orders ===
+      // Card/online payments → deduction handled in verify-payment callback
+      // Free orders (totalAmount=0) / cash / qahwa-card → deduct here immediately
+      try {
+        const orderUsedPointsNow = Number(body.pointsRedeemed) > 0;
+        const isNonGatewayPayment = ['cash', 'qahwa-card'].includes(String(body.paymentMethod)) || Number(serializedOrder.totalAmount) <= 0;
+        if (orderUsedPointsNow && isNonGatewayPayment) {
+          const redeemPts = Number(body.pointsRedeemed);
+          const redeemValue = Number(body.pointsValue) || parseFloat((redeemPts / 50).toFixed(2));
+          const cardPhone = body.customerPhone || body.customerInfo?.customerPhone;
+          if (cardPhone) {
+            const cPh = cardPhone.replace(/\D/g, '').replace(/^966/, '0').replace(/^9665/, '05');
+            const phVariants = [cPh, cardPhone, `+966${cPh.slice(1)}`, `966${cPh.slice(1)}`];
+            const loyCard = await mongoose.model('LoyaltyCard').findOne({ phoneNumber: { $in: phVariants } });
+            if (loyCard) {
+              const curPts = Number(loyCard.points) || 0;
+              const ptsToDeduct = Math.min(redeemPts, curPts);
+              if (ptsToDeduct > 0) {
+                await mongoose.model('LoyaltyCard').findByIdAndUpdate(loyCard._id, {
+                  $inc: { points: -ptsToDeduct },
+                  $set: { lastUsedAt: new Date() },
+                });
+                const LoyaltyTransactionModel = mongoose.model('LoyaltyTransaction');
+                await LoyaltyTransactionModel.create({
+                  cardId: loyCard.id || loyCard._id.toString(),
+                  customerId: body.customerId || loyCard.customerId || undefined,
+                  type: 'points_redeemed',
+                  pointsChange: -ptsToDeduct,
+                  description: `استخدام ${ptsToDeduct} نقطة (${redeemValue.toFixed(2)} ريال خصم) - طلب #${serializedOrder.orderNumber}`,
+                  orderId: serializedOrder.id,
+                  createdAt: new Date(),
+                });
+                console.log(`[LOYALTY] Deducted ${ptsToDeduct} pts (${redeemValue} SAR) from ${cPh} for order ${serializedOrder.orderNumber}`);
+              }
+            }
+          }
+        }
+      } catch (deductErr) {
+        console.error("[LOYALTY] Failed to deduct points at order creation:", deductErr);
+      }
+
       // === Loyalty: ensure loyalty card exists and award points ===
       // POS auto-confirmed orders: award actual points immediately (no pending phase needed)
       // Online orders: add pending points to be confirmed when order is marked ready/completed

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Clock, ChefHat, Package, Sparkles, Coffee, ShoppingBag } from "lucide-react";
 import type { Order } from "@shared/schema";
 import { motion, AnimatePresence } from "framer-motion";
+import { PrepCountdown } from "@/components/PrepCountdown";
 
 interface OrderTrackerProps {
  order: Order;
@@ -205,17 +206,25 @@ export default function OrderTracker({ order, compact = false }: OrderTrackerPro
  </motion.div>
  </AnimatePresence>
 
- {/* Estimated Time (if in progress) */}
- {(order.status === "payment_confirmed" || order.status === "in_progress") && (
+ {/* Prep countdown timer */}
+ {(order.status === "pending" || order.status === "payment_confirmed" || order.status === "in_progress") && (
  <motion.div
  initial={{ opacity: 0 }}
  animate={{ opacity: 1 }}
- className="mt-4 text-center"
+ className="mt-4"
  >
- <p className="text-sm text-gray-400">
- <Clock className="w-4 h-4 inline ml-1" />
- الوقت المتوقع: {order.status === "payment_confirmed" ? "جاري تأكيد الدفع..." : "5-10 دقائق"}
- </p>
+ {(order as any).estimatedPrepTimeInMinutes ? (
+   <PrepCountdown
+     estimatedPrepTimeInMinutes={(order as any).estimatedPrepTimeInMinutes}
+     prepTimeSetAt={(order as any).prepTimeSetAt}
+     status={order.status}
+   />
+ ) : (
+   <p className="text-sm text-gray-400 text-center">
+     <Clock className="w-4 h-4 inline ml-1" />
+     {order.status === "payment_confirmed" ? "جاري تأكيد الدفع..." : "قيد التحضير..."}
+   </p>
+ )}
  </motion.div>
  )}
  </CardContent>
