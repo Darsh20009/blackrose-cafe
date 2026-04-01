@@ -75,7 +75,7 @@ export function AddToCartModal({
     enabled: isOpen && !!activeItem,
   });
 
-  const generalAddons = useMemo(() => {
+  const generalAddons = useMemo((): IProductAddon[] => {
     // Never show general addons as fallback — addons must be explicitly linked to the item
     return [];
   }, []);

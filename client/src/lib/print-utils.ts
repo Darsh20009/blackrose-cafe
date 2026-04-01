@@ -9,6 +9,10 @@ interface OrderItem {
   };
   quantity: number;
   itemDiscount?: number;
+  customization?: {
+    selectedItemAddons?: Array<{ nameAr: string; nameEn?: string; price?: number }>;
+    [key: string]: any;
+  };
 }
 
 interface TaxInvoiceData {

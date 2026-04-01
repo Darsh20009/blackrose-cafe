@@ -42,7 +42,7 @@ export default function CustomerProfilePage() {
     }
     const stored = customerStorage.getProfile();
     if (stored) setProfile(stored);
-    else setProfile({ name: customer.name || "", phone: customer.phone || "", email: customer.email || "", stamps: 0, freeCupsEarned: 0, freeCupsRedeemed: 0 } as CustomerProfile);
+    else setProfile({ id: "", createdAt: new Date().toISOString(), name: customer.name || "", phone: customer.phone || "", email: customer.email || "", stamps: 0, freeDrinks: 0 } as CustomerProfile);
   }, [customer, setLocation]);
 
   const handleLogout = () => {
