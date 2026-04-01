@@ -1069,18 +1069,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // === Loyalty: Deduct points at order creation for free/cash orders ===
-      // Card/online payments → deduction handled in verify-payment callback
-      // Free orders (totalAmount=0) / cash / qahwa-card → deduct here immediately
+      // Gateway payments (Paymob/Geidea/Neoleap) → deduction handled in their webhook callbacks
+      // All other methods (cash, qahwa-card, mada, stc-pay, transfer, etc.) → deduct here immediately
       try {
         const orderUsedPointsNow = Number(body.pointsRedeemed) > 0;
-        const isNonGatewayPayment = ['cash', 'qahwa-card'].includes(String(body.paymentMethod)) || Number(serializedOrder.totalAmount) <= 0;
+        const GATEWAY_METHODS = ['paymob', 'paymob-card', 'paymob-wallet', 'geidea', 'apple_pay', 'neoleap', 'neoleap-apple-pay'];
+        const isNonGatewayPayment = !GATEWAY_METHODS.includes(String(body.paymentMethod)) || Number(serializedOrder.totalAmount) <= 0;
         if (orderUsedPointsNow && isNonGatewayPayment) {
           const redeemPts = Number(body.pointsRedeemed);
           const redeemValue = Number(body.pointsValue) || parseFloat((redeemPts / 50).toFixed(2));
-          const cardPhone = body.customerPhone || body.customerInfo?.customerPhone;
+          const cardPhone = body.customerPhone || body.customerInfo?.customerPhone || body.customerInfo?.phoneNumber;
           if (cardPhone) {
-            const cPh = cardPhone.replace(/\D/g, '').replace(/^966/, '0').replace(/^9665/, '05');
-            const phVariants = [cPh, cardPhone, `+966${cPh.slice(1)}`, `966${cPh.slice(1)}`];
+            const rawDigits = cardPhone.replace(/\D/g, '');
+            const last9 = rawDigits.slice(-9);
+            const cPh = rawDigits.replace(/^966/, '0').replace(/^9665/, '05');
+            const phVariants = [...new Set([cPh, cardPhone, rawDigits, last9, `0${last9}`, `+966${last9}`, `966${last9}`])];
             const loyCard = await mongoose.model('LoyaltyCard').findOne({ phoneNumber: { $in: phVariants } });
             if (loyCard) {
               const curPts = Number(loyCard.points) || 0;
@@ -1100,9 +1103,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   orderId: serializedOrder.id,
                   createdAt: new Date(),
                 });
-                console.log(`[LOYALTY] Deducted ${ptsToDeduct} pts (${redeemValue} SAR) from ${cPh} for order ${serializedOrder.orderNumber}`);
+                console.log(`[LOYALTY] ✅ Deducted ${ptsToDeduct} pts (${redeemValue} SAR) from ${last9} for order #${serializedOrder.orderNumber} via ${body.paymentMethod}`);
+              } else {
+                console.warn(`[LOYALTY] ⚠️ No points to deduct: has ${curPts}, requested ${redeemPts} for ${last9}`);
               }
+            } else {
+              console.warn(`[LOYALTY] ⚠️ Loyalty card NOT found for phone variants: ${phVariants.join(', ')} — points NOT deducted`);
             }
+          } else {
+            console.warn(`[LOYALTY] ⚠️ No customerPhone in order body — points NOT deducted`);
           }
         }
       } catch (deductErr) {
