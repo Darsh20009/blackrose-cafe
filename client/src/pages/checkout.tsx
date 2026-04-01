@@ -21,17 +21,12 @@ import { useLoyaltyCard } from "@/hooks/useLoyaltyCard";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useTranslate, tc } from "@/lib/useTranslate";
 import { User, Gift, CheckCircle, Sparkles, Loader2, Ticket, Tag, Wrench, Coffee, Award, CreditCard, Star, Coins, X, ChevronLeft, Upload, Camera, Truck, Printer, Navigation, MapPin, PackageCheck, Bell, ClipboardList } from "lucide-react";
+import BlackRoseCard from "@/components/BlackRoseCard";
 import { printSimpleReceipt } from "@/lib/print-utils";
 import { useTranslation } from "react-i18next";
 import type { PaymentMethodInfo, PaymentMethod } from "@shared/schema";
 import SarIcon from "@/components/sar-icon";
 
-const TIER_STYLES: Record<string, { gradient: string; badge: string; name: string; icon: string; nextTier?: string; threshold: number }> = {
-  bronze:   { gradient: 'from-amber-600 via-amber-700 to-amber-800',   badge: 'bg-amber-600',  name: tc('برونزي', 'Bronze'),  icon: '🥉', nextTier: 'silver',   threshold: 500 },
-  silver:   { gradient: 'from-slate-400 via-slate-500 to-slate-600',   badge: 'bg-slate-500',  name: tc('فضي', 'Silver'),     icon: '🥈', nextTier: 'gold',     threshold: 1500 },
-  gold:     { gradient: 'from-yellow-500 via-amber-500 to-yellow-600', badge: 'bg-yellow-500', name: tc('ذهبي', 'Gold'),    icon: '🥇', nextTier: 'platinum', threshold: 3000 },
-  platinum: { gradient: 'from-violet-500 via-purple-600 to-indigo-700',badge: 'bg-violet-500', name: tc('بلاتيني', 'Platinum'), icon: '💎', threshold: 3000 },
-};
 
 function LoyaltyCheckoutCard({
   loyaltyCard,
@@ -52,8 +47,6 @@ function LoyaltyCheckoutCard({
   onCancelPoints: () => void;
   baseTotal: number;
 }) {
-  const tier = loyaltyCard?.tier || 'bronze';
-  const tierStyle = TIER_STYLES[tier] || TIER_STYLES.bronze;
   const isApplied = pointsToRedeem > 0;
   const totalPointsValue = parseFloat((loyaltyPoints / pointsPerSar).toFixed(2));
   const appliedDiscount = parseFloat((pointsToRedeem / pointsPerSar).toFixed(2));
@@ -63,59 +56,15 @@ function LoyaltyCheckoutCard({
     canRedeem ? minPointsForRedemption : 0
   );
 
-  const nextTierStyle = tierStyle.nextTier ? TIER_STYLES[tierStyle.nextTier] : null;
-  const tierProgress = nextTierStyle
-    ? Math.min(100, Math.round((loyaltyPoints / nextTierStyle.threshold) * 100))
-    : 100;
-
   return (
     <div className="space-y-3" data-testid="loyalty-checkout-section">
       {/* Main card — Black Rose Design */}
-      <div className="relative rounded-2xl overflow-hidden shadow-xl" style={{ background: 'linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 50%, #0a0a0a 100%)' }}>
-        <div className="absolute bottom-0 left-0 opacity-20 pointer-events-none select-none" style={{ fontSize: '60px', lineHeight: 1, transform: 'rotate(15deg) translate(-8px, 16px)' }}>🌸</div>
-        <div className="absolute bottom-0 right-0 opacity-20 pointer-events-none select-none" style={{ fontSize: '60px', lineHeight: 1, transform: 'rotate(-15deg) translate(8px, 16px)' }}>🌸</div>
-        <div className="p-5 relative z-10">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-black text-sm tracking-[0.15em]" style={{ color: '#C9A96E' }}>BLACK ROSE</span>
-                <span className="text-[9px] tracking-[0.3em]" style={{ color: '#B89A5E' }}>CAFE</span>
-              </div>
-              <p className="text-xs truncate" style={{ color: '#C9A96E99' }}>{loyaltyCard?.customerName}</p>
-              <div className="flex items-center gap-1.5 mt-1.5 px-2 py-0.5 rounded-full w-fit" style={{ background: '#C9A96E20', border: '1px solid #C9A96E40' }}>
-                <span className="text-[10px]">{tierStyle.icon}</span>
-                <span className="text-[10px] font-bold" style={{ color: '#C9A96E' }}>{tierStyle.name}</span>
-              </div>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <p className="text-4xl font-black leading-none" style={{ color: '#C9A96E' }} data-testid="text-loyalty-points">{loyaltyPoints.toLocaleString()}</p>
-              <p className="text-[11px] mt-0.5" style={{ color: '#B89A5E' }}>{tc("نقطة", "pts")}</p>
-            </div>
-          </div>
-
-          {/* Points value */}
-          <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: '1px solid #C9A96E30' }}>
-            <div className="flex items-center gap-1.5 text-xs" style={{ color: '#C9A96E80' }}>
-              <Coins className="w-3.5 h-3.5" />
-              <span>{tc("قيمة نقاطك", "Your Points Value")}</span>
-            </div>
-            <span className="text-lg font-black" style={{ color: '#C9A96E' }}>{totalPointsValue.toFixed(2)} ريال</span>
-          </div>
-
-          {/* Tier progress */}
-          {nextTierStyle && (
-            <div className="mt-2 space-y-1">
-              <div className="flex justify-between text-[10px] opacity-60">
-                <span>{tierStyle.name}</span>
-                <span>{nextTierStyle.name} ({nextTierStyle.threshold.toLocaleString()} نقطة)</span>
-              </div>
-              <div className="w-full bg-white/20 rounded-full h-1.5 overflow-hidden">
-                <div className="h-full rounded-full bg-white/70 transition-all" style={{ width: `${tierProgress}%` }} />
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      <BlackRoseCard
+        phone={loyaltyCard?.phoneNumber || loyaltyCard?.customerPhone}
+        points={loyaltyPoints}
+        sarValue={totalPointsValue}
+        customerName={loyaltyCard?.customerName}
+      />
 
       {/* Applied state */}
       {isApplied && (

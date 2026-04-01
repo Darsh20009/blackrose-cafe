@@ -10,7 +10,7 @@ import {
   ArrowDownRight, ArrowUpRight, Clock, Star, Crown, Award, Medal,
   Wallet, Sparkles, CheckCircle2, ChevronDown, ChevronUp, Send, AlertCircle
 } from "lucide-react";
-import blackroseLogo from "@assets/blackrose-logo.png";
+import BlackRoseCard from "@/components/BlackRoseCard";
 import { useCustomer } from "@/contexts/CustomerContext";
 import { useLocation } from "wouter";
 import { CustomerLayout } from "@/components/layouts/CustomerLayout";
@@ -160,78 +160,25 @@ export default function MyCardPage() {
         </div>
 
         {/* ── Main Loyalty Card — Black Rose Design ─────────────── */}
-        <div
-          className="relative rounded-3xl overflow-hidden shadow-2xl"
-          style={{ background: 'linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 50%, #0a0a0a 100%)', minHeight: '200px' }}
-          data-testid="loyalty-card"
-        >
-          {/* Subtle texture overlay */}
-          <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, #C9A96E 0%, transparent 50%), radial-gradient(circle at 80% 20%, #C9A96E 0%, transparent 40%)' }} />
+        <BlackRoseCard
+          phone={customer?.phone}
+          points={points}
+          sarValue={sarValueNum}
+          customerName={customer?.name || card?.customerName}
+        />
 
-          {/* Floral decoration — bottom left */}
-          <div className="absolute bottom-0 left-0 w-28 h-28 opacity-25 pointer-events-none select-none" style={{ fontSize: '80px', lineHeight: 1, transform: 'rotate(15deg) translate(-10px, 20px)' }}>
-            🌸
-          </div>
-          {/* Floral decoration — bottom right */}
-          <div className="absolute bottom-0 right-0 w-28 h-28 opacity-25 pointer-events-none select-none" style={{ fontSize: '80px', lineHeight: 1, transform: 'rotate(-15deg) translate(10px, 20px)' }}>
-            🌸
-          </div>
-          {/* Leaf — top right */}
-          <div className="absolute top-2 right-4 opacity-15 pointer-events-none select-none" style={{ fontSize: '40px', transform: 'rotate(30deg)' }}>
-            🌿
-          </div>
-
-          <div className="relative z-10 p-5 pb-6">
-            {/* Logo + brand name */}
-            <div className="flex flex-col items-center gap-1.5 mb-4">
-              <img src={blackroseLogo} alt="Black Rose" className="w-10 h-10 object-contain opacity-90" style={{ filter: 'sepia(1) saturate(2) hue-rotate(5deg) brightness(1.1)' }} />
-              <div className="text-center">
-                <p className="font-black tracking-[0.2em] text-sm" style={{ color: '#C9A96E' }}>BLACK ROSE</p>
-                <p className="text-[9px] tracking-[0.35em]" style={{ color: '#B89A5E' }}>CAFE</p>
-              </div>
-            </div>
-
-            {/* Phone number */}
-            <div className="text-center mb-5">
-              <p className="font-mono text-lg font-bold tracking-widest" style={{ color: '#C9A96E' }} data-testid="text-phone-display" dir="ltr">
-                {customer?.phone ? `+966 ${customer.phone.replace(/^0/, '').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3')}` : '+966 5XX XXX XXXX'}
-              </p>
-            </div>
-
-            {/* Bottom row: tier badge + points block */}
-            <div className="flex items-end justify-between">
-              {/* Tier badge */}
-              <div className="flex flex-col gap-1">
-                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full ${tierCfg.badge} bg-opacity-80`}>
-                  <TierIcon className="w-3 h-3 text-white" />
-                  <span className="text-[10px] font-bold text-white">{tierCfg.label}</span>
-                </div>
-                {qrCodeUrl && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 px-2 gap-1 text-[10px] hover:bg-white/10"
-                    style={{ color: '#C9A96E' }}
-                    onClick={() => setShowQr(true)}
-                    data-testid="button-show-qr"
-                  >
-                    <QrCode className="w-3 h-3" />
-                    {tc("رمز QR","QR")}
-                  </Button>
-                )}
-              </div>
-
-              {/* Points + SAR */}
-              <div className="text-right">
-                <p className="text-xs font-bold mb-0.5" style={{ color: '#C9A96E' }}>{tc("نقاطي","My Points")}</p>
-                <p className="text-4xl font-black leading-none" style={{ color: '#C9A96E' }} data-testid="text-points">{points.toLocaleString()}</p>
-                <p className="text-xs mt-1" style={{ color: '#B89A5E' }}>
-                  {sarValue} {tc("ريال","SAR")}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* QR button */}
+        {qrCodeUrl && (
+          <Button
+            variant="outline"
+            className="w-full gap-2 border-primary/40"
+            onClick={() => setShowQr(true)}
+            data-testid="button-show-qr"
+          >
+            <QrCode className="w-4 h-4" />
+            {tc("عرض رمز QR","Show QR Code")}
+          </Button>
+        )}
 
         {/* ── SAR BALANCE BOX ─────────────────────────────────────── */}
         <div className="bg-gradient-to-br from-primary/10 to-primary/5 border-2 border-primary/30 rounded-2xl p-5 space-y-3" data-testid="sar-balance-card">
