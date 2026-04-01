@@ -29,7 +29,7 @@ export default function EmployeeGateway() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (password === "q2030") {
+    if (password.toLowerCase() === "b2030") {
       localStorage.setItem("qirox-gateway-passed", "true");
       setLocation("/employee/login");
     } else {
