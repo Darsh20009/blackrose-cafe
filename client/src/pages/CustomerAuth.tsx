@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PhoneInput } from "@/components/phone-input";
 import { SmartIdentifierInput } from "@/components/smart-identifier-input";
-import { Phone, User, Lock, Mail, Eye, EyeOff, Gift, Zap } from "lucide-react";
+import { Phone, User, Lock, Mail, Eye, EyeOff, Zap } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
@@ -24,7 +24,6 @@ export default function CustomerAuth() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [referralCode, setReferralCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -155,7 +154,6 @@ export default function CustomerAuth() {
         name: effectiveName,
         ...(email.trim() ? { email: email.trim() } : {}),
         password,
-        referralCode: referralCode.trim() || undefined
       });
       
       const customer = await res.json();
@@ -267,7 +265,7 @@ export default function CustomerAuth() {
                   <button
                     type="button"
                     onClick={() => navigate("/forgot-password")}
-                    className="text-xs text-accent/80 hover:text-accent transition-colors underline-offset-4 hover:underline"
+                    className="text-xs text-black hover:text-black/70 transition-colors underline-offset-4 hover:underline"
                     data-testid="link-forgot-password"
                   >
                     {i18n.language === 'ar' ? "نسيت كلمة المرور؟" : "Forgot Password?"}
@@ -394,24 +392,6 @@ export default function CustomerAuth() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="register-referral" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2 text-[#1f2025]">
-                    <Gift className="w-4 h-4" />
-                    {i18n.language === 'ar' ? "كود الإحالة (اختياري)" : "Referral Code (Optional)"}
-                  </Label>
-                  <Input
-                    id="register-referral"
-                    type="text"
-                    placeholder={i18n.language === 'ar' ? "أدخل كود الإحالة للحصول على نقاط إضافية" : "Enter referral code for bonus points"}
-                    value={referralCode}
-                    onChange={(e) => setReferralCode(e.target.value)}
-                    className="bg-primary/20 border-primary/50 text-card placeholder:text-card/60 focus:border-accent focus:ring-accent/30"
-                    data-testid="input-referral-code"
-                  />
-                  <p className="text-xs text-green-400/70 mt-1">
-                    {i18n.language === 'ar' ? "ستحصل أنت ومن أحالك على 50 نقطة لكل منكما!" : "You and your referrer will each get 50 bonus points!"}
-                  </p>
-                </div>
 
                 <Button
                   type="submit"
