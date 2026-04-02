@@ -17581,8 +17581,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { message, history } = req.body;
       if (!message) return res.status(400).json({ error: "الرسالة مطلوبة" });
 
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) return res.status(500).json({ error: "مفتاح الذكاء الاصطناعي غير مضبوط - يرجى إضافة OPENAI_API_KEY في الإعدادات" });
+      const apiKey = process.env.ZAI_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "مفتاح الذكاء الاصطناعي غير مضبوط - يرجى إضافة ZAI_API_KEY في الإعدادات" });
 
       // Gather business context
       const todayStart = getSaudiStartOfDay();
@@ -17661,16 +17661,14 @@ ${businessContext}
         { role: "user", content: message },
       ];
 
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      const response = await fetch("https://api.z.ai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": "https://qirox.cafe",
-          "X-Title": "BLACK ROSE Café AI Chat",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.0-flash-001",
+          model: "glm-4-flash",
           messages,
           max_tokens: 1000,
           temperature: 0.7,
@@ -17679,7 +17677,7 @@ ${businessContext}
 
       if (!response.ok) {
         const errText = await response.text();
-        console.error("OpenRouter AI chat error:", errText);
+        console.error("Z.AI chat error:", errText);
         return res.status(500).json({ error: "فشل الاتصال بالذكاء الاصطناعي" });
       }
 
@@ -17695,8 +17693,8 @@ ${businessContext}
   // ─── AI Quick Insights (auto-generated) ──────────────────────────────────
   app.get("/api/ai/insights", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) return res.status(500).json({ error: "OPENAI_API_KEY غير مضبوط" });
+      const apiKey = process.env.ZAI_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "ZAI_API_KEY غير مضبوط" });
 
       const insightsTenantId = req.employee?.tenantId || 'demo-tenant';
       const todayStart = getSaudiStartOfDay();
@@ -17746,16 +17744,14 @@ ${growthPct ? `- النمو مقارنة بالأسبوع الماضي: ${growth
 ]
 لا تضف أي نص خارج الـ JSON.`;
 
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      const response = await fetch("https://api.z.ai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": "https://qirox.cafe",
-          "X-Title": "BLACK ROSE AI Insights",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.0-flash-001",
+          model: "glm-4-flash",
           messages: [{ role: "user", content: prompt }],
           max_tokens: 500,
           temperature: 0.6,
@@ -17788,7 +17784,7 @@ ${growthPct ? `- النمو مقارنة بالأسبوع الماضي: ${growth
         return res.status(400).json({ error: "يرجى إدخال اسم المنتج أولاً" });
       }
 
-      const apiKey = process.env.OPENAI_API_KEY;
+      const apiKey = process.env.ZAI_API_KEY;
       if (!apiKey) {
         return res.status(500).json({ error: "مفتاح الذكاء الاصطناعي غير مضبوط" });
       }
@@ -17881,16 +17877,14 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
 
       const userPrompt = tasks[task] || tasks.description_ar;
 
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      const response = await fetch("https://api.z.ai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": "https://qirox.cafe",
-          "X-Title": "BLACK ROSE Café AI Assistant",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.0-flash-001",
+          model: "glm-4-flash",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
