@@ -268,6 +268,7 @@ function AppRouter() {
       <Route path="/employee/tables"><AuthGuard userType="employee"><CashierTables /></AuthGuard></Route>
       <Route path="/employee/table-orders"><AuthGuard userType="employee"><CashierTableOrders /></AuthGuard></Route>
       <Route path="/employee/orders"><AuthGuard userType="employee"><EmployeeOrders /></AuthGuard></Route>
+      <Route path="/manager/orders"><AuthGuard userType="manager" allowedRoles={["manager", "admin", "owner"]}><ManagerLayout><EmployeeOrders /></ManagerLayout></AuthGuard></Route>
       <Route path="/employee/orders-display"><AuthGuard userType="employee"><EmployeeOrdersDisplay /></AuthGuard></Route>
       <Route path="/employee/loyalty"><AuthGuard userType="employee"><EmployeeLoyalty /></AuthGuard></Route>
       <Route path="/employee/menu-management"><AuthGuard userType="manager" allowedRoles={["manager", "admin", "owner"]}><ManagerLayout><EmployeeMenuManagement /></ManagerLayout></AuthGuard></Route>
@@ -276,7 +277,9 @@ function AppRouter() {
       <Route path="/employee/attendance"><AuthGuard userType="employee"><EmployeeAttendance /></AuthGuard></Route>
       <Route path="/employee/leave-request"><AuthGuard userType="employee"><LeaveRequestPage /></AuthGuard></Route>
       <Route path="/employee/reservations"><AuthGuard userType="employee"><CashierReservations /></AuthGuard></Route>
+      <Route path="/manager/reservations"><AuthGuard userType="manager" allowedRoles={["manager", "admin", "owner"]}><ManagerLayout><CashierReservations /></ManagerLayout></AuthGuard></Route>
       <Route path="/employee/product-reservations"><AuthGuard userType="employee"><EmployeeProductReservations /></AuthGuard></Route>
+      <Route path="/manager/product-reservations"><AuthGuard userType="manager" allowedRoles={["manager", "admin", "owner"]}><ManagerLayout><EmployeeProductReservations /></ManagerLayout></AuthGuard></Route>
 
       {/* Manager auth routes (public) */}
       <Route path="/manager"><ManagerLogin /></Route>

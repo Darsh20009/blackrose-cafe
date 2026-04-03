@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { LayoutDashboard, Users, FileText, Settings, LogOut, Bell, Code2, GitBranch, Mail, Coffee, BookOpen, Star } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, LogOut, Bell, Code2, GitBranch, Mail, Coffee, BookOpen, Star, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import blackroseLogoStaff from "@assets/blackrose-logo.png";
 import { brand } from "@/lib/brand";
@@ -20,8 +20,9 @@ export function AdminSidebar() {
       label: "العمليات",
       items: [
         { label: 'إدارة المأكولات والمشروبات', icon: Coffee, path: '/employee/menu-management' },
-        { label: 'حجوزات الطاولات', icon: BookOpen, path: '/employee/reservations' },
-        { label: 'حجوزات المنتجات', icon: Star, path: '/employee/product-reservations' },
+        { label: 'إدارة الطلبات', icon: ClipboardList, path: '/manager/orders' },
+        { label: 'حجوزات الطاولات', icon: BookOpen, path: '/manager/reservations' },
+        { label: 'حجوزات المنتجات', icon: Star, path: '/manager/product-reservations' },
       ]
     },
     {

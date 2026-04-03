@@ -45,11 +45,11 @@ const NAV_GROUPS: { label: string; labelEn: string; color: string; items: NavIte
   {
     label: "العمليات", labelEn: "Operations", color: "#3b82f6",
     items: [
-      { label: "الطلبات", labelEn: "Orders", icon: ClipboardList, path: "/employee/orders", color: "#3b82f6" },
+      { label: "إدارة الطلبات", labelEn: "Orders", icon: ClipboardList, path: "/manager/orders", color: "#3b82f6" },
       { label: "الطاولات", labelEn: "Tables", icon: Table, path: "/manager/tables", color: "#60a5fa" },
       { label: "إدارة المأكولات والمشروبات", labelEn: "Menu", icon: Coffee, path: "/employee/menu-management", color: "#818cf8" },
-      { label: "حجوزات الطاولات", labelEn: "Table Reservations", icon: BookOpen, path: "/employee/reservations", color: "#6366f1" },
-      { label: "حجوزات المنتجات", labelEn: "Product Reservations", icon: Star, path: "/employee/product-reservations", color: "#8b5cf6" },
+      { label: "حجوزات الطاولات", labelEn: "Table Reservations", icon: BookOpen, path: "/manager/reservations", color: "#6366f1" },
+      { label: "حجوزات المنتجات", labelEn: "Product Reservations", icon: Star, path: "/manager/product-reservations", color: "#8b5cf6" },
       { label: "الورديات", labelEn: "Shifts", icon: Clock, path: "/manager/shifts", color: "#a78bfa" },
     ]
   },

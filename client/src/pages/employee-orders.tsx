@@ -63,9 +63,9 @@ export default function EmployeeOrders() {
     const stored = localStorage.getItem("currentEmployee");
     if (stored) {
       setEmployee(JSON.parse(stored));
-    } else {
-      setLocation("/employee/login");
     }
+    // Managers accessing via manager dashboard don't need localStorage check
+    // AuthGuard already validates the session
   }, [setLocation]);
 
   const { data: orders = [], refetch, isLoading, isError } = useQuery<any[]>({
