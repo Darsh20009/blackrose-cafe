@@ -723,6 +723,13 @@ export default function CheckoutPage() {
       ...(deliveryInfo?.type === 'delivery' && deliveryInfo?.deliveryAddress ? {
         deliveryAddress: { fullAddress: deliveryInfo.deliveryAddress, lat: 0, lng: 0, zone: 'general' },
       } : {}),
+      ...(deliveryInfo?.productReservationDate ? {
+        isProductReservation: true,
+        productReservationDate: deliveryInfo.productReservationDate,
+        productReservationFromTime: deliveryInfo.productReservationFromTime,
+        productReservationToTime: deliveryInfo.productReservationToTime,
+        productReservationStatus: 'pending_payment',
+      } : {}),
       channel: "online",
     };
 
@@ -857,6 +864,13 @@ export default function CheckoutPage() {
       ...(deliveryInfo?.type === 'delivery' && deliveryInfo?.deliveryAddress ? {
         deliveryAddress: { fullAddress: deliveryInfo.deliveryAddress, lat: 0, lng: 0, zone: 'general' },
       } : {}),
+      ...(deliveryInfo?.productReservationDate ? {
+        isProductReservation: true,
+        productReservationDate: deliveryInfo.productReservationDate,
+        productReservationFromTime: deliveryInfo.productReservationFromTime,
+        productReservationToTime: deliveryInfo.productReservationToTime,
+        productReservationStatus: 'pending_payment',
+      } : {}),
       channel: "online",
     };
 
@@ -946,9 +960,19 @@ export default function CheckoutPage() {
       const rawPhone = businessConfig?.contactPhone || businessConfig?.socialLinks?.whatsapp?.replace(/\D/g, '') || '';
       const phone = rawPhone.replace(/\D/g, '').replace(/^0/, '966');
       const reservationItems = orderDetails?.items || [];
-      const itemsText = reservationItems.map((i: any) => `• ${i.nameAr || i.coffeeItem?.nameAr || 'منتج'} x${i.quantity}`).join('\n');
+      const itemsText = reservationItems.map((i: any) => {
+        const pkg = i.customization?.selectedReservationPackage;
+        return `• ${i.nameAr || i.coffeeItem?.nameAr || 'منتج'} x${i.quantity}${pkg ? ` (${pkg.packageName})` : ''}`;
+      }).join('\n');
+      const resDate = orderDetails?.productReservationDate
+        ? new Date(orderDetails.productReservationDate).toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        : '';
+      const resTime = (orderDetails?.productReservationFromTime && orderDetails?.productReservationToTime)
+        ? `من ${orderDetails.productReservationFromTime} إلى ${orderDetails.productReservationToTime}`
+        : '';
+      const resLine = resDate ? `\n📅 موعد الحجز: ${resDate}\n⏰ الوقت: ${resTime}` : '';
       const msg = encodeURIComponent(
-        `🗓️ طلب تأكيد حجز\n\nرقم الطلب: ${orderNum}\n\n${itemsText}\n\nالإجمالي: ${orderTotal.toFixed(2)} ر.س\n\nالاسم: ${customerName || orderDetails?.customerName || '—'}\nالجوال: ${customerPhone || orderDetails?.customerPhone || '—'}\n\nأرجو التأكيد على هذا الحجز`
+        `🗓️ طلب تأكيد حجز\n\nرقم الطلب: ${orderNum}\n\n${itemsText}${resLine}\n\nالإجمالي: ${orderTotal.toFixed(2)} ر.س\n\nالاسم: ${customerName || orderDetails?.customerName || '—'}\nالجوال: ${customerPhone || orderDetails?.customerPhone || '—'}\n\nأرجو التأكيد على هذا الحجز`
       );
       window.open(`https://wa.me/${phone || '966920000000'}?text=${msg}`, '_blank');
     };
@@ -1067,6 +1091,19 @@ export default function CheckoutPage() {
                 <p className="font-black text-white text-base">طلب حجز مسبق</p>
               </div>
               <div className="p-5 space-y-4">
+                {orderDetails?.productReservationDate && (
+                  <div className="bg-amber-100 dark:bg-amber-900/40 rounded-xl p-3 space-y-1">
+                    <p className="text-xs font-bold text-amber-800 dark:text-amber-200">📅 موعد حجزك</p>
+                    <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                      {new Date(orderDetails.productReservationDate).toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                    {orderDetails.productReservationFromTime && (
+                      <p className="text-sm text-amber-700 dark:text-amber-300">
+                        ⏰ من {orderDetails.productReservationFromTime} إلى {orderDetails.productReservationToTime}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <p className="text-sm text-amber-800 dark:text-amber-200">
                   لإتمام حجزك يرجى اتخاذ الخطوتين التاليتين:
                 </p>

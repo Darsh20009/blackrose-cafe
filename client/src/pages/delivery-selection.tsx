@@ -236,6 +236,18 @@ export default function DeliverySelectionPage() {
 
   const isReservationCart = cartItems.some(ci => (ci.coffeeItem as any)?.isReservation);
 
+  const getTomorrowString = () => {
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  };
+  const getMaxDateString = () => {
+    const d = new Date(); d.setDate(d.getDate() + 7);
+    return d.toISOString().split('T')[0];
+  };
+  const [reservationDate, setReservationDate] = useState<string>('');
+  const [reservationFromTime, setReservationFromTime] = useState<string>('');
+  const [reservationToTime, setReservationToTime] = useState<string>('');
+
   useEffect(() => {
     document.title = `${t("nav.branch_selection")} - BLACK ROSE CAFE`;
     const metaDesc = document.querySelector('meta[name="description"]');
@@ -451,6 +463,25 @@ export default function DeliverySelectionPage() {
       }
     }
 
+    if (isReservationCart) {
+      if (!reservationDate) {
+        toast({ title: 'تنبيه', description: 'يرجى اختيار تاريخ الحجز', variant: 'destructive' });
+        return;
+      }
+      if (!reservationFromTime) {
+        toast({ title: 'تنبيه', description: 'يرجى تحديد وقت بداية الحجز', variant: 'destructive' });
+        return;
+      }
+      if (!reservationToTime) {
+        toast({ title: 'تنبيه', description: 'يرجى تحديد وقت نهاية الحجز', variant: 'destructive' });
+        return;
+      }
+      if (reservationFromTime >= reservationToTime) {
+        toast({ title: 'تنبيه', description: 'وقت البداية يجب أن يكون قبل وقت النهاية', variant: 'destructive' });
+        return;
+      }
+    }
+
     if (selectedMethod === 'delivery') {
       if (!selectedCountry) {
         toast({ title: t("product.error"), description: "يرجى اختيار الدولة", variant: 'destructive' });
@@ -489,6 +520,9 @@ export default function DeliverySelectionPage() {
         ? [DELIVERY_COUNTRIES.find(c => c.value === selectedCountry)?.label, selectedGovernorate, detailedAddress.trim()].filter(Boolean).join(' - ')
         : undefined,
       deliveryFee: selectedMethod === 'delivery' ? deliveryFeeAmount : 0,
+      productReservationDate: isReservationCart ? reservationDate : undefined,
+      productReservationFromTime: isReservationCart ? reservationFromTime : undefined,
+      productReservationToTime: isReservationCart ? reservationToTime : undefined,
     });
 
     setLocation('/checkout');
@@ -656,12 +690,71 @@ export default function DeliverySelectionPage() {
 
         {/* Method Selection — shown once branch is selected */}
         {isReservationCart && (
-          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-700 rounded-2xl p-4 flex items-start gap-3">
-            <span className="text-2xl mt-0.5">🗓️</span>
-            <div>
-              <p className="font-bold text-amber-800 dark:text-amber-200 text-sm">سلة الحجز المسبق</p>
-              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">لديك منتج يتطلب حجزاً مسبقاً. سيتم تقييدك بخيار الاستلام من الفرع فقط، وسيتم إرسال تأكيد الحجز عبر واتساب.</p>
+          <div className="space-y-4">
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-700 rounded-2xl p-4 flex items-start gap-3">
+              <span className="text-2xl mt-0.5">🗓️</span>
+              <div>
+                <p className="font-bold text-amber-800 dark:text-amber-200 text-sm">سلة الحجز المسبق</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">لديك منتج يتطلب حجزاً مسبقاً. الاستلام يكون في الفرع فقط مع تأكيد عبر واتساب.</p>
+              </div>
             </div>
+
+            {selectedBranchId && (
+              <div className="bg-card border border-amber-200 dark:border-amber-700 rounded-2xl p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-amber-500 text-white text-xs font-bold flex items-center justify-center">2</div>
+                  <span className="text-base font-bold">حدد موعد الحجز</span>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-sm font-semibold text-foreground">📅 تاريخ الحجز</Label>
+                  <p className="text-xs text-muted-foreground">من الغد حتى 7 أيام قادمة</p>
+                  <Input
+                    type="date"
+                    value={reservationDate}
+                    min={getTomorrowString()}
+                    max={getMaxDateString()}
+                    onChange={(e) => setReservationDate(e.target.value)}
+                    className="text-base h-11 border-amber-200 focus:border-amber-400"
+                    data-testid="input-reservation-date"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-semibold text-foreground">⏰ من الساعة</Label>
+                    <Input
+                      type="time"
+                      value={reservationFromTime}
+                      onChange={(e) => setReservationFromTime(e.target.value)}
+                      className="text-base h-11 border-amber-200 focus:border-amber-400"
+                      data-testid="input-reservation-from-time"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm font-semibold text-foreground">⏰ إلى الساعة</Label>
+                    <Input
+                      type="time"
+                      value={reservationToTime}
+                      onChange={(e) => setReservationToTime(e.target.value)}
+                      className="text-base h-11 border-amber-200 focus:border-amber-400"
+                      data-testid="input-reservation-to-time"
+                    />
+                  </div>
+                </div>
+
+                {reservationDate && reservationFromTime && reservationToTime && (
+                  <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 rounded-xl p-3 text-center">
+                    <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
+                      📋 موعد الحجز: {new Date(reservationDate).toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                      من {reservationFromTime} إلى {reservationToTime}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

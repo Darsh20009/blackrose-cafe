@@ -811,6 +811,20 @@ export default function EmployeeDashboard() {
 
               <Button
                 size="lg"
+                variant="outline"
+                className="h-32 flex flex-col items-center justify-center gap-3 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-950/20"
+                onClick={() => setLocation("/employee/product-reservations")}
+                data-testid="button-product-reservations"
+              >
+                <Calendar className="w-10 h-10" />
+                <div className="text-center">
+                  <div className="font-bold text-lg">حجوزات المنتجات</div>
+                  <div className="text-sm opacity-90">إدارة الطلبات المحجوزة</div>
+                </div>
+              </Button>
+
+              <Button
+                size="lg"
                 variant="secondary"
                 className="h-32 flex flex-col items-center justify-center gap-3"
                 onClick={() => setLocation("/employee/table-orders")}

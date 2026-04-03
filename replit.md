@@ -117,8 +117,18 @@ Fully dynamic plan management UI in the QIROX super admin panel:
 - **Package selection**: `AddToCartModal` shows reservation package selector when product `isReservation=true`; validates package selection; price computed from selected package
 - **Cart store**: `addToCart()` and POST `/api/cart` extended to accept `selectedReservationPackage`; composite cart ID includes package name to prevent collision
 - **Delivery restriction**: `delivery-selection.tsx` detects `isReservationCart` and shows only "استلام / حضور في الفرع" option with reservation banner
-- **Post-order flow**: `checkout.tsx` detects `wasReservationOrder`; success page shows prominent reservation banner with invoice download button + WhatsApp confirmation button that pre-fills order details
+- **Post-order flow**: `checkout.tsx` detects `wasReservationOrder`; success page shows prominent reservation banner with: date/time summary card, invoice download button + WhatsApp confirmation button that pre-fills order details including date/time
 - **Management UI**: `employee-menu-management.tsx` has toggle + packages editor in both add and edit dialogs
+- **Phase 2 — Reservation Date/Time (April 2026)**:
+  - `delivery-selection.tsx`: date picker (tomorrow → +7 days) + from/to time range shown when `isReservationCart`. Validates: date required, from time required, to time required, from < to. Stored in `DeliveryInfo.productReservationDate/FromTime/ToTime`
+  - `cart-store.ts`: `DeliveryInfo` extended with `productReservationDate`, `productReservationFromTime`, `productReservationToTime`
+  - `checkout.tsx`: passes `isProductReservation`, `productReservationDate/FromTime/ToTime`, `productReservationStatus` to order data (both paths). WhatsApp message includes package name, formatted date, and time range
+  - `shared/schema.ts` + `OrderSchema`: Added `isProductReservation`, `productReservationDate/FromTime/ToTime`, `productReservationStatus` (pending_payment→pending_confirmation→confirmed→rejected→cancelled→completed), `productReservationPackageName`, `productReservationNotes`
+  - `server/routes.ts`: Added `GET /api/product-reservations` (employee), `GET /api/product-reservations/customer/:phone` (customer), `PATCH /api/product-reservations/:id/status` (employee)
+  - `employee-product-reservations.tsx`: New page at `/employee/product-reservations` — shows all product reservations with status filter, search, expandable items, and status-change action buttons per workflow (e.g. pending_payment→confirm payment→pending_confirmation→confirm/reject)
+  - `employee-dashboard.tsx`: Added "حجوزات المنتجات" button linking to the new page
+  - `customer-reservations.tsx`: Now shows both table reservations and product reservations tabs after search; product tab shows date, time range, items, status, and "pay via WhatsApp" prompt for pending_payment status
+  - Sample product `تجربة الرومانسية الخاصة` added to DB (id: `reservation-romance-001`, `isReservation: true`, 2 packages: Couple 250 SAR / Group 450 SAR)
 
 ## Recent Fixes (March 2026)
 

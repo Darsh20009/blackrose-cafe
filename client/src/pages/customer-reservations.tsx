@@ -32,6 +32,7 @@ export default function CustomerReservations() {
   const tc = useTranslate();
   const [searchPhone, setSearchPhone] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
+  const [activeTab, setActiveTab] = useState<'table' | 'product'>('product');
 
   const { data: reservations = [], isLoading, refetch } = useQuery({
     queryKey: ["/api/tables/reservations/customer", searchPhone],
@@ -43,6 +44,26 @@ export default function CustomerReservations() {
     },
     enabled: false
   });
+
+  const { data: productReservations = [], isLoading: productLoading, refetch: refetchProduct } = useQuery<any[]>({
+    queryKey: ["/api/product-reservations/customer", searchPhone],
+    queryFn: async () => {
+      if (!searchPhone.trim()) return [];
+      const response = await fetch(`/api/product-reservations/customer/${encodeURIComponent(searchPhone)}`);
+      if (response.ok) return await response.json();
+      return [];
+    },
+    enabled: false
+  });
+
+  const PRODUCT_RES_STATUS: Record<string, { label: string; color: string }> = {
+    pending_payment:      { label: 'بانتظار الدفع', color: 'bg-orange-50 text-orange-700 border-orange-200' },
+    pending_confirmation: { label: 'بانتظار التأكيد', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
+    confirmed:            { label: 'مؤكد', color: 'bg-green-50 text-green-700 border-green-200' },
+    rejected:             { label: 'مرفوض', color: 'bg-red-50 text-red-700 border-red-200' },
+    cancelled:            { label: 'ملغى', color: 'bg-gray-50 text-gray-600 border-gray-200' },
+    completed:            { label: 'مكتمل', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  };
 
   const extendMutation = useMutation({
     mutationFn: async (tableId: string) => {
@@ -80,6 +101,7 @@ export default function CustomerReservations() {
     }
     setHasSearched(true);
     refetch();
+    refetchProduct();
   };
 
   const getStatusDisplay = (status: string) => {
@@ -179,6 +201,84 @@ export default function CustomerReservations() {
           </CardContent>
         </Card>
 
+        {hasSearched && (
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => setActiveTab('product')}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-bold border transition-colors ${activeTab === 'product' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white dark:bg-card border-border text-muted-foreground'}`}
+              data-testid="tab-product-reservations"
+            >
+              🗓️ حجوزات المنتجات {productReservations.length > 0 ? `(${productReservations.length})` : ''}
+            </button>
+            <button
+              onClick={() => setActiveTab('table')}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-bold border transition-colors ${activeTab === 'table' ? 'bg-primary text-primary-foreground border-primary' : 'bg-white dark:bg-card border-border text-muted-foreground'}`}
+              data-testid="tab-table-reservations"
+            >
+              🪑 حجوزات الطاولات {reservations.length > 0 ? `(${reservations.length})` : ''}
+            </button>
+          </div>
+        )}
+
+        {/* Product Reservations Tab */}
+        {hasSearched && activeTab === 'product' && (
+          <div className="space-y-3 mb-6">
+            {productLoading ? (
+              <Card><CardContent className="pt-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></CardContent></Card>
+            ) : productReservations.length === 0 ? (
+              <Card>
+                <CardContent className="pt-8 text-center text-gray-500">
+                  لا توجد حجوزات منتجات لهذا الرقم
+                </CardContent>
+              </Card>
+            ) : (
+              productReservations.map((order: any) => {
+                const statusKey = order.productReservationStatus || 'pending_payment';
+                const statusCfg = PRODUCT_RES_STATUS[statusKey] || PRODUCT_RES_STATUS['pending_payment'];
+                return (
+                  <Card key={order.id} className="shadow-sm">
+                    <CardContent className="pt-4 pb-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm">#{order.orderNumber}</span>
+                        <Badge variant="outline" className={`${statusCfg.color} text-xs`}>{statusCfg.label}</Badge>
+                      </div>
+                      {order.productReservationDate && (
+                        <div className="bg-amber-50 dark:bg-amber-950/20 rounded-lg p-2.5 space-y-1">
+                          <p className="text-xs font-semibold text-amber-700">📅 {new Date(order.productReservationDate).toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                          {order.productReservationFromTime && (
+                            <p className="text-xs text-amber-600">⏰ {order.productReservationFromTime} — {order.productReservationToTime}</p>
+                          )}
+                        </div>
+                      )}
+                      {Array.isArray(order.items) && order.items.length > 0 && (
+                        <div className="space-y-1">
+                          {order.items.map((item: any, i: number) => (
+                            <div key={i} className="flex justify-between text-xs text-muted-foreground">
+                              <span>{item.nameAr || 'منتج'} × {item.quantity}</span>
+                              <span>{((item.price || 0) * (item.quantity || 1)).toFixed(2)} ر.س</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center border-t pt-2">
+                        <span className="text-xs text-muted-foreground">الإجمالي</span>
+                        <span className="font-bold text-sm">{(order.totalAmount || 0).toFixed(2)} ر.س</span>
+                      </div>
+                      {statusKey === 'pending_payment' && (
+                        <div className="bg-orange-50 border border-orange-200 rounded-lg p-2.5 text-xs text-orange-700">
+                          ⚠️ يرجى إرسال إيصال الدفع عبر واتساب لتأكيد حجزك
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* Table Reservations Tab */}
+        {activeTab === 'table' && (
         <div className="space-y-4">
           {isLoading ? (
             <Card>
@@ -300,6 +400,7 @@ export default function CustomerReservations() {
             ))
           ) : null}
         </div>
+        )}
       </div>
     </div>
   );

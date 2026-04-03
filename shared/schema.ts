@@ -1207,6 +1207,13 @@ export interface IOrder extends Document {
   customerNotes?: string;
   cancellationReason?: string;
   cancelledBy?: 'customer' | 'cashier';
+  isProductReservation?: boolean;
+  productReservationDate?: string;
+  productReservationFromTime?: string;
+  productReservationToTime?: string;
+  productReservationStatus?: 'pending_payment' | 'pending_confirmation' | 'confirmed' | 'rejected' | 'cancelled' | 'completed';
+  productReservationPackageName?: string;
+  productReservationNotes?: string;
   carPickup?: {
     carType?: string;
     carColor?: string;
@@ -1328,6 +1335,13 @@ const OrderSchema = new Schema<IOrder>({
   giftCardCode: { type: String },
   giftCardAmountUsed: { type: Number },
   giftCardRemainingBalance: { type: Number },
+  isProductReservation: { type: Boolean, default: false },
+  productReservationDate: { type: String },
+  productReservationFromTime: { type: String },
+  productReservationToTime: { type: String },
+  productReservationStatus: { type: String, enum: ['pending_payment', 'pending_confirmation', 'confirmed', 'rejected', 'cancelled', 'completed'], default: 'pending_payment' },
+  productReservationPackageName: { type: String },
+  productReservationNotes: { type: String },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

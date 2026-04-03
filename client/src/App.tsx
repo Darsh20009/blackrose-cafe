@@ -61,6 +61,7 @@ const TableReservation = lazy(() => import("@/pages/table-reservation"));
 const CashierTableOrders = lazy(() => import("@/pages/cashier-table-orders"));
 const CashierTables = lazy(() => import("@/pages/cashier-tables"));
 const CashierReservations = lazy(() => import("@/pages/cashier-reservations"));
+const EmployeeProductReservations = lazy(() => import("@/pages/employee-product-reservations"));
 const EmployeeForgotPassword = lazy(() => import("@/pages/employee-forgot-password"));
 const ManagerForgotPassword = lazy(() => import("@/pages/manager-forgot-password"));
 const EmployeeAttendance = lazy(() => import("@/pages/employee-attendance"));
@@ -274,6 +275,7 @@ function AppRouter() {
       <Route path="/employee/attendance"><AuthGuard userType="employee"><EmployeeAttendance /></AuthGuard></Route>
       <Route path="/employee/leave-request"><AuthGuard userType="employee"><LeaveRequestPage /></AuthGuard></Route>
       <Route path="/employee/reservations"><AuthGuard userType="employee"><CashierReservations /></AuthGuard></Route>
+      <Route path="/employee/product-reservations"><AuthGuard userType="employee"><EmployeeProductReservations /></AuthGuard></Route>
 
       {/* Manager auth routes (public) */}
       <Route path="/manager"><ManagerLogin /></Route>

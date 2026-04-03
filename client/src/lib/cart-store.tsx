@@ -21,6 +21,9 @@ export interface DeliveryInfo {
   branchId?: string;
   branchName?: string;
   branchAddress?: string;
+  productReservationDate?: string;
+  productReservationFromTime?: string;
+  productReservationToTime?: string;
   dineIn?: boolean;
   tableId?: string;
   tableNumber?: string;

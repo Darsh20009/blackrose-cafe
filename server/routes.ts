@@ -8188,6 +8188,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all orders (branch-filtered for non-admin/owner roles)
+  // GET /api/product-reservations/customer/:phone — fetch customer product reservations
+  app.get("/api/product-reservations/customer/:phone", async (req: any, res) => {
+    try {
+      const { OrderModel } = await import("@shared/schema");
+      const { phone } = req.params;
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const cleanPhone = phone.replace(/\D/g, '');
+      const orders = await OrderModel.find({
+        tenantId,
+        isProductReservation: true,
+        $or: [{ customerPhone: phone }, { customerPhone: cleanPhone }, { 'customerInfo.customerPhone': phone }, { 'customerInfo.customerPhone': cleanPhone }],
+      }).sort({ createdAt: -1 }).limit(50).lean();
+      return res.json(orders.map((o: any) => serializeDoc(o)));
+    } catch (error) {
+      return res.status(500).json({ error: "Failed to fetch customer product reservations" });
+    }
+  });
+
+  // GET /api/product-reservations — fetch all product reservation orders
+  app.get("/api/product-reservations", async (req: any, res) => {
+    try {
+      const { OrderModel } = await import("@shared/schema");
+      const employee = req.session?.employee;
+      const tenantId = employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const query: any = { tenantId, isProductReservation: true };
+      if (employee?.branchId) query.branchId = employee.branchId;
+      const orders = await OrderModel.find(query).sort({ createdAt: -1 }).limit(200).lean();
+      const result = orders.map((o: any) => serializeDoc(o));
+      return res.json(result);
+    } catch (error) {
+      return res.status(500).json({ error: "Failed to fetch product reservations" });
+    }
+  });
+
+  // PATCH /api/product-reservations/:id/status — update reservation status
+  app.patch("/api/product-reservations/:id/status", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { OrderModel } = await import("@shared/schema");
+      const { id } = req.params;
+      const { productReservationStatus, productReservationNotes } = req.body;
+      const validStatuses = ['pending_payment', 'pending_confirmation', 'confirmed', 'rejected', 'cancelled', 'completed'];
+      if (!validStatuses.includes(productReservationStatus)) {
+        return res.status(400).json({ error: "Invalid reservation status" });
+      }
+      const update: any = { productReservationStatus, updatedAt: new Date() };
+      if (productReservationNotes !== undefined) update.productReservationNotes = productReservationNotes;
+      const updated = await OrderModel.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
+      if (!updated) return res.status(404).json({ error: "Reservation not found" });
+      return res.json(serializeDoc(updated));
+    } catch (error) {
+      return res.status(500).json({ error: "Failed to update reservation status" });
+    }
+  });
+
   app.get("/api/orders", async (req: any, res) => {
     try {
       const { OrderModel } = await import("@shared/schema");
