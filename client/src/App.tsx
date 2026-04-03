@@ -1,6 +1,6 @@
 import i18n from "@/lib/i18n";
 import { lazy, Suspense, useState, useEffect, useCallback } from "react";
-import { Router as WouterRouter, Switch, Route } from "wouter";
+import { Router as WouterRouter, Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -327,6 +327,9 @@ function AppRouter() {
       {/* Owner protected routes */}
       <Route path="/owner/dashboard"><AuthGuard userType="manager" allowedRoles={["owner", "admin"]}><OwnerDashboard /></AuthGuard></Route>
       <Route path="/executive"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><ExecutiveDashboard /></AuthGuard></Route>
+
+      {/* Admin redirect */}
+      <Route path="/admin"><Redirect to="/admin/dashboard" /></Route>
 
       {/* Admin protected routes */}
       <Route path="/admin/dashboard"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><AdminDashboard /></AuthGuard></Route>
