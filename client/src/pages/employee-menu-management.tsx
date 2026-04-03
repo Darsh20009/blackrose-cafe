@@ -78,6 +78,12 @@ type BundledSection = {
 };
 const [addBundledItems, setAddBundledItems] = useState<BundledSection[]>([]);
 const [editBundledItems, setEditBundledItems] = useState<BundledSection[]>([]);
+
+type ReservationPackage = { packageName: string; description?: string; price: number; duration?: string; maxGuests?: number; };
+const [addIsReservation, setAddIsReservation] = useState(false);
+const [addReservationPackages, setAddReservationPackages] = useState<ReservationPackage[]>([]);
+const [editIsReservation, setEditIsReservation] = useState(false);
+const [editReservationPackages, setEditReservationPackages] = useState<ReservationPackage[]>([]);
  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
  const [isImageLibraryOpen, setIsImageLibraryOpen] = useState(false);
  const [imageLibraryContext, setImageLibraryContext] = useState<'add' | 'edit' | 'add-addon' | 'edit-addon'>('add');
@@ -574,6 +580,8 @@ const [aiEditDescription, setAiEditDescription] = useState("");
      availableSizes: addEditableSizes.filter(s => s.nameAr.trim()),
      addons: addEditableAddons.filter(a => a.nameAr.trim()),
      bundledItems: addBundledItems,
+     isReservation: addIsReservation,
+     reservationPackages: addReservationPackages.filter(p => p.packageName.trim()),
    });
    setAddStep(2);
  };
@@ -612,6 +620,8 @@ const [aiEditDescription, setAiEditDescription] = useState("");
      availableSizes: step1Data.availableSizes || [],
      addons: (step1Data as any).addons || [],
      bundledItems: (step1Data as any).bundledItems || [],
+     isReservation: (step1Data as any).isReservation || false,
+     reservationPackages: (step1Data as any).reservationPackages || [],
      branchAvailability: step1Data.branchAvailability,
      hasRecipe: 0,
      requiresRecipe: 0,
@@ -647,6 +657,8 @@ const [aiEditDescription, setAiEditDescription] = useState("");
      availableSizes: step1Data.availableSizes || [],
      addons: (step1Data as any).addons || [],
      bundledItems: (step1Data as any).bundledItems || [],
+     isReservation: (step1Data as any).isReservation || false,
+     reservationPackages: (step1Data as any).reservationPackages || [],
      branchAvailability: step1Data.branchAvailability,
      hasRecipe: hasRecipeItems ? 1 : 0,
      requiresRecipe: 1,
@@ -729,6 +741,8 @@ const [aiEditDescription, setAiEditDescription] = useState("");
     imageUrls: editImageUrls.length > 0 ? editImageUrls : ((editingItem as any).imageUrls || []),
     addons: editableAddons,
     bundledItems: editBundledItems,
+    isReservation: editIsReservation,
+    reservationPackages: editReservationPackages.filter(p => p.packageName.trim()),
      availableSizes: editableSizes,
    };
 
@@ -740,6 +754,8 @@ const [aiEditDescription, setAiEditDescription] = useState("");
  setEditableSizes(item.availableSizes || []);
  setEditableAddons(item.addons || []);
  setEditBundledItems((item as any).bundledItems || []);
+ setEditIsReservation((item as any).isReservation || false);
+ setEditReservationPackages((item as any).reservationPackages || []);
 setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : []));
  setAiEditNameEn(item.nameEn || "");
  setAiEditDescription(item.description || "");
@@ -862,6 +878,8 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
     setAddEditableAddons([]);
     setAddEditableSizes([]);
     setAddBundledItems([]);
+    setAddIsReservation(false);
+    setAddReservationPackages([]);
     setSelectedCategory(defaultCategory);
     setSelectedCoffeeStrength("classic");
   }
@@ -1244,6 +1262,48 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
     </div>
   ))}
   <Button type="button" size="sm" variant="outline" onClick={() => setAddBundledItems([...addBundledItems, { sectionTitle: '', selectionType: 'single', minSelectable: 0, maxSelectable: 1, items: [] }])} className="border-purple-400/40 text-purple-600 w-full" data-testid="btn-add-bundle-section"><Plus className="w-4 h-4 ml-1" />إضافة قسم منتجات مصاحبة</Button>
+</div>
+
+{/* Reservation Section */}
+<div className="space-y-2 border border-amber-200 rounded-lg p-3 bg-amber-50/30">
+  <div className="flex items-center justify-between">
+    <Label className="text-gray-700 font-semibold flex items-center gap-2">🗓️ منتج يحتاج حجز مسبق</Label>
+    <button
+      type="button"
+      onClick={() => setAddIsReservation(!addIsReservation)}
+      className={`relative w-12 h-6 rounded-full transition-colors ${addIsReservation ? 'bg-amber-500' : 'bg-gray-300'}`}
+      data-testid="toggle-add-reservation"
+    >
+      <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${addIsReservation ? 'right-1' : 'left-1'}`} />
+    </button>
+  </div>
+  {addIsReservation && (
+    <div className="space-y-3 pt-2">
+      <p className="text-xs text-amber-700">هذا المنتج لا يمكن طلبه مع منتجات أخرى، ويُلزم العميل بالحجز في الفرع فقط مع تأكيد عبر واتساب</p>
+      <Label className="text-gray-600 text-sm">الباقات المتاحة للحجز</Label>
+      {addReservationPackages.map((pkg, idx) => (
+        <div key={idx} className="border border-amber-200 rounded-lg p-3 space-y-2 bg-white">
+          <div className="flex items-center gap-2">
+            <Input placeholder="اسم الباقة (مثال: باقة رومانسية)" value={pkg.packageName} onChange={(e) => { const n = [...addReservationPackages]; n[idx] = {...n[idx], packageName: e.target.value}; setAddReservationPackages(n); }} className="bg-white border-gray-300 text-gray-900 flex-1 h-8 text-sm" data-testid={`input-add-pkg-name-${idx}`} />
+            <button type="button" onClick={() => setAddReservationPackages(addReservationPackages.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600" data-testid={`btn-del-pkg-${idx}`}><X className="w-4 h-4" /></button>
+          </div>
+          <Input placeholder="الوصف (اختياري)" value={pkg.description || ''} onChange={(e) => { const n = [...addReservationPackages]; n[idx] = {...n[idx], description: e.target.value}; setAddReservationPackages(n); }} className="bg-white border-gray-300 text-gray-900 h-8 text-sm" data-testid={`input-add-pkg-desc-${idx}`} />
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Input type="number" min={0} step={0.5} placeholder="السعر (ر.س)" value={pkg.price} onChange={(e) => { const n = [...addReservationPackages]; n[idx] = {...n[idx], price: parseFloat(e.target.value) || 0}; setAddReservationPackages(n); }} className="bg-white border-gray-300 text-gray-900 h-8 text-sm w-full" data-testid={`input-add-pkg-price-${idx}`} />
+            </div>
+            <div className="flex-1">
+              <Input placeholder="المدة (مثال: 2 ساعة)" value={pkg.duration || ''} onChange={(e) => { const n = [...addReservationPackages]; n[idx] = {...n[idx], duration: e.target.value}; setAddReservationPackages(n); }} className="bg-white border-gray-300 text-gray-900 h-8 text-sm w-full" data-testid={`input-add-pkg-duration-${idx}`} />
+            </div>
+            <div className="flex-1">
+              <Input type="number" min={1} placeholder="الحد الأقصى للضيوف" value={pkg.maxGuests || ''} onChange={(e) => { const n = [...addReservationPackages]; n[idx] = {...n[idx], maxGuests: parseInt(e.target.value) || undefined}; setAddReservationPackages(n); }} className="bg-white border-gray-300 text-gray-900 h-8 text-sm w-full" data-testid={`input-add-pkg-guests-${idx}`} />
+            </div>
+          </div>
+        </div>
+      ))}
+      <Button type="button" size="sm" variant="outline" onClick={() => setAddReservationPackages([...addReservationPackages, { packageName: '', price: 0 }])} className="border-amber-400/40 text-amber-700 w-full" data-testid="btn-add-pkg"><Plus className="w-4 h-4 ml-1" />إضافة باقة</Button>
+    </div>
+  )}
 </div>
 
 {employee?.role === "manager" && branches.length > 0 && (
@@ -2021,6 +2081,48 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
    ))}
    <Button type="button" size="sm" variant="outline" onClick={() => setEditBundledItems([...editBundledItems, { sectionTitle: '', selectionType: 'single', minSelectable: 0, maxSelectable: 1, items: [] }])} className="border-purple-400/40 text-purple-600 w-full" data-testid="btn-add-edit-bundle-section"><Plus className="w-4 h-4 ml-1" />إضافة قسم منتجات مصاحبة</Button>
  </div>
+
+{/* Reservation Section - Edit */}
+<div className="space-y-2 border border-amber-200 rounded-lg p-3 bg-amber-50/30">
+  <div className="flex items-center justify-between">
+    <Label className="text-gray-700 font-semibold flex items-center gap-2">🗓️ منتج يحتاج حجز مسبق</Label>
+    <button
+      type="button"
+      onClick={() => setEditIsReservation(!editIsReservation)}
+      className={`relative w-12 h-6 rounded-full transition-colors ${editIsReservation ? 'bg-amber-500' : 'bg-gray-300'}`}
+      data-testid="toggle-edit-reservation"
+    >
+      <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${editIsReservation ? 'right-1' : 'left-1'}`} />
+    </button>
+  </div>
+  {editIsReservation && (
+    <div className="space-y-3 pt-2">
+      <p className="text-xs text-amber-700">هذا المنتج لا يمكن طلبه مع منتجات أخرى، ويُلزم العميل بالحجز في الفرع فقط مع تأكيد عبر واتساب</p>
+      <Label className="text-gray-600 text-sm">الباقات المتاحة للحجز</Label>
+      {editReservationPackages.map((pkg, idx) => (
+        <div key={idx} className="border border-amber-200 rounded-lg p-3 space-y-2 bg-white">
+          <div className="flex items-center gap-2">
+            <Input placeholder="اسم الباقة (مثال: باقة رومانسية)" value={pkg.packageName} onChange={(e) => { const n = [...editReservationPackages]; n[idx] = {...n[idx], packageName: e.target.value}; setEditReservationPackages(n); }} className="bg-white border-gray-300 text-gray-900 flex-1 h-8 text-sm" data-testid={`input-edit-pkg-name-${idx}`} />
+            <button type="button" onClick={() => setEditReservationPackages(editReservationPackages.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600" data-testid={`btn-edit-del-pkg-${idx}`}><X className="w-4 h-4" /></button>
+          </div>
+          <Input placeholder="الوصف (اختياري)" value={pkg.description || ''} onChange={(e) => { const n = [...editReservationPackages]; n[idx] = {...n[idx], description: e.target.value}; setEditReservationPackages(n); }} className="bg-white border-gray-300 text-gray-900 h-8 text-sm" data-testid={`input-edit-pkg-desc-${idx}`} />
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Input type="number" min={0} step={0.5} placeholder="السعر (ر.س)" value={pkg.price} onChange={(e) => { const n = [...editReservationPackages]; n[idx] = {...n[idx], price: parseFloat(e.target.value) || 0}; setEditReservationPackages(n); }} className="bg-white border-gray-300 text-gray-900 h-8 text-sm w-full" data-testid={`input-edit-pkg-price-${idx}`} />
+            </div>
+            <div className="flex-1">
+              <Input placeholder="المدة (مثال: 2 ساعة)" value={pkg.duration || ''} onChange={(e) => { const n = [...editReservationPackages]; n[idx] = {...n[idx], duration: e.target.value}; setEditReservationPackages(n); }} className="bg-white border-gray-300 text-gray-900 h-8 text-sm w-full" data-testid={`input-edit-pkg-duration-${idx}`} />
+            </div>
+            <div className="flex-1">
+              <Input type="number" min={1} placeholder="الحد الأقصى للضيوف" value={pkg.maxGuests || ''} onChange={(e) => { const n = [...editReservationPackages]; n[idx] = {...n[idx], maxGuests: parseInt(e.target.value) || undefined}; setEditReservationPackages(n); }} className="bg-white border-gray-300 text-gray-900 h-8 text-sm w-full" data-testid={`input-edit-pkg-guests-${idx}`} />
+            </div>
+          </div>
+        </div>
+      ))}
+      <Button type="button" size="sm" variant="outline" onClick={() => setEditReservationPackages([...editReservationPackages, { packageName: '', price: 0 }])} className="border-amber-400/40 text-amber-700 w-full" data-testid="btn-edit-add-pkg"><Plus className="w-4 h-4 ml-1" />إضافة باقة</Button>
+    </div>
+  )}
+</div>
 
  <div className="flex justify-end gap-2">
  <Button

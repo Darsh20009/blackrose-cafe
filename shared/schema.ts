@@ -70,6 +70,14 @@ export interface ICoffeeItem extends Document {
       customPrice: number;
     }>;
   }>;
+  isReservation?: boolean;
+  reservationPackages?: Array<{
+    packageName: string;
+    description?: string;
+    price: number;
+    duration?: string;
+    maxGuests?: number;
+  }>;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -126,6 +134,14 @@ const CoffeeItemSchema = new Schema<ICoffeeItem>({
       originalPrice: { type: Number, required: true, default: 0 },
       customPrice: { type: Number, required: true, default: 0 },
     }],
+  }],
+  isReservation: { type: Boolean, default: false },
+  reservationPackages: [{
+    packageName: { type: String, required: true },
+    description: { type: String },
+    price: { type: Number, required: true, default: 0 },
+    duration: { type: String },
+    maxGuests: { type: Number },
   }],
   recipeId: { type: String },
   costOfGoods: { type: Number, default: 0 },
@@ -1410,6 +1426,7 @@ export interface ICartItem extends Document {
   selectedSize?: string;
   selectedAddons?: string[];
   selectedItemAddons?: Array<{ nameAr: string; nameEn?: string; price: number }>;
+  selectedReservationPackage?: { packageName: string; description?: string; price: number; duration?: string; maxGuests?: number; } | null;
   carType?: string;
   carColor?: string;
   plateNumber?: string;
@@ -1425,6 +1442,7 @@ const CartItemSchema = new Schema<ICartItem>({
   selectedSize: { type: String },
   selectedAddons: [{ type: String }],
   selectedItemAddons: [{ type: mongoose.Schema.Types.Mixed }],
+  selectedReservationPackage: { type: mongoose.Schema.Types.Mixed, default: null },
   createdAt: { type: Date, default: Date.now },
 });
 

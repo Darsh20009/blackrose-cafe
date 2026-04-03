@@ -407,6 +407,29 @@ export default function MenuPage() {
     return aPos - bPos;
   });
 
+  const cartHasReservationItem = cartItems.some(ci => (ci.coffeeItem as any)?.isReservation);
+  const cartHasNonReservationItem = cartItems.some(ci => !(ci.coffeeItem as any)?.isReservation);
+
+  const checkReservationIsolation = (isReservationProduct: boolean): boolean => {
+    if (isReservationProduct && cartHasNonReservationItem) {
+      toast({
+        title: tc("تنبيه", "Notice"),
+        description: tc("منتجات الحجز لا يمكن إضافتها مع منتجات أخرى. يرجى إفراغ السلة أولاً.", "Reservation products cannot be mixed with other items. Please clear your cart first."),
+        variant: "destructive"
+      });
+      return false;
+    }
+    if (!isReservationProduct && cartHasReservationItem) {
+      toast({
+        title: tc("تنبيه", "Notice"),
+        description: tc("لديك منتج حجز في السلة. لا يمكن إضافة منتجات أخرى معه.", "You have a reservation item in your cart. No other items can be added."),
+        variant: "destructive"
+      });
+      return false;
+    }
+    return true;
+  };
+
   const handleAddToCartDirect = (item: CoffeeItem) => {
     if (!isStoreOpen()) {
       toast({
@@ -433,8 +456,11 @@ export default function MenuPage() {
     const hasSizes = item.availableSizes && item.availableSizes.length > 0;
     const hasAddons = itemsWithAddonsSet.has((item as any).id);
     const hasBundledItems = (item as any).bundledItems?.some((s: any) => s.items?.length > 0);
+    const isReservation = !!(item as any).isReservation;
 
-    if (hasMultipleVariants || hasSizes || hasAddons || hasBundledItems) {
+    if (!checkReservationIsolation(isReservation)) return;
+
+    if (isReservation || hasMultipleVariants || hasSizes || hasAddons || hasBundledItems) {
       setSelectedItem(item);
       setIsModalOpen(true);
     } else {
@@ -912,7 +938,8 @@ export default function MenuPage() {
         onClose={() => setIsModalOpen(false)}
         variants={selectedItem ? (groupedItems[getGroupingKey(selectedItem)] || [selectedItem]) : []}
         onAddToCart={(data) => {
-          addToCart(data.coffeeItemId, data.quantity, data.selectedSize, data.selectedAddons, data.selectedItemAddons);
+          if (!checkReservationIsolation(!!data.isReservation)) return;
+          addToCart(data.coffeeItemId, data.quantity, data.selectedSize, data.selectedAddons, data.selectedItemAddons, data.selectedReservationPackage);
           setIsModalOpen(false);
           toast({ 
             title: t("menu.added_to_cart"), 

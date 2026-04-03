@@ -109,6 +109,17 @@ Fully dynamic plan management UI in the QIROX super admin panel:
 - 3 plan cards (Lite/Pro/Infinity) with per-plan feature lists scrollable, color-coded badges, branch/employee/product limits at a glance.
 - Full feature matrix table grouped by `category`, using `ALL_FEATURES` and `isFeatureInPlan()` — always in sync with `plan-features.ts`, no duplication.
 
+## Recent Features (April 2026)
+
+### Reservation Product Feature (يحتاج حجز مسبق)
+- **Schema**: Added `isReservation: boolean` and `reservationPackages[]` (packageName, description, price, duration, maxGuests) to `ICoffeeItem` and `CoffeeItemSchema` in `shared/schema.ts`
+- **Cart isolation**: Reservation products cannot be mixed with regular items. Enforced in `menu.tsx` via `checkReservationIsolation()` before adding to cart
+- **Package selection**: `AddToCartModal` shows reservation package selector when product `isReservation=true`; validates package selection; price computed from selected package
+- **Cart store**: `addToCart()` and POST `/api/cart` extended to accept `selectedReservationPackage`; composite cart ID includes package name to prevent collision
+- **Delivery restriction**: `delivery-selection.tsx` detects `isReservationCart` and shows only "استلام / حضور في الفرع" option with reservation banner
+- **Post-order flow**: `checkout.tsx` detects `wasReservationOrder`; success page shows prominent reservation banner with invoice download button + WhatsApp confirmation button that pre-fills order details
+- **Management UI**: `employee-menu-management.tsx` has toggle + packages editor in both add and edit dialogs
+
 ## Recent Fixes (March 2026)
 
 - **Payment "Coming Soon" Removed**: `comingSoon={false}` in `checkout.tsx` and `checkout-modal.tsx` — payment methods are now fully active

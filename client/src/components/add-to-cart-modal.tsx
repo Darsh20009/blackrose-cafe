@@ -36,6 +36,7 @@ export function AddToCartModal({
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
   const [selectedItemAddonIndices, setSelectedItemAddonIndices] = useState<number[]>([]);
   const [selectedBundledItems, setSelectedBundledItems] = useState<Record<number, string[]>>({});
+  const [selectedReservationPackageIdx, setSelectedReservationPackageIdx] = useState<number | null>(null);
   const { toast } = useToast();
   const { i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
@@ -58,6 +59,7 @@ export function AddToCartModal({
       setSelectedAddons([]);
       setSelectedItemAddonIndices([]);
       setSelectedBundledItems({});
+      setSelectedReservationPackageIdx(null);
     }
   }, [isOpen, item]);
 
@@ -141,6 +143,16 @@ export function AddToCartModal({
       return;
     }
 
+    const reservationPackages: Array<{packageName: string; description?: string; price: number; duration?: string; maxGuests?: number;}> = (activeItem as any)?.reservationPackages || [];
+    if ((activeItem as any)?.isReservation && reservationPackages.length > 0 && selectedReservationPackageIdx === null) {
+      toast({
+        title: isAr ? "تنبيه" : "Notice",
+        description: isAr ? "يرجى اختيار باقة الحجز" : "Please select a reservation package",
+        variant: "destructive",
+      });
+      return;
+    }
+
     for (let i = 0; i < bundledSections.length; i++) {
       const section = bundledSections[i];
       if (section.minSelectable > 0) {
@@ -166,6 +178,9 @@ export function AddToCartModal({
       };
     }).filter(s => s.selectedItems.length > 0);
 
+    const selectedReservationPackage = (selectedReservationPackageIdx !== null && reservationPackages[selectedReservationPackageIdx])
+      ? reservationPackages[selectedReservationPackageIdx] : null;
+
     const cartItem = {
       coffeeItemId: activeItem.id,
       quantity,
@@ -173,6 +188,8 @@ export function AddToCartModal({
       selectedAddons: selectedAddons,
       selectedItemAddons,
       selectedBundledItems: selectedBundledDetails,
+      isReservation: !!(activeItem as any)?.isReservation,
+      selectedReservationPackage,
     };
 
     onAddToCart(cartItem);
@@ -190,8 +207,13 @@ export function AddToCartModal({
     return sum + (addon?.price ?? 0);
   }, 0);
 
-  const totalPrice =
-    (selectedSize
+  const reservationPkgs: Array<{packageName: string; price: number;}> = (activeItem as any)?.reservationPackages || [];
+  const reservationPackagePrice = (selectedReservationPackageIdx !== null && reservationPkgs[selectedReservationPackageIdx])
+    ? reservationPkgs[selectedReservationPackageIdx].price : null;
+
+  const totalPrice = (activeItem as any)?.isReservation && reservationPackagePrice !== null
+    ? reservationPackagePrice * quantity
+    : (selectedSize
       ? activeItem.availableSizes?.find((s) => s.nameAr === selectedSize)?.price ??
         activeItem.price
       : activeItem.price) * quantity +
@@ -445,6 +467,42 @@ export function AddToCartModal({
                     </button>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {(activeItem as any)?.isReservation && ((activeItem as any)?.reservationPackages || []).length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🗓️</span>
+                <Label className="text-sm font-semibold text-foreground">{isAr ? "اختر باقة الحجز" : "Select Reservation Package"}</Label>
+                <span className="text-[10px] text-muted-foreground border border-border rounded-full px-2 py-0.5">{isAr ? "مطلوب" : "Required"}</span>
+              </div>
+              <div className="space-y-2">
+                {((activeItem as any)?.reservationPackages || []).map((pkg: any, idx: number) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setSelectedReservationPackageIdx(idx)}
+                    className={`w-full text-right p-3 rounded-lg border-2 transition-all ${selectedReservationPackageIdx === idx ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30' : 'border-border bg-card hover:border-amber-300'}`}
+                    data-testid={`btn-select-pkg-${idx}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col items-start gap-0.5">
+                        <span className="font-semibold text-sm text-foreground">{pkg.packageName}</span>
+                        {pkg.description && <span className="text-xs text-muted-foreground">{pkg.description}</span>}
+                        <div className="flex items-center gap-3 mt-1">
+                          {pkg.duration && <span className="text-xs text-amber-700 bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded-full">⏱️ {pkg.duration}</span>}
+                          {pkg.maxGuests && <span className="text-xs text-blue-700 bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 rounded-full">👥 {isAr ? `حتى ${pkg.maxGuests} أشخاص` : `Up to ${pkg.maxGuests} guests`}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className={`font-bold text-sm ${selectedReservationPackageIdx === idx ? 'text-amber-600' : 'text-primary'}`}>{pkg.price}</span>
+                        <SarIcon className={`w-3.5 h-3.5 ${selectedReservationPackageIdx === idx ? 'text-amber-600' : 'text-primary'}`} />
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
           )}

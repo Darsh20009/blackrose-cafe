@@ -234,6 +234,8 @@ export default function DeliverySelectionPage() {
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [selectedMethod, setSelectedMethod] = useState<OrderMethod>('takeaway');
 
+  const isReservationCart = cartItems.some(ci => (ci.coffeeItem as any)?.isReservation);
+
   useEffect(() => {
     document.title = `${t("nav.branch_selection")} - BLACK ROSE CAFE`;
     const metaDesc = document.querySelector('meta[name="description"]');
@@ -497,7 +499,18 @@ export default function DeliverySelectionPage() {
   const selectedCarColor = CAR_COLORS.find(c => c.name === carInfo.color);
   const carHex = selectedCarColor?.hex || '#6B7280';
 
-  const methodCards = [
+  const methodCards = isReservationCart ? [
+    {
+      id: 'takeaway' as OrderMethod,
+      icon: Store,
+      label: 'استلام / حضور في الفرع',
+      desc: 'منتجات الحجز تستلزم الحضور للفرع',
+      color: 'from-amber-500 to-amber-600',
+      ring: 'ring-amber-500',
+      bg: 'bg-amber-50 dark:bg-amber-950/20',
+      badge: '🗓️ حجز',
+    },
+  ] : [
     enableTakeaway && {
       id: 'takeaway' as OrderMethod,
       icon: Store,
@@ -642,6 +655,16 @@ export default function DeliverySelectionPage() {
         </Card>
 
         {/* Method Selection — shown once branch is selected */}
+        {isReservationCart && (
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-700 rounded-2xl p-4 flex items-start gap-3">
+            <span className="text-2xl mt-0.5">🗓️</span>
+            <div>
+              <p className="font-bold text-amber-800 dark:text-amber-200 text-sm">سلة الحجز المسبق</p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">لديك منتج يتطلب حجزاً مسبقاً. سيتم تقييدك بخيار الاستلام من الفرع فقط، وسيتم إرسال تأكيد الحجز عبر واتساب.</p>
+            </div>
+          </div>
+        )}
+
         {selectedBranchId && methodCards.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center gap-2">

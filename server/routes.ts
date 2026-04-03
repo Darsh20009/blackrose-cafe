@@ -7051,7 +7051,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add item to cart
   app.post("/api/cart", async (req, res) => {
     try {
-      const { sessionId, coffeeItemId, quantity, selectedSize, selectedAddons, selectedItemAddons } = req.body;
+      const { sessionId, coffeeItemId, quantity, selectedSize, selectedAddons, selectedItemAddons, selectedReservationPackage } = req.body;
       // console.log(`[CART] POST: item=${coffeeItemId}, size=${selectedSize}, qty=${quantity}`);
 
       if (!sessionId || !coffeeItemId) {
@@ -7067,7 +7067,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const normalizedSize = sizeName || "default";
       const normalizedAddons = Array.isArray(addons) ? addons.sort().join(",") : "";
       const normalizedItemAddons = itemAddons.map((a: any) => a.nameAr).sort().join(",");
-      const compositeId = `${coffeeItemId}-${normalizedSize}-${normalizedAddons}-${normalizedItemAddons}`;
+      const reservationPkgKey = selectedReservationPackage ? `-pkg:${selectedReservationPackage.packageName}` : "";
+      const compositeId = `${coffeeItemId}-${normalizedSize}-${normalizedAddons}-${normalizedItemAddons}${reservationPkgKey}`;
       
       let cartItem = await CartItemModel.findOne({ sessionId, id: compositeId });
       
@@ -7083,6 +7084,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           selectedSize: normalizedSize,
           selectedAddons: addons,
           selectedItemAddons: itemAddons,
+          selectedReservationPackage: selectedReservationPackage || null,
           createdAt: new Date()
         });
       }

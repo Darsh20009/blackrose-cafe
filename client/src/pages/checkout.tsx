@@ -201,6 +201,7 @@ export default function CheckoutPage() {
   const [paymobCheckoutUrl, setPaymobCheckoutUrl] = useState("");
   const [orderDetails, setOrderDetails] = useState<any>(null);
   const [showSuccessPage, setShowSuccessPage] = useState(false);
+  const [wasReservationOrder, setWasReservationOrder] = useState(false);
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -226,6 +227,11 @@ export default function CheckoutPage() {
   const { data: businessConfig } = useQuery<any>({
     queryKey: ["/api/business-config"],
     staleTime: 60000,
+  });
+
+  const { data: publicSettings } = useQuery<any>({
+    queryKey: ["/api/public/settings"],
+    staleTime: 120000,
   });
 
   const pointsPerSar: number = loyaltySettings?.pointsPerSar ?? 50;
@@ -531,6 +537,8 @@ export default function CheckoutPage() {
         try { await refetchLoyaltyCard(); } catch {}
       }
       // Gift card is now redeemed atomically inside POST /api/orders — no separate call needed
+      const hasReservationItem = cartItems.some(ci => (ci.coffeeItem as any)?.isReservation);
+      setWasReservationOrder(hasReservationItem);
       setOrderDetails(data);
       clearCart();
       customerStorage.clearActiveOffer();
@@ -934,6 +942,17 @@ export default function CheckoutPage() {
       window.open("https://maps.app.goo.gl/zhHFfQVjWRxVKEBn6?g_st=ic", "_blank");
     };
 
+    const handleWhatsAppReservation = () => {
+      const rawPhone = businessConfig?.contactPhone || businessConfig?.socialLinks?.whatsapp?.replace(/\D/g, '') || '';
+      const phone = rawPhone.replace(/\D/g, '').replace(/^0/, '966');
+      const reservationItems = orderDetails?.items || [];
+      const itemsText = reservationItems.map((i: any) => `• ${i.nameAr || i.coffeeItem?.nameAr || 'منتج'} x${i.quantity}`).join('\n');
+      const msg = encodeURIComponent(
+        `🗓️ طلب تأكيد حجز\n\nرقم الطلب: ${orderNum}\n\n${itemsText}\n\nالإجمالي: ${orderTotal.toFixed(2)} ر.س\n\nالاسم: ${customerName || orderDetails?.customerName || '—'}\nالجوال: ${customerPhone || orderDetails?.customerPhone || '—'}\n\nأرجو التأكيد على هذا الحجز`
+      );
+      window.open(`https://wa.me/${phone || '966920000000'}?text=${msg}`, '_blank');
+    };
+
     return (
       <div className="min-h-screen bg-background flex flex-col items-center py-10 px-4" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="max-w-md w-full space-y-4">
@@ -1039,6 +1058,40 @@ export default function CheckoutPage() {
               </a>
             </div>
           </div>
+
+          {/* Reservation confirmation banner */}
+          {wasReservationOrder && (
+            <div className="bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-400 dark:border-amber-600 rounded-3xl overflow-hidden shadow-lg">
+              <div className="bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-3 flex items-center gap-2">
+                <span className="text-xl">🗓️</span>
+                <p className="font-black text-white text-base">طلب حجز مسبق</p>
+              </div>
+              <div className="p-5 space-y-4">
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  لإتمام حجزك يرجى اتخاذ الخطوتين التاليتين:
+                </p>
+                <div className="space-y-3">
+                  <button
+                    onClick={async () => { await handlePrintInvoice(); }}
+                    className="w-full flex items-center justify-center gap-3 bg-white dark:bg-card border-2 border-amber-300 dark:border-amber-600 rounded-xl py-3 px-4 font-bold text-amber-800 dark:text-amber-200 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+                    data-testid="button-download-reservation-invoice"
+                  >
+                    <Printer className="w-5 h-5" />
+                    <span>١. تحميل الفاتورة</span>
+                  </button>
+                  <button
+                    onClick={handleWhatsAppReservation}
+                    className="w-full flex items-center justify-center gap-3 bg-green-500 hover:bg-green-600 text-white rounded-xl py-3 px-4 font-bold transition-colors shadow"
+                    data-testid="button-whatsapp-reservation"
+                  >
+                    <span className="text-xl">💬</span>
+                    <span>٢. تأكيد الحجز عبر واتساب</span>
+                  </button>
+                </div>
+                <p className="text-xs text-amber-600 dark:text-amber-400 text-center">سيتواصل معك فريقنا لتأكيد الحجز وتفاصيله</p>
+              </div>
+            </div>
+          )}
 
           {/* Push notification */}
           {!pushSubscribed && notifPermission !== 'granted' && notifPermission !== 'denied' && (
