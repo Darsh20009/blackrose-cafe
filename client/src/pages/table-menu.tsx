@@ -450,8 +450,9 @@ export default function TableMenuNew() {
     const hasMultipleVariants = group.length > 1;
     const hasSizes = item.availableSizes && item.availableSizes.length > 0;
     const hasAddons = itemsWithAddonsSet.has(item.id);
+    const hasBundledItems = (item as any).bundledItems?.some((s: any) => s.items?.length > 0);
 
-    if (hasMultipleVariants || hasSizes || hasAddons) {
+    if (hasMultipleVariants || hasSizes || hasAddons || hasBundledItems) {
       setSelectedItem(item);
       setIsModalOpen(true);
     } else {

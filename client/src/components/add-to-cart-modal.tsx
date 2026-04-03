@@ -35,6 +35,7 @@ export function AddToCartModal({
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
   const [selectedItemAddonIndices, setSelectedItemAddonIndices] = useState<number[]>([]);
+  const [selectedBundledItems, setSelectedBundledItems] = useState<Record<number, string[]>>({});
   const { toast } = useToast();
   const { i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
@@ -44,6 +45,7 @@ export function AddToCartModal({
     setSelectedSize(null);
     setSelectedAddons([]);
     setSelectedItemAddonIndices([]);
+    setSelectedBundledItems({});
     setSelectedVariant(null);
     onClose();
   }, [onClose]);
@@ -55,6 +57,7 @@ export function AddToCartModal({
       setSelectedSize(null);
       setSelectedAddons([]);
       setSelectedItemAddonIndices([]);
+      setSelectedBundledItems({});
     }
   }, [isOpen, item]);
 
@@ -100,6 +103,23 @@ export function AddToCartModal({
     return (activeItem as any)?.addons || [];
   }, [activeItem]);
 
+  const bundledSections: Array<{
+    sectionTitle: string;
+    selectionType: 'single' | 'multiple';
+    minSelectable: number;
+    maxSelectable: number;
+    items: Array<{ productId: string; nameAr: string; nameEn?: string; imageUrl?: string; originalPrice: number; customPrice: number; }>;
+  }> = useMemo(() => (activeItem as any)?.bundledItems || [], [activeItem]);
+
+  const bundledItemsPrice = useMemo(() => {
+    return bundledSections.reduce((total, section, secIdx) => {
+      const selected = selectedBundledItems[secIdx] || [];
+      return total + section.items
+        .filter(it => selected.includes(it.productId))
+        .reduce((s, it) => s + it.customPrice, 0);
+    }, 0);
+  }, [bundledSections, selectedBundledItems]);
+
   const handleAddToCart = () => {
     if (!activeItem) return;
 
@@ -121,7 +141,30 @@ export function AddToCartModal({
       return;
     }
 
+    for (let i = 0; i < bundledSections.length; i++) {
+      const section = bundledSections[i];
+      if (section.minSelectable > 0) {
+        const selected = selectedBundledItems[i] || [];
+        if (selected.length < section.minSelectable) {
+          toast({
+            title: isAr ? "تنبيه" : "Notice",
+            description: isAr ? `يرجى اختيار ${section.minSelectable === 1 ? 'منتج' : section.minSelectable + ' منتجات'} من "${section.sectionTitle}"` : `Please select from "${section.sectionTitle}"`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    }
+
     const selectedItemAddons = selectedItemAddonIndices.map(idx => inlineAddons[idx]).filter(Boolean);
+
+    const selectedBundledDetails = bundledSections.map((section, secIdx) => {
+      const selectedIds = selectedBundledItems[secIdx] || [];
+      return {
+        sectionTitle: section.sectionTitle,
+        selectedItems: section.items.filter(it => selectedIds.includes(it.productId)),
+      };
+    }).filter(s => s.selectedItems.length > 0);
 
     const cartItem = {
       coffeeItemId: activeItem.id,
@@ -129,6 +172,7 @@ export function AddToCartModal({
       selectedSize: selectedSize || "default",
       selectedAddons: selectedAddons,
       selectedItemAddons,
+      selectedBundledItems: selectedBundledDetails,
     };
 
     onAddToCart(cartItem);
@@ -151,7 +195,7 @@ export function AddToCartModal({
       ? activeItem.availableSizes?.find((s) => s.nameAr === selectedSize)?.price ??
         activeItem.price
       : activeItem.price) * quantity +
-    (productAddonPrice + inlineAddonsPrice) * quantity;
+    (productAddonPrice + inlineAddonsPrice + bundledItemsPrice) * quantity;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && resetModal()}>
@@ -402,6 +446,67 @@ export function AddToCartModal({
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {bundledSections.length > 0 && bundledSections.some(s => s.items.length > 0) && (
+            <div className="space-y-3">
+              {bundledSections.filter(s => s.items.length > 0).map((section, secIdx) => (
+                <div key={secIdx} className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-semibold text-foreground">{section.sectionTitle || (isAr ? "منتجات مصاحبة" : "Add-on Products")}</Label>
+                    {section.minSelectable > 0 && (
+                      <span className="text-[10px] text-red-500 border border-red-200 rounded-full px-2 py-0.5">{isAr ? "إلزامي" : "Required"}</span>
+                    )}
+                    {section.selectionType === 'single' ? (
+                      <span className="text-[10px] text-muted-foreground border border-border rounded-full px-2 py-0.5">{isAr ? "اختر واحداً" : "Select one"}</span>
+                    ) : section.maxSelectable > 1 ? (
+                      <span className="text-[10px] text-muted-foreground border border-border rounded-full px-2 py-0.5">{isAr ? `حتى ${section.maxSelectable}` : `Up to ${section.maxSelectable}`}</span>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {section.items.map((bItem) => {
+                      const selectedIds = selectedBundledItems[secIdx] || [];
+                      const isSelected = selectedIds.includes(bItem.productId);
+                      return (
+                        <button
+                          key={bItem.productId}
+                          type="button"
+                          onClick={() => {
+                            setSelectedBundledItems(prev => {
+                              const current = prev[secIdx] || [];
+                              if (section.selectionType === 'single') {
+                                return {...prev, [secIdx]: isSelected ? [] : [bItem.productId]};
+                              } else {
+                                const maxSel = section.maxSelectable || 99;
+                                if (isSelected) return {...prev, [secIdx]: current.filter(id => id !== bItem.productId)};
+                                if (current.length >= maxSel) return prev;
+                                return {...prev, [secIdx]: [...current, bItem.productId]};
+                              }
+                            });
+                          }}
+                          className={`rounded-xl text-xs font-medium transition-all flex items-center gap-2 px-3 py-2 ${
+                            isSelected
+                              ? "bg-primary text-white shadow-md ring-2 ring-primary/30"
+                              : "bg-secondary text-foreground border border-border hover:border-primary/50"
+                          }`}
+                          data-testid={`btn-bundle-item-${secIdx}-${bItem.productId}`}
+                        >
+                          {bItem.imageUrl && (
+                            <img src={bItem.imageUrl.startsWith('/') ? bItem.imageUrl : '/' + bItem.imageUrl} alt={bItem.nameAr} className="w-7 h-7 rounded object-cover" />
+                          )}
+                          <div className="text-right">
+                            <div>{isAr ? bItem.nameAr : (bItem.nameEn || bItem.nameAr)}</div>
+                            <div className={`text-[10px] ${isSelected ? 'text-white/80' : 'text-primary font-bold'}`}>
+                              {bItem.customPrice === 0 ? (isAr ? "مجاني 🎁" : "Free 🎁") : `+${bItem.customPrice} ${isAr ? 'ر.س' : 'SAR'}`}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 

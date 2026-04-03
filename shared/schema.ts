@@ -56,6 +56,20 @@ export interface ICoffeeItem extends Document {
     section?: string;
     selectionType?: 'single' | 'multiple';
   }>;
+  bundledItems?: Array<{
+    sectionTitle: string;
+    selectionType: 'single' | 'multiple';
+    minSelectable: number;
+    maxSelectable: number;
+    items: Array<{
+      productId: string;
+      nameAr: string;
+      nameEn?: string;
+      imageUrl?: string;
+      originalPrice: number;
+      customPrice: number;
+    }>;
+  }>;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -98,6 +112,20 @@ const CoffeeItemSchema = new Schema<ICoffeeItem>({
     maxSelectable: { type: Number, default: 1 },
     section: { type: String, default: '' },
     selectionType: { type: String, enum: ['single', 'multiple'], default: 'multiple' },
+  }],
+  bundledItems: [{
+    sectionTitle: { type: String, required: true },
+    selectionType: { type: String, enum: ['single', 'multiple'], default: 'single' },
+    minSelectable: { type: Number, default: 0 },
+    maxSelectable: { type: Number, default: 1 },
+    items: [{
+      productId: { type: String, required: true },
+      nameAr: { type: String, required: true },
+      nameEn: { type: String },
+      imageUrl: { type: String },
+      originalPrice: { type: Number, required: true, default: 0 },
+      customPrice: { type: Number, required: true, default: 0 },
+    }],
   }],
   recipeId: { type: String },
   costOfGoods: { type: Number, default: 0 },

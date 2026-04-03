@@ -68,6 +68,16 @@ export default function EmployeeMenuManagement() {
  const [editableAddons, setEditableAddons] = useState<Array<{nameAr: string; nameEn?: string; price: number; imageUrl?: string; category?: string; section?: string; selectionType?: 'single' | 'multiple'}>>([]);
  const [addEditableAddons, setAddEditableAddons] = useState<Array<{nameAr: string; nameEn?: string; price: number; imageUrl?: string; category?: string; section?: string; selectionType?: 'single' | 'multiple'}>>([]);
 const [addEditableSizes, setAddEditableSizes] = useState<Array<{nameAr: string; price: number}>>([]);
+
+type BundledSection = {
+  sectionTitle: string;
+  selectionType: 'single' | 'multiple';
+  minSelectable: number;
+  maxSelectable: number;
+  items: Array<{ productId: string; nameAr: string; nameEn?: string; imageUrl?: string; originalPrice: number; customPrice: number; }>;
+};
+const [addBundledItems, setAddBundledItems] = useState<BundledSection[]>([]);
+const [editBundledItems, setEditBundledItems] = useState<BundledSection[]>([]);
  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
  const [isImageLibraryOpen, setIsImageLibraryOpen] = useState(false);
  const [imageLibraryContext, setImageLibraryContext] = useState<'add' | 'edit' | 'add-addon' | 'edit-addon'>('add');
@@ -563,6 +573,7 @@ const [aiEditDescription, setAiEditDescription] = useState("");
      isGiftable: false, // Default value, will be updated by UI if needed
      availableSizes: addEditableSizes.filter(s => s.nameAr.trim()),
      addons: addEditableAddons.filter(a => a.nameAr.trim()),
+     bundledItems: addBundledItems,
    });
    setAddStep(2);
  };
@@ -600,6 +611,7 @@ const [aiEditDescription, setAiEditDescription] = useState("");
      isGiftable: step1Data.isGiftable || false,
      availableSizes: step1Data.availableSizes || [],
      addons: (step1Data as any).addons || [],
+     bundledItems: (step1Data as any).bundledItems || [],
      branchAvailability: step1Data.branchAvailability,
      hasRecipe: 0,
      requiresRecipe: 0,
@@ -634,6 +646,7 @@ const [aiEditDescription, setAiEditDescription] = useState("");
      isGiftable: step1Data.isGiftable || false,
      availableSizes: step1Data.availableSizes || [],
      addons: (step1Data as any).addons || [],
+     bundledItems: (step1Data as any).bundledItems || [],
      branchAvailability: step1Data.branchAvailability,
      hasRecipe: hasRecipeItems ? 1 : 0,
      requiresRecipe: 1,
@@ -715,6 +728,7 @@ const [aiEditDescription, setAiEditDescription] = useState("");
      imageUrl: editImageUrls.length > 0 ? editImageUrls[0] : editingItem.imageUrl,
     imageUrls: editImageUrls.length > 0 ? editImageUrls : ((editingItem as any).imageUrls || []),
     addons: editableAddons,
+    bundledItems: editBundledItems,
      availableSizes: editableSizes,
    };
 
@@ -725,6 +739,7 @@ const [aiEditDescription, setAiEditDescription] = useState("");
  setEditingItem(item);
  setEditableSizes(item.availableSizes || []);
  setEditableAddons(item.addons || []);
+ setEditBundledItems((item as any).bundledItems || []);
 setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : []));
  setAiEditNameEn(item.nameEn || "");
  setAiEditDescription(item.description || "");
@@ -846,6 +861,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
     setAddImageUrls([]);
     setAddEditableAddons([]);
     setAddEditableSizes([]);
+    setAddBundledItems([]);
     setSelectedCategory(defaultCategory);
     setSelectedCoffeeStrength("classic");
   }
@@ -1171,6 +1187,63 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
       </div>
     );
   })()}
+</div>
+
+{/* Bundled Items Section */}
+<div className="space-y-2">
+  <Label className="text-gray-300 flex items-center gap-2"><span>🔗</span> منتجات مصاحبة مع الطلب</Label>
+  <p className="text-xs text-gray-500">أضف منتجات من المنيو تُعرض على العميل عند طلب هذا المنتج (مجانية أو بسعر مخفض)</p>
+  {addBundledItems.map((section, secIdx) => (
+    <div key={secIdx} className="border border-purple-200 rounded-lg p-3 space-y-2 bg-purple-50/30">
+      <div className="flex items-center gap-2">
+        <Input
+          placeholder="اسم القسم (مثال: اختر مشروبك)"
+          value={section.sectionTitle}
+          onChange={(e) => { const n = [...addBundledItems]; n[secIdx] = {...n[secIdx], sectionTitle: e.target.value}; setAddBundledItems(n); }}
+          className="bg-white border-gray-300 text-gray-900 flex-1 h-8 text-sm"
+          data-testid={`input-add-bundle-title-${secIdx}`}
+        />
+        <button type="button" onClick={() => setAddBundledItems(addBundledItems.filter((_, i) => i !== secIdx))} className="text-red-400 hover:text-red-600" data-testid={`btn-del-bundle-${secIdx}`}><X className="w-4 h-4" /></button>
+      </div>
+      <div className="flex gap-2 items-center flex-wrap">
+        <span className="text-xs text-gray-500">نوع الاختيار:</span>
+        <button type="button" onClick={() => { const n = [...addBundledItems]; n[secIdx] = {...n[secIdx], selectionType: 'single', maxSelectable: 1}; setAddBundledItems(n); }} className={`text-xs px-2 py-1 rounded border transition-colors ${section.selectionType === 'single' ? 'bg-purple-500 text-white border-purple-500' : 'bg-white text-gray-600 border-gray-300'}`} data-testid={`btn-bundle-single-${secIdx}`}>◉ واحد فقط</button>
+        <button type="button" onClick={() => { const n = [...addBundledItems]; n[secIdx] = {...n[secIdx], selectionType: 'multiple'}; setAddBundledItems(n); }} className={`text-xs px-2 py-1 rounded border transition-colors ${section.selectionType === 'multiple' ? 'bg-purple-500 text-white border-purple-500' : 'bg-white text-gray-600 border-gray-300'}`} data-testid={`btn-bundle-multi-${secIdx}`}>☑ متعدد</button>
+        {section.selectionType === 'multiple' && (
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-gray-500">حتى:</span>
+            <Input type="number" min={1} value={section.maxSelectable || 1} onChange={(e) => { const n = [...addBundledItems]; n[secIdx] = {...n[secIdx], maxSelectable: parseInt(e.target.value) || 1}; setAddBundledItems(n); }} className="bg-white border-gray-300 text-gray-900 w-14 h-7 text-xs" data-testid={`input-bundle-max-${secIdx}`} />
+            <span className="text-xs text-gray-500">خيار</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-gray-500">إلزامي؟</span>
+          <button type="button" onClick={() => { const n = [...addBundledItems]; n[secIdx] = {...n[secIdx], minSelectable: n[secIdx].minSelectable > 0 ? 0 : 1}; setAddBundledItems(n); }} className={`text-xs px-2 py-1 rounded border transition-colors ${section.minSelectable > 0 ? 'bg-orange-400 text-white border-orange-400' : 'bg-white text-gray-600 border-gray-300'}`} data-testid={`btn-bundle-required-${secIdx}`}>{section.minSelectable > 0 ? 'نعم' : 'اختياري'}</button>
+        </div>
+      </div>
+      {section.items.map((bItem, itemIdx) => (
+        <div key={itemIdx} className="flex items-center gap-2 bg-white rounded p-2 border border-gray-200">
+          <select value={bItem.productId} onChange={(e) => {
+            const picked = coffeeItems.find(c => c.id === e.target.value);
+            const n = [...addBundledItems];
+            n[secIdx].items[itemIdx] = { productId: e.target.value, nameAr: picked?.nameAr || '', nameEn: picked?.nameEn, imageUrl: picked?.imageUrl, originalPrice: picked?.price || 0, customPrice: n[secIdx].items[itemIdx].customPrice };
+            setAddBundledItems(n);
+          }} className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 bg-white text-gray-900" data-testid={`select-bundle-product-${secIdx}-${itemIdx}`}>
+            <option value="">اختر منتجاً من المنيو</option>
+            {coffeeItems.map(c => <option key={c.id} value={c.id}>{c.nameAr} ({c.price} ر.س)</option>)}
+          </select>
+          <div className="flex items-center gap-1 shrink-0">
+            <Input type="number" min={0} step={0.5} placeholder="سعره" value={bItem.customPrice} onChange={(e) => { const n = [...addBundledItems]; n[secIdx].items[itemIdx] = {...n[secIdx].items[itemIdx], customPrice: parseFloat(e.target.value) || 0}; setAddBundledItems(n); }} className="bg-white border-gray-300 text-gray-900 w-20 h-8 text-sm" data-testid={`input-bundle-price-${secIdx}-${itemIdx}`} />
+            <span className="text-xs text-gray-500">ر.س</span>
+            {bItem.customPrice === 0 && bItem.productId && <span className="text-xs bg-green-100 text-green-700 px-1 rounded">مجاني</span>}
+          </div>
+          <button type="button" onClick={() => { const n = [...addBundledItems]; n[secIdx].items = n[secIdx].items.filter((_, i) => i !== itemIdx); setAddBundledItems(n); }} className="text-red-400 hover:text-red-600 shrink-0" data-testid={`btn-del-bundle-item-${secIdx}-${itemIdx}`}><X className="w-3 h-3" /></button>
+        </div>
+      ))}
+      <button type="button" onClick={() => { const n = [...addBundledItems]; n[secIdx].items.push({ productId: '', nameAr: '', originalPrice: 0, customPrice: 0 }); setAddBundledItems(n); }} className="text-xs text-purple-600 hover:underline" data-testid={`btn-add-bundle-item-${secIdx}`}>+ إضافة منتج لهذا القسم</button>
+    </div>
+  ))}
+  <Button type="button" size="sm" variant="outline" onClick={() => setAddBundledItems([...addBundledItems, { sectionTitle: '', selectionType: 'single', minSelectable: 0, maxSelectable: 1, items: [] }])} className="border-purple-400/40 text-purple-600 w-full" data-testid="btn-add-bundle-section"><Plus className="w-4 h-4 ml-1" />إضافة قسم منتجات مصاحبة</Button>
 </div>
 
 {employee?.role === "manager" && branches.length > 0 && (
@@ -1899,6 +1972,54 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
        </div>
      );
    })()}
+ </div>
+
+ {/* Bundled Items Section - Edit */}
+ <div className="space-y-2">
+   <Label className="text-gray-300 flex items-center gap-2"><span>🔗</span> منتجات مصاحبة مع الطلب</Label>
+   <p className="text-xs text-gray-500">منتجات من المنيو تُعرض على العميل عند طلب هذا المنتج</p>
+   {editBundledItems.map((section, secIdx) => (
+     <div key={secIdx} className="border border-purple-200 rounded-lg p-3 space-y-2 bg-purple-50/30">
+       <div className="flex items-center gap-2">
+         <Input placeholder="اسم القسم" value={section.sectionTitle} onChange={(e) => { const n = [...editBundledItems]; n[secIdx] = {...n[secIdx], sectionTitle: e.target.value}; setEditBundledItems(n); }} className="bg-white border-gray-300 text-gray-900 flex-1 h-8 text-sm" data-testid={`input-edit-bundle-title-${secIdx}`} />
+         <button type="button" onClick={() => setEditBundledItems(editBundledItems.filter((_, i) => i !== secIdx))} className="text-red-400 hover:text-red-600" data-testid={`btn-del-edit-bundle-${secIdx}`}><X className="w-4 h-4" /></button>
+       </div>
+       <div className="flex gap-2 items-center flex-wrap">
+         <span className="text-xs text-gray-500">نوع الاختيار:</span>
+         <button type="button" onClick={() => { const n = [...editBundledItems]; n[secIdx] = {...n[secIdx], selectionType: 'single', maxSelectable: 1}; setEditBundledItems(n); }} className={`text-xs px-2 py-1 rounded border transition-colors ${section.selectionType === 'single' ? 'bg-purple-500 text-white border-purple-500' : 'bg-white text-gray-600 border-gray-300'}`} data-testid={`btn-edit-bundle-single-${secIdx}`}>◉ واحد فقط</button>
+         <button type="button" onClick={() => { const n = [...editBundledItems]; n[secIdx] = {...n[secIdx], selectionType: 'multiple'}; setEditBundledItems(n); }} className={`text-xs px-2 py-1 rounded border transition-colors ${section.selectionType === 'multiple' ? 'bg-purple-500 text-white border-purple-500' : 'bg-white text-gray-600 border-gray-300'}`} data-testid={`btn-edit-bundle-multi-${secIdx}`}>☑ متعدد</button>
+         {section.selectionType === 'multiple' && (
+           <div className="flex items-center gap-1">
+             <span className="text-xs text-gray-500">حتى:</span>
+             <Input type="number" min={1} value={section.maxSelectable || 1} onChange={(e) => { const n = [...editBundledItems]; n[secIdx] = {...n[secIdx], maxSelectable: parseInt(e.target.value) || 1}; setEditBundledItems(n); }} className="bg-white border-gray-300 text-gray-900 w-14 h-7 text-xs" data-testid={`input-edit-bundle-max-${secIdx}`} />
+             <span className="text-xs text-gray-500">خيار</span>
+           </div>
+         )}
+         <button type="button" onClick={() => { const n = [...editBundledItems]; n[secIdx] = {...n[secIdx], minSelectable: n[secIdx].minSelectable > 0 ? 0 : 1}; setEditBundledItems(n); }} className={`text-xs px-2 py-1 rounded border transition-colors ${section.minSelectable > 0 ? 'bg-orange-400 text-white border-orange-400' : 'bg-white text-gray-600 border-gray-300'}`} data-testid={`btn-edit-bundle-required-${secIdx}`}>{section.minSelectable > 0 ? 'إلزامي' : 'اختياري'}</button>
+       </div>
+       {section.items.map((bItem, itemIdx) => (
+         <div key={itemIdx} className="flex items-center gap-2 bg-white rounded p-2 border border-gray-200">
+           <select value={bItem.productId} onChange={(e) => {
+             const picked = coffeeItems.find(c => c.id === e.target.value);
+             const n = [...editBundledItems];
+             n[secIdx].items[itemIdx] = { productId: e.target.value, nameAr: picked?.nameAr || '', nameEn: picked?.nameEn, imageUrl: picked?.imageUrl, originalPrice: picked?.price || 0, customPrice: n[secIdx].items[itemIdx].customPrice };
+             setEditBundledItems(n);
+           }} className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 bg-white text-gray-900" data-testid={`select-edit-bundle-product-${secIdx}-${itemIdx}`}>
+             <option value="">اختر منتجاً من المنيو</option>
+             {coffeeItems.map(c => <option key={c.id} value={c.id}>{c.nameAr} ({c.price} ر.س)</option>)}
+           </select>
+           <div className="flex items-center gap-1 shrink-0">
+             <Input type="number" min={0} step={0.5} placeholder="سعره" value={bItem.customPrice} onChange={(e) => { const n = [...editBundledItems]; n[secIdx].items[itemIdx] = {...n[secIdx].items[itemIdx], customPrice: parseFloat(e.target.value) || 0}; setEditBundledItems(n); }} className="bg-white border-gray-300 text-gray-900 w-20 h-8 text-sm" data-testid={`input-edit-bundle-price-${secIdx}-${itemIdx}`} />
+             <span className="text-xs text-gray-500">ر.س</span>
+             {bItem.customPrice === 0 && bItem.productId && <span className="text-xs bg-green-100 text-green-700 px-1 rounded">مجاني</span>}
+           </div>
+           <button type="button" onClick={() => { const n = [...editBundledItems]; n[secIdx].items = n[secIdx].items.filter((_, i) => i !== itemIdx); setEditBundledItems(n); }} className="text-red-400 hover:text-red-600 shrink-0" data-testid={`btn-del-edit-bundle-item-${secIdx}-${itemIdx}`}><X className="w-3 h-3" /></button>
+         </div>
+       ))}
+       <button type="button" onClick={() => { const n = [...editBundledItems]; n[secIdx].items.push({ productId: '', nameAr: '', originalPrice: 0, customPrice: 0 }); setEditBundledItems(n); }} className="text-xs text-purple-600 hover:underline" data-testid={`btn-add-edit-bundle-item-${secIdx}`}>+ إضافة منتج لهذا القسم</button>
+     </div>
+   ))}
+   <Button type="button" size="sm" variant="outline" onClick={() => setEditBundledItems([...editBundledItems, { sectionTitle: '', selectionType: 'single', minSelectable: 0, maxSelectable: 1, items: [] }])} className="border-purple-400/40 text-purple-600 w-full" data-testid="btn-add-edit-bundle-section"><Plus className="w-4 h-4 ml-1" />إضافة قسم منتجات مصاحبة</Button>
  </div>
 
  <div className="flex justify-end gap-2">
