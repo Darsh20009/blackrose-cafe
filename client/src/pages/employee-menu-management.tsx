@@ -118,6 +118,9 @@ const [editReservationPackages, setEditReservationPackages] = useState<Reservati
    isGiftable?: boolean;
    availableSizes?: any[];
    addons?: any[];
+   bundledItems?: any[];
+   isReservation?: boolean;
+   reservationPackages?: any[];
  } | null>(null);
  
  const [sizeImages, setSizeImages] = useState<{[key: string]: string}>({});
