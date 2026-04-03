@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { NotificationBell } from "@/components/notification-bell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Coffee, LogOut, ShoppingCart, ClipboardList, User, Award, Gift, Sparkles, Download, IdCard, Settings, BarChart3, Table, Lock, Clock, MonitorSmartphone, ChefHat, Wallet, Warehouse, Eye, Bell, CheckCircle, AlertCircle, Calendar, FileText, MapPin, X, Wifi, WifiOff } from "lucide-react";
+import { Coffee, LogOut, ShoppingCart, ClipboardList, User, Award, Gift, Sparkles, Download, IdCard, Settings, BarChart3, Table, Lock, Clock, MonitorSmartphone, ChefHat, Wallet, Warehouse, Eye, Bell, CheckCircle, AlertCircle, Calendar, FileText, MapPin, X, Wifi, WifiOff, Utensils } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { LoadingState, EmptyState, ErrorState } from "@/components/ui/states";
 import { EmployeeSidebar } from "@/components/employee-sidebar";
@@ -792,6 +792,20 @@ export default function EmployeeDashboard() {
                 <div className="text-center">
                   <div className="font-bold text-lg">{t('employee.drinks_management')}</div>
                   <div className="text-sm opacity-90">{t('employee.drinks_desc')}</div>
+                </div>
+              </Button>
+
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-32 flex flex-col items-center justify-center gap-3"
+                onClick={() => setLocation("/employee/menu-management?type=food")}
+                data-testid="button-food-management"
+              >
+                <Utensils className="w-10 h-10" />
+                <div className="text-center">
+                  <div className="font-bold text-lg">إدارة المأكولات</div>
+                  <div className="text-sm opacity-90">قائمة الطعام والوجبات</div>
                 </div>
               </Button>
 

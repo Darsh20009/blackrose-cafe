@@ -1,6 +1,6 @@
 import { useTranslate } from "@/lib/useTranslate";
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,8 +57,9 @@ interface MenuCategory {
 
 export default function EmployeeMenuManagement() {
  const [, setLocation] = useLocation();
+ const search = useSearch();
  const [employee, setEmployee] = useState<Employee | null>(null);
- const managementType = new URLSearchParams(window.location.search).get('type') === 'food' ? 'food' : 'drinks';
+ const managementType = new URLSearchParams(search).get('type') === 'food' ? 'food' : 'drinks';
  const isFood = managementType === 'food';
  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
