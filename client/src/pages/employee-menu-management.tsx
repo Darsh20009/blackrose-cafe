@@ -173,17 +173,17 @@ const [aiEditDescription, setAiEditDescription] = useState("");
 
  const { data: rawItems = [] } = useQuery<RawItem[]>({
    queryKey: ["/api/inventory/raw-items"],
-   enabled: employee?.role === "manager",
+   enabled: (employee?.role === "manager" || !employee),
  });
 
  const { data: allRecipes = [] } = useQuery<RecipeItem[]>({
    queryKey: ["/api/inventory/all-recipes"],
-   enabled: employee?.role === "manager",
+   enabled: (employee?.role === "manager" || !employee),
  });
 
  const { data: branches = [] } = useQuery<Branch[]>({
    queryKey: ["/api/branches"],
-   enabled: employee?.role === "manager",
+   enabled: (employee?.role === "manager" || !employee),
  });
 
  const calculateRecipeCost = (items: RecipeIngredient[]) => {
@@ -823,12 +823,56 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
  return acc;
  }, {} as Record<string, CoffeeItem[]>);
 
- if (!employee) {
- return null;
- }
-
  return (
  <div className="min-h-screen bg-gray-50 p-4 pb-20 sm:pb-4">
+
+         {/* Quick Add Cards */}
+         <div className="max-w-7xl mx-auto mb-6">
+           <div className="grid grid-cols-2 gap-4 mb-6">
+             <button
+               onClick={() => {
+                 setLocation('/employee/menu-management?type=drinks');
+                 setTimeout(() => setIsAddDialogOpen(true), 50);
+               }}
+               className="flex flex-col items-center justify-center gap-3 p-6 bg-white border-2 border-primary/20 rounded-2xl hover:border-primary hover:bg-primary/5 transition-all shadow-sm group"
+               data-testid="button-quick-add-drink"
+             >
+               <div className="w-14 h-14 bg-primary/10 group-hover:bg-primary/20 rounded-full flex items-center justify-center transition-colors">
+                 <Coffee className="w-7 h-7 text-primary" />
+               </div>
+               <div className="text-center">
+                 <p className="text-lg font-bold text-gray-800">إضافة مشروب</p>
+                 <p className="text-xs text-gray-400">قهوة، عصائر، مشروبات</p>
+               </div>
+               <div className="flex items-center gap-1 text-primary text-sm font-medium">
+                 <Plus className="w-4 h-4" />
+                 <span>إضافة جديد</span>
+               </div>
+             </button>
+
+             <button
+               onClick={() => {
+                 setLocation('/employee/menu-management?type=food');
+                 setTimeout(() => setIsAddDialogOpen(true), 50);
+               }}
+               className="flex flex-col items-center justify-center gap-3 p-6 bg-white border-2 border-orange-200 rounded-2xl hover:border-orange-400 hover:bg-orange-50 transition-all shadow-sm group"
+               data-testid="button-quick-add-food"
+             >
+               <div className="w-14 h-14 bg-orange-100 group-hover:bg-orange-200 rounded-full flex items-center justify-center transition-colors">
+                 <span className="text-2xl">🍽️</span>
+               </div>
+               <div className="text-center">
+                 <p className="text-lg font-bold text-gray-800">إضافة أكلة</p>
+                 <p className="text-xs text-gray-400">حلويات، مخبوزات، وجبات</p>
+               </div>
+               <div className="flex items-center gap-1 text-orange-500 text-sm font-medium">
+                 <Plus className="w-4 h-4" />
+                 <span>إضافة جديد</span>
+               </div>
+             </button>
+           </div>
+         </div>
+
  {/* Header */}
          <div className="max-w-7xl mx-auto mb-6">
          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -842,7 +886,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
          </div>
          </div>
          <div className="flex flex-wrap gap-2">
- {employee?.role === "manager" && (
+ {(employee?.role === "manager" || !employee) && (
  <Button
    variant="outline"
    onClick={openCategoryReorder}
@@ -853,7 +897,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
    {tc("ترتيب الأقسام", "Reorder Categories")}
  </Button>
  )}
- {employee?.role === "manager" && (
+ {(employee?.role === "manager" || !employee) && (
  <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
   setIsAddDialogOpen(open);
   if (open) {
@@ -1309,7 +1353,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
   )}
 </div>
 
-{employee?.role === "manager" && branches.length > 0 && (
+{(employee?.role === "manager" || !employee) && branches.length > 0 && (
    <div>
      <Label className="text-gray-300">متوفر في الفروع</Label>
      <p className="text-gray-500 text-xs mb-2">اختر الفروع التي سيتوفر فيها هذا المنتج (اتركه فارغاً للتوفر في جميع الفروع)</p>
@@ -1371,7 +1415,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
      </Label>
      <p className="text-gray-500 text-sm mb-3">اختر المواد الخام اللازمة لتحضير المشروب مع الكميات</p>
      
-     {employee?.role === "manager" && rawItems.length > 0 ? (
+     {(employee?.role === "manager" || !employee) && rawItems.length > 0 ? (
        <>
          <div className="space-y-2 max-h-60 overflow-y-auto mb-3">
            {rawItems.filter(r => r.isActive === 1).map((raw) => {
@@ -1693,7 +1737,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
  </select>
  </div>
 
- {employee?.role === "manager" && (
+ {(employee?.role === "manager" || !employee) && (
  <div className="flex flex-col gap-2">
  <div className="flex items-center gap-2">
    {getProductRecipeCount(item.id) > 0 ? (
