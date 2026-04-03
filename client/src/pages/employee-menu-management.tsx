@@ -140,10 +140,10 @@ const [aiEditDescription, setAiEditDescription] = useState("");
  useEffect(() => {
  const storedEmployee = localStorage.getItem("currentEmployee");
  if (storedEmployee) {
- setEmployee(JSON.parse(storedEmployee));
- } else {
- setLocation("/employee/gateway");
+   setEmployee(JSON.parse(storedEmployee));
  }
+ // Managers accessing from manager dashboard don't need localStorage check
+ // AuthGuard already validates the session
  }, [setLocation]);
 
   const { data: coffeeItems = [], isLoading, refetch } = useQuery<CoffeeItem[]>({

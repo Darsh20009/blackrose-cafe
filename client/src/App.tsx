@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthGuard } from "@/components/guards/AuthGuard";
 import { AdminLayout } from "@/components/admin-layout";
+import { ManagerLayout } from "@/components/manager-layout";
 import { CartProvider, useCartStore } from "@/lib/cart-store";
 import { CustomerProvider } from "@/contexts/CustomerContext";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -269,7 +270,7 @@ function AppRouter() {
       <Route path="/employee/orders"><AuthGuard userType="employee"><EmployeeOrders /></AuthGuard></Route>
       <Route path="/employee/orders-display"><AuthGuard userType="employee"><EmployeeOrdersDisplay /></AuthGuard></Route>
       <Route path="/employee/loyalty"><AuthGuard userType="employee"><EmployeeLoyalty /></AuthGuard></Route>
-      <Route path="/employee/menu-management"><AuthGuard userType="employee" allowedRoles={["manager", "admin"]}><EmployeeMenuManagement /></AuthGuard></Route>
+      <Route path="/employee/menu-management"><AuthGuard userType="manager" allowedRoles={["manager", "admin", "owner"]}><ManagerLayout><EmployeeMenuManagement /></ManagerLayout></AuthGuard></Route>
       <Route path="/employee/ingredients"><AuthGuard userType="employee" allowedRoles={["manager", "admin"]}><EmployeeIngredientsManagement /></AuthGuard></Route>
       <Route path="/employee/availability"><AuthGuard userType="employee"><EmployeeAvailability /></AuthGuard></Route>
       <Route path="/employee/attendance"><AuthGuard userType="employee"><EmployeeAttendance /></AuthGuard></Route>
