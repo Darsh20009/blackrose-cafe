@@ -95,6 +95,7 @@ interface RawItem {
   category: string;
   unit: string;
   unitCost: number;
+  currentStock: number;
   minStockLevel: number;
   maxStockLevel?: number;
   supplierId?: string;
@@ -334,6 +335,7 @@ export default function InventoryRawItemsPage() {
                   <TableHead className="text-right">{tc("الفئة", "Category")}</TableHead>
                   <TableHead className="text-right">{tc("الوحدة", "Unit")}</TableHead>
                   <TableHead className="text-right">{tc("التكلفة", "Cost")}</TableHead>
+                  <TableHead className="text-right">{tc("المخزون المتبقي", "Current Stock")}</TableHead>
                   <TableHead className="text-right">{tc("الحد الأدنى", "Min Level")}</TableHead>
                   <TableHead className="text-right">{tc("الإجراءات", "Actions")}</TableHead>
                 </TableRow>
@@ -386,6 +388,23 @@ export default function InventoryRawItemsPage() {
                         <TableCell>
                           <span className="font-medium">{item.unitCost.toFixed(2)}</span>
                           <span className="text-muted-foreground mr-1"><SarIcon /></span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {(item.currentStock ?? 0) <= 0 ? (
+                              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700">
+                                نفاد
+                              </Badge>
+                            ) : (item.currentStock ?? 0) <= item.minStockLevel ? (
+                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700">
+                                {item.currentStock} {unitLabels[item.unit]}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700">
+                                {item.currentStock ?? 0} {unitLabels[item.unit]}
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">

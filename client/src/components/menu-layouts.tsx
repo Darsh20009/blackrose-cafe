@@ -37,7 +37,7 @@ const itemMotion = {
   exit: { opacity: 0, scale: 0.95 },
 };
 
-const DEFAULT_IMG = "/images/default-coffee.png";
+const DEFAULT_IMG = "/blackrose-logo.png";
 function imgClass(hasImage: boolean, extra = "") {
   return hasImage
     ? `w-full h-full object-cover ${extra}`

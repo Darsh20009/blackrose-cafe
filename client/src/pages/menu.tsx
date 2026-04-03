@@ -874,12 +874,12 @@ export default function MenuPage() {
                   onClick={() => handleAddToCartDirect(item)}
                   data-testid={`card-featured-${item.id}`}
                 >
-                  <div className="aspect-square rounded-xl overflow-hidden bg-secondary">
+                  <div className="aspect-square rounded-xl overflow-hidden bg-secondary flex items-center justify-center">
                     <img 
-                      src={item.imageUrl} 
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+                      src={item.imageUrl || blackroseLogo} 
+                      className={`transition-transform duration-500 group-hover:scale-110 ${item.imageUrl ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain p-1'}`}
                       alt={i18n.language === 'ar' ? item.nameAr : item.nameEn || item.nameAr} 
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      onError={(e) => { const img = e.target as HTMLImageElement; img.src = blackroseLogo; img.className = img.className.replace('object-cover', 'object-contain') + ' p-1 w-3/4 h-3/4'; }}
                     />
                   </div>
                   <div className="space-y-1.5">

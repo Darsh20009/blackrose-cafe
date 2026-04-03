@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import blackroseLogoStaff from "@assets/blackrose-logo.png";
+import employeeTeamLogo from "@assets/Gemini_Generated_Image_fsoqo0fsoqo0fsoq_1775238733003.png";
 import { useTranslate } from "@/lib/useTranslate";
 
 export default function EmployeeSplash() {
@@ -60,10 +60,10 @@ export default function EmployeeSplash() {
               animate={{ y: [0, -6, 0] }}
               transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
             >
-              <div className="w-28 h-28 rounded-2xl overflow-hidden shadow-lg shadow-black/30 ring-1 ring-white/10">
+              <div className="w-36 h-36 rounded-2xl overflow-hidden shadow-lg shadow-black/30 ring-1 ring-white/10">
                 <img
-                  src={blackroseLogoStaff}
-                  alt="BLACK ROSE SYSTEMS"
+                  src={employeeTeamLogo}
+                  alt="BLACK ROSE CAFE TEAM"
                   className="w-full h-full object-cover"
                 />
               </div>

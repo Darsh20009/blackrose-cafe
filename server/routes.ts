@@ -12597,8 +12597,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (category && typeof category === 'string') {
         items = items.filter(item => item.category === category);
       }
+
+      // Enrich each item with total currentStock summed from all branch stocks
+      const { BranchStockModel } = await import("@shared/schema");
+      const allBranchStocks = await BranchStockModel.find({}).lean();
+      const enriched = items.map(item => {
+        const totalStock = allBranchStocks
+          .filter((s: any) => s.rawItemId === item.id)
+          .reduce((sum: number, s: any) => sum + (s.currentQuantity || 0), 0);
+        return { ...item, currentStock: totalStock };
+      });
       
-      res.json(items);
+      res.json(enriched);
     } catch (error) {
       res.status(500).json({ error: "فشل في جلب المواد الخام" });
     }

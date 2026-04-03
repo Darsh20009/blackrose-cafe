@@ -1488,12 +1488,42 @@ export class DBStorage implements IStorage {
 
   async getBranchStock(branchId: string): Promise<BranchStock[]> {
     const stock = await BranchStockModel.find({ branchId }).lean();
-    return (stock as any[]).map(serializeDoc);
+    const rawItems = await RawItemModel.find({}).lean();
+    return (stock as any[]).map(s => {
+      const serialized = serializeDoc(s);
+      const rawItem = rawItems.find((r: any) => r.id === s.rawItemId || r._id?.toString() === s.rawItemId);
+      if (rawItem) {
+        serialized.rawItem = {
+          nameAr: (rawItem as any).nameAr,
+          nameEn: (rawItem as any).nameEn,
+          code: (rawItem as any).code,
+          unit: (rawItem as any).unit,
+          minStockLevel: (rawItem as any).minStockLevel,
+          unitCost: (rawItem as any).unitCost,
+          category: (rawItem as any).category,
+        };
+      }
+      return serialized;
+    });
   }
 
   async getBranchStockItem(branchId: string, rawItemId: string): Promise<BranchStock | undefined> {
     const stock = await BranchStockModel.findOne({ branchId, rawItemId }).lean();
-    return stock ? serializeDoc(stock) : undefined;
+    if (!stock) return undefined;
+    const serialized = serializeDoc(stock);
+    const rawItem = await RawItemModel.findOne({ $or: [{ id: rawItemId }, { _id: rawItemId }] }).lean();
+    if (rawItem) {
+      serialized.rawItem = {
+        nameAr: (rawItem as any).nameAr,
+        nameEn: (rawItem as any).nameEn,
+        code: (rawItem as any).code,
+        unit: (rawItem as any).unit,
+        minStockLevel: (rawItem as any).minStockLevel,
+        unitCost: (rawItem as any).unitCost,
+        category: (rawItem as any).category,
+      };
+    }
+    return serialized;
   }
 
   async updateBranchStock(branchId: string, rawItemId: string, quantity: number, createdBy: string, movementType: string = "adjustment", notes: string = ""): Promise<BranchStock> {
@@ -1557,7 +1587,23 @@ export class DBStorage implements IStorage {
 
   async getAllBranchesStock(): Promise<any[]> {
     const stock = await BranchStockModel.find({}).lean();
-    return (stock as any[]).map(serializeDoc);
+    const rawItems = await RawItemModel.find({}).lean();
+    return (stock as any[]).map(s => {
+      const serialized = serializeDoc(s);
+      const rawItem = rawItems.find((r: any) => r.id === s.rawItemId || r._id?.toString() === s.rawItemId);
+      if (rawItem) {
+        serialized.rawItem = {
+          nameAr: (rawItem as any).nameAr,
+          nameEn: (rawItem as any).nameEn,
+          code: (rawItem as any).code,
+          unit: (rawItem as any).unit,
+          minStockLevel: (rawItem as any).minStockLevel,
+          unitCost: (rawItem as any).unitCost,
+          category: (rawItem as any).category,
+        };
+      }
+      return serialized;
+    });
   }
 
   async getStockTransfers(branchId?: string): Promise<StockTransfer[]> {
