@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { LayoutDashboard, Users, FileText, Settings, LogOut, Bell, Code2 } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, LogOut, Bell, Code2, GitBranch, Mail, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import blackroseLogoStaff from "@assets/blackrose-logo.png";
 import { brand } from "@/lib/brand";
@@ -9,12 +9,13 @@ import { brand } from "@/lib/brand";
 export function AdminSidebar() {
   const [location, navigate] = useLocation();
 
-
   const menuItems = [
     { label: 'لوحة التحكم', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'الموظفون', icon: Users, path: '/admin/employees' },
+    { label: 'الفروع', icon: GitBranch, path: '/admin/branches' },
     { label: 'التقارير', icon: FileText, path: '/admin/reports' },
     { label: 'إرسال الإشعارات', icon: Bell, path: '/admin/notifications' },
+    { label: 'التسويق البريدي', icon: Mail, path: '/admin/email' },
     { label: 'الإعدادات', icon: Settings, path: '/admin/settings' },
     { label: 'إدارة API', icon: Code2, path: '/admin/api' },
   ];
@@ -44,7 +45,7 @@ export function AdminSidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location === item.path;
@@ -52,14 +53,14 @@ export function AdminSidebar() {
               <button
                 key={item.path}
                 onClick={() => navigate(item.path)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-right ${
                   isActive
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-foreground hover:bg-primary/10'
                 }`}
                 data-testid={`sidebar-link-${item.label}`}
               >
-                <Icon className="w-5 h-5" />
+                <Icon className="w-5 h-5 shrink-0" />
                 <span className="font-medium">{item.label}</span>
               </button>
             );
@@ -68,7 +69,6 @@ export function AdminSidebar() {
 
         {/* Bottom actions */}
         <div className="p-4 border-t border-border space-y-2">
-
           <Button
             onClick={handleLogout}
             variant="outline"
@@ -80,8 +80,6 @@ export function AdminSidebar() {
           </Button>
         </div>
       </div>
-
-
     </>
   );
 }
