@@ -866,6 +866,7 @@ export default function EmployeeCashier() {
      pointsRedeemed: (usePointsDiscount && pointsToRedeem > 0) ? pointsToRedeem : 0,
      pointsValue: (usePointsDiscount && pointsToRedeem > 0) ? pointsToSar(pointsToRedeem) : 0,
      bypassPointsVerification: true,
+     channel: 'pos',
    };
 
    try {

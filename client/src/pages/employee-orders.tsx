@@ -36,6 +36,7 @@ export default function EmployeeOrders() {
   const [receiptDialogOrder, setReceiptDialogOrder] = useState<any>(null);
 
   const BANK_TRANSFER_METHODS = ['mada', 'rajhi', 'alinma', 'ur', 'barq', 'bank_transfer'];
+  const GATEWAY_METHODS = ['paymob', 'paymob-card', 'paymob-wallet', 'geidea', 'apple_pay', 'neoleap', 'neoleap-apple-pay'];
 
   const getPaymentLabel = (method: string) => {
     const labels: Record<string, { label: string; icon: any }> = {
@@ -571,7 +572,7 @@ export default function EmployeeOrders() {
                           </Button>
                         )}
 
-                        {!isPaymentConfirmed(order) && !['completed', 'cancelled'].includes(order.status) && (
+                        {!isPaymentConfirmed(order) && !['completed', 'cancelled'].includes(order.status) && !GATEWAY_METHODS.includes(order.paymentMethod) && (
                           <Button 
                             size="sm" 
                             variant="outline" 
