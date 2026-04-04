@@ -1869,9 +1869,14 @@ export class DBStorage implements IStorage {
       )
     );
 
+    // Track items with no recipe to use coffeeItem.costOfGoods as fallback
+    type NoRecipeItem = { coffeeItemId: string; quantity: number };
+    const itemsWithNoRecipe: NoRecipeItem[] = [];
+
     for (const { item, recipe } of recipeResults) {
       if (recipe.length === 0) {
-        console.warn(`[INVENTORY] No recipe found for coffeeItemId="${item.coffeeItemId}" — skipping inventory deduction for this item`);
+        console.warn(`[INVENTORY] No recipe found for coffeeItemId="${item.coffeeItemId}" — will use item.costOfGoods as fallback`);
+        itemsWithNoRecipe.push({ coffeeItemId: item.coffeeItemId, quantity: item.quantity || 1 });
       }
       for (const r of recipe) {
         tasks.push({ rawItemId: r.rawItemId, required: r.quantity * item.quantity, unit: r.unit, source: 'Recipe' });
@@ -1884,9 +1889,27 @@ export class DBStorage implements IStorage {
       }
     }
 
+    // Fallback: calculate COGS from coffeeItem.costOfGoods for items with no recipe
+    let fallbackCogs = 0;
+    if (itemsWithNoRecipe.length > 0) {
+      const coffeeIds = itemsWithNoRecipe.map(i => i.coffeeItemId);
+      const coffeeItems = await CoffeeItemModel.find({ id: { $in: coffeeIds } }).lean();
+      for (const noRecipeItem of itemsWithNoRecipe) {
+        const coffeeItem = coffeeItems.find((c: any) => c.id === noRecipeItem.coffeeItemId);
+        const itemCost = Number((coffeeItem as any)?.costOfGoods || 0) * noRecipeItem.quantity;
+        fallbackCogs += itemCost;
+      }
+    }
+
     if (tasks.length === 0) {
-      console.warn(`[INVENTORY] No deduction tasks for order ${orderId} — no recipes linked to any item in this order`);
-      return { success: true, costOfGoods: 0, deductionDetails: [], shortages: [], warnings: ['No recipes linked to order items — inventory not deducted'], errors: [] };
+      // No recipes at all — use fallback COGS only
+      if (fallbackCogs > 0) {
+        await OrderModel.findOneAndUpdate({ id: orderId }, {
+          $set: { costOfGoods: fallbackCogs, inventoryDeducted: 0, updatedAt: new Date() }
+        }).catch(() => {});
+      }
+      console.warn(`[INVENTORY] No deduction tasks for order ${orderId} — using fallback COGS: ${fallbackCogs}`);
+      return { success: true, costOfGoods: fallbackCogs, deductionDetails: [], shortages: [], warnings: ['No recipes linked — used item cost as fallback'], errors: [] };
     }
 
     // Fetch all raw items in parallel
@@ -1985,16 +2008,19 @@ export class DBStorage implements IStorage {
       }
     }));
 
+    // Add fallback COGS for items that had no recipe
+    const totalCostOfGoods = costOfGoods + fallbackCogs;
+
     OrderModel.findOneAndUpdate({ id: orderId }, {
       $set: {
-        costOfGoods,
+        costOfGoods: totalCostOfGoods,
         inventoryDeducted: shortages.length === 0 ? 1 : 2,
         inventoryDeductionDetails: deductionDetails,
         updatedAt: new Date()
       }
     }).catch(err => console.error('[INVENTORY] Order COGS update error:', err));
 
-    return { success: shortages.length === 0, costOfGoods, grossProfit: 0, deductionDetails, shortages, warnings: [], errors: [] };
+    return { success: shortages.length === 0, costOfGoods: totalCostOfGoods, grossProfit: 0, deductionDetails, shortages, warnings: [], errors: [] };
   }
 
   async calculateOrderCOGS(items: any[], branchId?: string): Promise<any> {

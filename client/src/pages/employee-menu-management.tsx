@@ -740,6 +740,7 @@ const [aiEditDescription, setAiEditDescription] = useState("");
      price: parseFloat(formData.get("price") as string),
      oldPrice: formData.get("oldPrice") ? parseFloat(formData.get("oldPrice") as string) : undefined,
      category: formData.get("category") as string,
+     costOfGoods: formData.get("costOfGoods") ? parseFloat(formData.get("costOfGoods") as string) : (editingItem.costOfGoods || 0),
      imageUrl: editImageUrls.length > 0 ? editImageUrls[0] : editingItem.imageUrl,
     imageUrls: editImageUrls.length > 0 ? editImageUrls : ((editingItem as any).imageUrls || []),
     addons: editableAddons,
@@ -1923,6 +1924,21 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
  className="bg-gray-50 border-gray-300 text-gray-900"
  data-testid="input-edit-old-price"
  />
+ </div>
+ <div>
+ <Label htmlFor="edit-costOfGoods" className="text-gray-300">{tc("تكلفة الإنتاج (ريال)", "Production Cost (SAR)")}</Label>
+ <Input
+ id="edit-costOfGoods"
+ name="costOfGoods"
+ type="number"
+ step="0.01"
+ min="0"
+ defaultValue={editingItem.costOfGoods || 0}
+ className="bg-gray-50 border-gray-300 text-gray-900"
+ data-testid="input-edit-cost-of-goods"
+ placeholder="0.00"
+ />
+ </div>
  </div>
 <div>
 <Label className="text-gray-300">{tc("صور المشروب (حتى 5 صور)", "Item Photos (up to 5)")}</Label>
