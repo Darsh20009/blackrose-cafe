@@ -128,7 +128,7 @@ async function sendPushToSubscriptions(
     if (result.status === "rejected") {
       const statusCode = (result.reason as any)?.statusCode;
       console.log(`[PUSH] Failed to send to ${subscriptions[index].userId}: status=${statusCode}, error=${(result.reason as any)?.body || result.reason}`);
-      if (statusCode === 410 || statusCode === 404) {
+      if (statusCode === 410 || statusCode === 404 || statusCode === 401) {
         staleEndpoints.push(subscriptions[index].endpoint);
       }
     } else {
