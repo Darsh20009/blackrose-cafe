@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import blackroseLogo from "@assets/blackrose-logo.png";
+import blackroseStaffLogo from "@assets/blackrose-staff-logo.png";
 import { useTranslate } from "@/lib/useTranslate";
 
 export default function EmployeeSplash() {
@@ -62,8 +62,8 @@ export default function EmployeeSplash() {
             >
               <div className="w-36 h-36 rounded-2xl overflow-hidden shadow-lg shadow-black/30 ring-1 ring-white/10 bg-black flex items-center justify-center p-3">
                 <img
-                  src={blackroseLogo}
-                  alt="BLACK ROSE CAFE"
+                  src={blackroseStaffLogo}
+                  alt="BLACK ROSE SYSTEMS"
                   className="w-full h-full object-contain"
                 />
               </div>

@@ -75,7 +75,7 @@ export const brand = {
   logoCustomer: "/logo.png",
 
   /** Staff/employee portal logo (used in sidebars, login screens, employee app) */
-  logoStaff: "/employee-logo.png",
+  logoStaff: "/blackrose-staff-logo.png",
 
   /** Favicon (browser tab icon) */
   favicon: "/logo.png",
@@ -87,7 +87,7 @@ export const brand = {
   logoAssetCustomer: "blackrose-logo.png",
 
   /** Staff logo asset path */
-  logoAssetStaff: "blackrose-logo.png",
+  logoAssetStaff: "blackrose-staff-logo.png",
 
   /** Logo URL for email templates (must be absolute/public URL) */
   logoEmailUrl: "https://raw.githubusercontent.com/Darsh20009/blackrose-cafe/main/client/public/logo.png",
