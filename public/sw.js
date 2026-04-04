@@ -1,263 +1,494 @@
-// QIROX Cafe Service Worker - Rich Push Notifications + Offline Caching
-// Version: 4.0 - Creative Notifications with Stage Tracking
+const CACHE_VERSION = 'v16';
+const CACHE_NAME = `blackrose-cache-${CACHE_VERSION}`;
 
-const CACHE_NAME = 'qirox-cafe-v4';
+// Essential shell files to pre-cache during install
+// Vite-built assets (JS/CSS bundles) are cached at runtime via the fetch handler
+const urlsToCache = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/employee-manifest.json',
+  '/logo.png',
+  '/employee-logo.png',
+  '/favicon.ico',
+  '/favicon.png',
+  '/badge-icon.png'
+];
 
-// Install: cache essential assets
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
+self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(['/logo.png', '/manifest.json']).catch(() => {});
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.addAll(urlsToCache).catch(err => {
+        console.log('[SW] Cache addAll error (non-fatal):', err);
+        return Promise.allSettled(
+          urlsToCache.map(url => cache.add(url).catch(e => console.log('[SW] Failed to cache:', url, e)))
+        );
+      });
     })
   );
+  self.skipWaiting();
 });
 
-// Activate: clean old caches
-self.addEventListener('activate', (event) => {
+self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
-      )
-    ).then(() => self.clients.claim())
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames
+          .filter(name => name !== CACHE_NAME)
+          .map(name => caches.delete(name))
+      );
+    })
   );
+  self.clients.claim();
 });
 
-// Build a Unicode progress bar for order stages
-function buildProgressBar(orderStatus) {
-  const stages = ['pending', 'payment_confirmed', 'in_progress', 'ready', 'completed'];
-  const stageLabels = ['📦', '✅', '☕', '🔔', '🎉'];
-  const idx = stages.indexOf(orderStatus);
-  if (idx < 0) return '';
-  return stageLabels.map((icon, i) => (i <= idx ? icon : '◯')).join(' ─ ');
-}
+const STATUS_CONFIG = {
+  pending: {
+    emoji: '🕐',
+    labelAr: 'تم استلام الطلب',
+    labelEn: 'Order Received',
+    color: '#F59E0B',
+  },
+  payment_confirmed: {
+    emoji: '✅',
+    labelAr: 'تم تأكيد الدفع',
+    labelEn: 'Payment Confirmed',
+    color: '#10B981',
+  },
+  in_progress: {
+    emoji: '☕',
+    labelAr: 'جاري التحضير',
+    labelEn: 'Preparing',
+    color: '#3B82F6',
+  },
+  ready: {
+    emoji: '🎉',
+    labelAr: 'طلبك جاهز!',
+    labelEn: 'Order Ready!',
+    color: '#22C55E',
+  },
+  completed: {
+    emoji: '✨',
+    labelAr: 'تم التسليم',
+    labelEn: 'Delivered',
+    color: '#8B5CF6',
+  },
+  cancelled: {
+    emoji: '❌',
+    labelAr: 'تم الإلغاء',
+    labelEn: 'Cancelled',
+    color: '#EF4444',
+  },
+};
 
-// Build a clean text progress bar using dots
-function buildTextProgress(stageIndex, totalStages) {
-  if (stageIndex < 0 || totalStages < 1) return '';
-  const filled = '●';
-  const empty = '○';
-  const connector = '───';
-  let bar = '';
-  for (let i = 0; i < totalStages; i++) {
-    bar += i <= stageIndex ? filled : empty;
-    if (i < totalStages - 1) bar += connector;
+const ORDER_TYPE_LABELS = {
+  'dine_in': '🍽️ محلي',
+  'dine-in': '🍽️ محلي',
+  'takeaway': '🥤 سفري',
+  'pickup': '🥤 سفري',
+  'car_pickup': '🚗 سيارة',
+  'car-pickup': '🚗 سيارة',
+  'delivery': '🚚 توصيل',
+};
+
+function buildOrderStatusNotification(data) {
+  const status = data.orderStatus || 'pending';
+  const config = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
+  const orderNum = data.orderNumber || '---';
+  const isEmployee = data.url && data.url.startsWith('/employee');
+  
+  let title = '';
+  let body = '';
+  let actions = [];
+  
+  if (data.type === 'new_order') {
+    const customerName = data.customerName || 'عميل';
+    const orderTypeLabel = ORDER_TYPE_LABELS[data.orderType] || '';
+    const itemCount = data.itemCount || 0;
+    
+    title = `🔔 طلب جديد #${orderNum}`;
+    body = `${customerName}`;
+    if (orderTypeLabel) body += ` • ${orderTypeLabel}`;
+    if (itemCount > 0) body += ` • ${itemCount} ${itemCount > 1 ? 'منتجات' : 'منتج'}`;
+    if (data.totalAmount) body += `\n💰 ${Number(data.totalAmount).toFixed(2)} ر.س`;
+    
+    if (data.items && data.items.length > 0) {
+      const itemsList = data.items.slice(0, 4).map(i => `  ${i.quantity}x ${i.name}`).join('\n');
+      body += `\n${itemsList}`;
+      if (data.items.length > 4) body += `\n  +${data.items.length - 4} أخرى`;
+    }
+    
+    actions = [
+      { action: 'accept', title: '✅ بدء التحضير' },
+      { action: 'open', title: '📋 عرض التفاصيل' }
+    ];
+  } else {
+    title = `${config.emoji} طلب #${orderNum}`;
+    body = config.labelAr;
+    
+    if (status === 'in_progress') {
+      body = '☕ جاري تحضير طلبك الآن...';
+      if (data.estimatedTime) body += `\n⏱️ الوقت المتوقع: ${data.estimatedTime} دقيقة`;
+      actions = [
+        { action: 'open', title: '📋 متابعة الطلب' }
+      ];
+    } else if (status === 'ready') {
+      title = `🎉 طلبك جاهز! #${orderNum}`;
+      body = '✨ طلبك جاهز للاستلام الآن';
+      if (data.orderType) {
+        const typeLabel = ORDER_TYPE_LABELS[data.orderType];
+        if (typeLabel) body += `\n${typeLabel}`;
+      }
+      actions = [
+        { action: 'open', title: '📍 عرض التفاصيل' }
+      ];
+    } else if (status === 'completed') {
+      body = '✅ شكراً لزيارتك! نتمنى لك يوماً سعيداً';
+      if (data.totalAmount) body += `\n💰 المجموع: ${Number(data.totalAmount).toFixed(2)} ر.س`;
+      actions = [
+        { action: 'open', title: '⭐ تقييم الطلب' }
+      ];
+    } else if (status === 'cancelled') {
+      body = '❌ نعتذر، تم إلغاء طلبك';
+      actions = [
+        { action: 'open', title: '📞 تواصل معنا' }
+      ];
+    }
   }
-  return bar;
+  
+  return { title, body, actions, config };
 }
 
-// Get stage-specific vibration pattern
-function getVibrationPattern(orderStatus) {
-  const patterns = {
-    'pending':           [100, 50, 100],
-    'payment_confirmed': [150, 80, 150],
-    'in_progress':       [200, 100, 200, 100, 200],
-    'ready':             [300, 100, 300, 100, 300, 100, 300],
-    'completed':         [100, 50, 100, 50, 100, 50, 100, 50, 100],
-    'cancelled':         [500, 200, 500],
-  };
-  return patterns[orderStatus] || [200, 100, 200];
-}
+self.addEventListener('push', function(event) {
+  let data = { title: 'BLACK ROSE Cafe', body: 'لديك إشعار جديد', url: '/', type: 'general' };
 
-// Push notification handler - rich notifications with image + progress
-self.addEventListener('push', (event) => {
-  let data = {};
   try {
-    data = event.data ? event.data.json() : {};
+    if (event.data) {
+      const parsed = event.data.json();
+      data = { ...data, ...parsed };
+    }
   } catch (e) {
-    data = {
-      title: 'QIROX Cafe',
-      body: event.data ? event.data.text() : 'إشعار جديد',
-    };
-  }
-
-  const title = data.title || 'QIROX Cafe ☕';
-  const orderStatus = data.orderStatus || data.status || '';
-  const isOrderNotification = data.type === 'order_status' || data.type === 'new_order';
-
-  // Build rich body with progress indicator
-  let body = data.body || 'لديك إشعار جديد';
-  if (isOrderNotification && orderStatus) {
-    const progressBar = buildProgressBar(orderStatus);
-    const textBar = (typeof data.stageIndex === 'number' && data.totalStages)
-      ? buildTextProgress(data.stageIndex, data.totalStages)
-      : '';
-
-    if (progressBar) {
-      body = data.body + '\n' + progressBar;
-    }
-    if (data.estimatedTime && orderStatus === 'in_progress') {
-      body += '\n⏱ متبقي حوالي ' + data.estimatedTime + ' دقيقة';
+    try {
+      if (event.data) data.body = event.data.text();
+    } catch (e2) {
+      console.error('[SW] Push data parse error:', e2);
     }
   }
 
-  // Build action buttons based on order status
-  let actions = data.actions || [];
-  if (isOrderNotification && !data.actions) {
-    if (orderStatus === 'ready') {
-      actions = [
-        { action: 'track', title: '📍 تتبع الطلب' },
-        { action: 'directions', title: '🗺️ الاتجاهات' },
-      ];
-    } else if (orderStatus === 'completed') {
-      actions = [
-        { action: 'rate', title: '⭐ قيّم تجربتك' },
-        { action: 'reorder', title: '🔄 إعادة الطلب' },
-      ];
-    } else {
-      actions = [{ action: 'track', title: '👁 عرض الطلب' }];
-    }
+  const isEmployee = data.url && data.url.startsWith('/employee');
+  const icon = isEmployee ? '/employee-logo.png' : '/logo.png';
+
+  // Build notification title and body
+  let notifTitle = data.title;
+  let notifBody = data.body;
+
+  if (data.type === 'order_status' || data.type === 'new_order') {
+    const notification = buildOrderStatusNotification(data);
+    notifTitle = notification.title || data.title;
+    notifBody = notification.body || data.body;
   }
 
-  const requireInteraction = ['ready', 'completed', 'cancelled'].includes(orderStatus)
-    || data.requireInteraction !== false;
+  // Core options — compatible with all platforms including iOS PWA
+  const coreOptions = {
+    body: notifBody,
+    icon: icon,
+    badge: '/badge-icon.png',
+    data: {
+      url: data.url || '/',
+      orderId: data.orderId,
+      orderNumber: data.orderNumber,
+      orderStatus: data.orderStatus,
+      type: data.type,
+      timestamp: Date.now(),
+    },
+    tag: data.tag || `notif-${Date.now()}`,
+    dir: 'rtl',
+    lang: 'ar',
+  };
 
-  const vibrate = getVibrationPattern(orderStatus);
-
-  const options = {
-    body,
-    icon: '/logo-192.png',
-    badge: '/logo-32.png',
-    tag: data.tag || 'qirox-notification',
-    requireInteraction,
-    vibrate,
+  // Extended options for platforms that support them (Android Chrome, Desktop)
+  // iOS ignores most of these silently, but they cause no harm
+  const extendedOptions = {
+    ...coreOptions,
+    vibrate: data.type === 'new_order'
+      ? [200, 100, 200, 100, 200]
+      : [300, 100, 300],
+    renotify: true,
     silent: false,
     timestamp: data.timestamp || Date.now(),
-    data: {
-      url: data.url || '/my-orders',
-      orderNumber: data.orderNumber,
-      orderStatus,
-      orderType: data.orderType,
-      ...data,
-    },
-    actions: actions.slice(0, 2),
+    actions: data.type === 'order_status' || data.type === 'new_order'
+      ? buildOrderStatusNotification(data).actions
+      : [{ action: 'open', title: '📋 عرض' }],
   };
 
-  // Include rich notification image if provided (shows large banner below text)
-  if (data.image) {
-    options.image = data.image;
-  }
-
+  // Try extended options first, fall back to minimal if it fails (iOS safety net)
   event.waitUntil(
-    self.registration.showNotification(title, options)
+    self.registration.showNotification(notifTitle, extendedOptions)
+      .catch(() => self.registration.showNotification(notifTitle, coreOptions))
   );
 });
 
-// Notification click handler - smart navigation
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener('notificationclick', function(event) {
   event.notification.close();
 
-  const notifData = event.notification.data || {};
   const action = event.action;
-  const orderNumber = notifData.orderNumber;
-  const orderStatus = notifData.orderStatus;
+  if (action === 'dismiss') return;
 
-  let url = notifData.url || '/my-orders';
-
-  if (action === 'rate') {
-    url = orderNumber ? `/my-orders?rate=${orderNumber}` : '/my-orders';
-  } else if (action === 'reorder') {
-    url = '/menu';
-  } else if (action === 'track') {
-    url = '/my-orders';
-  } else if (action === 'directions') {
-    url = notifData.url || '/my-orders';
+  let targetUrl = event.notification.data?.url || '/';
+  
+  if (action === 'accept' && event.notification.data?.type === 'new_order') {
+    targetUrl = '/employee/pos';
   }
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if ('focus' in client) {
-          client.focus();
-          if ('navigate' in client) {
-            return client.navigate(url);
-          }
-          return;
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+      for (let i = 0; i < clientList.length; i++) {
+        const client = clientList[i];
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(targetUrl);
+          return client.focus();
         }
       }
-      if (self.clients.openWindow) {
-        return self.clients.openWindow(url);
-      }
+      return clients.openWindow(targetUrl);
     })
   );
 });
 
-// Notification close handler (optional analytics)
-self.addEventListener('notificationclose', (event) => {
-  const data = event.notification.data || {};
-  // Could track dismissal analytics here
+self.addEventListener('notificationclose', function(event) {
 });
 
-// Background sync — auto-sync offline POS orders when connectivity returns
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-offline-orders') {
-    event.waitUntil(
-      (async () => {
-        try {
-          const db = await new Promise((resolve, reject) => {
-            const req = indexedDB.open('qirox-offline-db', 1);
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-          });
-
-          const pending = await new Promise((resolve, reject) => {
-            const tx = db.transaction('offline-orders', 'readonly');
-            const idx = tx.objectStore('offline-orders').index('status');
-            const req = idx.getAll('pending');
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-          });
-
-          for (const order of pending) {
-            try {
-              const res = await fetch('/api/orders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(order.orderData),
-              });
-              const newStatus = res.ok ? 'synced' : 'failed';
-              const tx2 = db.transaction('offline-orders', 'readwrite');
-              const store = tx2.objectStore('offline-orders');
-              const record = await new Promise(r => { const req = store.get(order.localId); req.onsuccess = () => r(req.result); });
-              if (record) { record.status = newStatus; store.put(record); }
-            } catch {}
-          }
-
-          // Notify all open clients
-          const clients = await self.clients.matchAll({ type: 'window' });
-          clients.forEach(c => c.postMessage({ type: 'OFFLINE_SYNC_COMPLETE' }));
-        } catch {}
-      })()
-    );
+self.addEventListener('sync', function(event) {
+  if (event.tag === 'sync-orders') {
+    event.waitUntil(syncPendingOrders());
+  }
+  if (event.tag === 'sync-writes') {
+    event.waitUntil(syncPendingWrites());
   }
 });
 
-// Fetch: network-first for API, cache-first for static assets
-self.addEventListener('fetch', (event) => {
+async function syncPendingWrites() {
+  try {
+    const db = await openDB();
+    const tx = db.transaction('pending-writes', 'readonly');
+    const store = tx.objectStore('pending-writes');
+    const writes = await getAllFromStore(store);
+    for (const write of writes) {
+      try {
+        const response = await fetch(write.url, {
+          method: write.method,
+          headers: write.headers || { 'Content-Type': 'application/json' },
+          body: write.body,
+        });
+        if (response.ok) {
+          const deleteTx = db.transaction('pending-writes', 'readwrite');
+          deleteTx.objectStore('pending-writes').delete(write.id);
+          console.log('[SW] Synced offline write:', write.url);
+        }
+      } catch (err) {
+        console.error('[SW] Failed to sync write:', write.url, err);
+      }
+    }
+  } catch (error) {
+    console.log('[SW] Background sync writes - error:', error);
+  }
+}
+
+async function syncPendingOrders() {
+  try {
+    const db = await openDB();
+    const tx = db.transaction('pending-orders', 'readonly');
+    const store = tx.objectStore('pending-orders');
+    const orders = await getAllFromStore(store);
+
+    for (const order of orders) {
+      try {
+        const response = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(order.data),
+        });
+
+        if (response.ok) {
+          const deleteTx = db.transaction('pending-orders', 'readwrite');
+          deleteTx.objectStore('pending-orders').delete(order.id);
+          console.log('[SW] Synced offline order:', order.id);
+        }
+      } catch (err) {
+        console.error('[SW] Failed to sync order:', order.id, err);
+      }
+    }
+  } catch (error) {
+    console.log('[SW] Background sync - no pending orders or DB not available');
+  }
+}
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('qirox-offline', 2);
+    request.onupgradeneeded = function(event) {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains('pending-orders')) {
+        db.createObjectStore('pending-orders', { keyPath: 'id', autoIncrement: true });
+      }
+      if (!db.objectStoreNames.contains('pending-writes')) {
+        db.createObjectStore('pending-writes', { keyPath: 'id', autoIncrement: true });
+      }
+    };
+    request.onsuccess = function(event) {
+      resolve(event.target.result);
+    };
+    request.onerror = function(event) {
+      reject(event.target.error);
+    };
+  });
+}
+
+function getAllFromStore(store) {
+  return new Promise((resolve, reject) => {
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'sync-orders') {
+    event.waitUntil(syncPendingOrders());
+  }
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+// API endpoints to cache for offline reading
+const OFFLINE_API_CACHE = 'qirox-api-cache-v1';
+const CACHEABLE_APIS = ['/api/menu-items', '/api/business-config', '/api/categories', '/api/coffee-items', '/api/loyalty-config', '/api/tables'];
+
+async function queueWriteRequest(request) {
+  try {
+    const body = await request.text();
+    const db = await openDB();
+    const tx = db.transaction('pending-writes', 'readwrite');
+    const store = tx.objectStore('pending-writes');
+    store.add({ url: request.url, method: request.method, body, headers: { 'Content-Type': 'application/json' }, timestamp: Date.now() });
+    if ('sync' in self.registration) {
+      self.registration.sync.register('sync-writes').catch(() => {});
+    }
+    return new Response(JSON.stringify({ offline: true, queued: true, message: 'Request queued for sync' }), {
+      status: 202, headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'offline' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+  }
+}
+
+self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // Skip non-GET and API requests (let them go to network)
-  if (event.request.method !== 'GET' || url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws/')) {
+  // Handle write requests: queue them when offline
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(event.request.method) && url.pathname.startsWith('/api/')) {
+    event.respondWith(
+      fetch(event.request.clone()).catch(() => queueWriteRequest(event.request.clone()))
+    );
     return;
   }
 
-  // For static assets: cache-first
-  if (url.pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|css|js|woff|woff2)$/)) {
+  if (event.request.method !== 'GET') return;
+
+  // API GET requests: network-first with cache fallback for offline reading
+  if (url.pathname.startsWith('/api/')) {
+    const isCacheable = CACHEABLE_APIS.some(api => url.pathname.startsWith(api));
+    if (isCacheable) {
+      event.respondWith(
+        fetch(event.request)
+          .then(response => {
+            if (response && response.status === 200) {
+              const clone = response.clone();
+              caches.open(OFFLINE_API_CACHE).then(cache => cache.put(event.request, clone));
+            }
+            return response;
+          })
+          .catch(() => caches.match(event.request, { cacheName: OFFLINE_API_CACHE })
+            .then(cached => cached || new Response(JSON.stringify({ offline: true, data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+          )
+      );
+      return;
+    }
+    event.respondWith(fetch(event.request).catch(() => new Response(JSON.stringify({ offline: true }), { status: 503, headers: { 'Content-Type': 'application/json' } })));
+    return;
+  }
+
+  // Never intercept Vite internal dev-server requests
+  if (
+    url.pathname.startsWith('/@vite') ||
+    url.pathname.startsWith('/@fs') ||
+    url.pathname.startsWith('/@react-refresh') ||
+    url.pathname.startsWith('/node_modules/.vite') ||
+    url.pathname.startsWith('/__vite')
+  ) {
+    return;
+  }
+
+  if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        return cached || fetch(event.request).then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+      fetch(event.request)
+        .then(response => {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(event.request, responseToCache);
+          });
           return response;
-        });
+        })
+        .catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  const isStaticAsset = url.pathname.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|mp3|webp)$/);
+  if (isStaticAsset) {
+    event.respondWith(
+      caches.match(event.request).then(cachedResponse => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(event.request)
+          .then(response => {
+            if (!response || response.status !== 200) return response;
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(event.request, responseToCache);
+            });
+            return response;
+          })
+          .catch(() => {
+            return new Response('', { status: 408, statusText: 'Offline' });
+          });
       })
     );
     return;
   }
 
-  // For HTML pages: network-first with cache fallback
   event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
+    caches.match(event.request).then(response => {
+      if (response) return response;
+      return fetch(event.request)
+        .then(networkResponse => {
+          if (!networkResponse || networkResponse.status !== 200) return networkResponse;
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(event.request, responseToCache);
+          });
+          return networkResponse;
+        })
+        .catch(() => {
+          const accept = event.request.headers.get('accept');
+          if (accept && accept.includes('text/html')) {
+            return caches.match('/index.html');
+          }
+        });
+    })
   );
 });
