@@ -1963,7 +1963,6 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
   {editImageUrls.length === 0 && <p className="text-gray-500 text-xs">اختر صوراً من المكتبة. الصورة الأولى ستكون الرئيسية</p>}
 </div>
 </div>
- </div>
 
  {/* Editable Sizes */}
  <div className="space-y-2">
