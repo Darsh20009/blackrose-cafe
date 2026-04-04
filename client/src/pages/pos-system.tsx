@@ -606,12 +606,82 @@ export default function PosSystem() {
         } : {}),
       };
 
-      // If offline, queue the order locally
+      // If offline, queue the order locally AND show receipt
       if (!navigator.onLine) {
         const localId = await queueOfflineOrder({ ...orderData, totalAmount: total });
         const newCount = await countPendingOrders().catch(() => 0);
         setOfflineQueueCount(newCount);
-        toast({ title: tc("📦 تم حفظ الطلب محلياً","📦 Order saved locally"), description: tc("سيُرسل تلقائياً عند استعادة الاتصال","Will be sent automatically when connection is restored") });
+
+        // Build offline receipt with a temporary order number
+        const offlineOrderNum = `OFF-${Date.now().toString().slice(-4)}`;
+        const offlineReceipt = {
+          orderNumber: offlineOrderNum,
+          date: new Date().toISOString(),
+          items: orderItems.map(item => {
+            const addonsPrice = (item.customization?.selectedItemAddons || []).reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
+            return {
+              coffeeItem: {
+                nameAr: item.coffeeItem.nameAr,
+                nameEn: item.coffeeItem.nameEn,
+                price: String(Number(item.coffeeItem.price) + addonsPrice),
+              },
+              quantity: item.quantity,
+              customization: item.customization,
+            };
+          }),
+          subtotal,
+          tax,
+          total,
+          paymentMethod,
+          customerName,
+          customerPhone,
+          employeeName: employee?.fullName || t('pos.employee_fallback'),
+          tableNumber: orderType === "dine_in" ? tableNumber : undefined,
+          orderType,
+          isOffline: true,
+        };
+        setLastOrder(offlineReceipt);
+
+        // Auto-print offline receipt if enabled
+        if (autoPrint) {
+          const printSnapshot = {
+            orderNumber: offlineOrderNum,
+            customerName,
+            customerPhone,
+            items: orderItems.map(item => {
+              const addonsPrice = (item.customization?.selectedItemAddons || []).reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
+              const inlineNames = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
+              return {
+                coffeeItem: {
+                  nameAr: (item.coffeeItem?.nameAr || '') + (inlineNames ? ` (${inlineNames})` : ''),
+                  nameEn: item.coffeeItem?.nameEn || '',
+                  price: String(Number(item.coffeeItem?.price || 0) + addonsPrice),
+                },
+                quantity: item.quantity,
+                customization: item.customization,
+              };
+            }),
+            subtotal: subtotal.toFixed(2),
+            total: total.toFixed(2),
+            paymentMethod: PAYMENT_METHOD_LABELS[paymentMethod] || paymentMethod,
+            employeeName: employee?.fullName || t('pos.employee_fallback'),
+            tableNumber: orderType === "dine_in" ? tableNumber : undefined,
+            orderType: orderType as any,
+            date: new Date().toISOString(),
+            crNumber: businessConfig?.commercialRegistration,
+            vatNumber: businessConfig?.vatNumber,
+          };
+          setTimeout(() => {
+            try { printTaxInvoice(printSnapshot, { autoPrint: false }); } catch (e) {
+              console.warn('[POS] Offline auto-print failed silently:', e);
+            }
+          }, 200);
+        }
+
+        // Show the receipt dialog
+        setShowReceiptDialog(true);
+
+        // Clear cart
         setOrderItems([]);
         setCustomerName("");
         setCustomerPhone("");
@@ -1883,16 +1953,34 @@ export default function PosSystem() {
             <div className="space-y-4">
               <div className="text-center space-y-2 border-b pb-4">
                 <h3 className="font-black text-xl text-primary">BLACK ROSE CAFE</h3>
+                {lastOrder.isOffline && (
+                  <div className="flex items-center justify-center gap-1.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl px-3 py-2">
+                    <span className="text-amber-600 dark:text-amber-400 text-sm">📶</span>
+                    <div className="text-right">
+                      <p className="text-xs font-bold text-amber-700 dark:text-amber-400">
+                        {i18n.language === 'ar' ? 'طلب محفوظ بدون إنترنت' : 'Saved Offline'}
+                      </p>
+                      <p className="text-xs text-amber-600 dark:text-amber-500">
+                        {i18n.language === 'ar' ? 'سيُرسل تلقائياً عند استعادة الاتصال' : 'Will sync when back online'}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">
                   {new Date(lastOrder.date).toLocaleDateString()} - {new Date(lastOrder.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
-                <div className="mt-2 py-3 px-4 bg-primary/10 rounded-2xl border border-primary/20" data-testid="text-receipt-order-number">
+                <div className={`mt-2 py-3 px-4 rounded-2xl border ${lastOrder.isOffline ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-700' : 'bg-primary/10 border-primary/20'}`} data-testid="text-receipt-order-number">
                   <p className="text-xs text-muted-foreground font-medium mb-0.5">
                     {i18n.language === 'ar' ? 'رقم الطلب' : 'Order Number'}
                   </p>
-                  <p className="text-4xl font-black text-primary tracking-wide">
+                  <p className={`text-4xl font-black tracking-wide ${lastOrder.isOffline ? 'text-amber-600 dark:text-amber-400' : 'text-primary'}`}>
                     #{lastOrder.orderNumber}
                   </p>
+                  {lastOrder.isOffline && (
+                    <p className="text-xs text-amber-500 dark:text-amber-500 mt-1">
+                      {i18n.language === 'ar' ? 'رقم مؤقت — سيتغير عند المزامنة' : 'Temp number — will update on sync'}
+                    </p>
+                  )}
                 </div>
               </div>
 
