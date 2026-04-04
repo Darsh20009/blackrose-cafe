@@ -1,6 +1,47 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
   <head>
+    <!-- ═══════════════════════════════════════════════════════════
+         ONE-TIME CACHE CLEANER
+         لمسح الكاش من كل المتصفحات مرة واحدة فقط عند التحديث
+         لتشغيل تنظيف جديد: غيّر CLEAR_VERSION إلى رقم جديد
+         ═══════════════════════════════════════════════════════════ -->
+    <script>
+      (function() {
+        var CLEAR_VERSION = 'br-2026-04-04-v1';
+        var CLEAR_KEY = 'br_clear_version';
+        try {
+          if (localStorage.getItem(CLEAR_KEY) !== CLEAR_VERSION) {
+            // 1. مسح كل الكوكيز
+            document.cookie.split(';').forEach(function(cookie) {
+              var name = cookie.split('=')[0].trim();
+              if (name) {
+                var expiry = 'expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+                document.cookie = name + '=;' + expiry;
+                document.cookie = name + '=;' + expiry + ';domain=' + location.hostname;
+                document.cookie = name + '=;' + expiry + ';domain=.' + location.hostname;
+              }
+            });
+            // 2. مسح كل الكاش من الـ Service Worker
+            if ('caches' in window) {
+              caches.keys().then(function(names) {
+                names.forEach(function(name) { caches.delete(name); });
+              });
+            }
+            // 3. إلغاء تسجيل الـ Service Workers القديمة
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                registrations.forEach(function(reg) { reg.unregister(); });
+              });
+            }
+            // 4. حفظ رقم الإصدار الجديد حتى لا يتكرر التنظيف
+            localStorage.setItem(CLEAR_KEY, CLEAR_VERSION);
+            // 5. إعادة تحميل الصفحة بعد التنظيف
+            setTimeout(function() { location.reload(true); }, 200);
+          }
+        } catch(e) {}
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <!-- Primary Meta Tags -->
     <title>BLACK ROSE CAFE | تجربة قهوة فاخرة</title>
