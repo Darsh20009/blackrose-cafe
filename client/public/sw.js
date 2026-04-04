@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v14';
+const CACHE_VERSION = 'v15';
 const CACHE_NAME = `blackrose-cache-${CACHE_VERSION}`;
 
 // Essential shell files to pre-cache during install

@@ -1,7 +1,7 @@
 {
-  "id": "/employee",
-  "name": "BLACK ROSE SYSTEMS - أنظمة بلاك روز",
-  "short_name": "BLACK ROSE SYS",
+  "id": "/blackrose-systems-staff",
+  "name": "BLACK ROSE SYSTEMS",
+  "short_name": "BLACK ROSE",
   "description": "نظام إدارة الموظفين والعمليات والطلبات في BLACK ROSE CAFE",
   "start_url": "/employee/home",
   "scope": "/employee",
