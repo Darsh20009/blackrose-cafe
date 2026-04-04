@@ -17724,36 +17724,24 @@ ${businessContext}
         { role: "user", content: message },
       ];
 
-      const aiPayload = JSON.stringify({
-        model: "openai-large",
-        messages,
-        max_tokens: 1000,
-        temperature: 0.7,
-      });
+      const groqKey = process.env.GROQ_API_KEY;
+      if (!groqKey) return res.status(500).json({ error: "مفتاح Groq غير مضبوط" });
 
-      let response = await fetch("https://text.pollinations.ai/openai", {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: aiPayload,
+        headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages, max_tokens: 1000, temperature: 0.7 }),
       });
-
-      if (!response.ok) {
-        response = await fetch("https://llm7.io/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer none" },
-          body: JSON.stringify({ model: "mistral-small-3.1-24b", messages, max_tokens: 1000, temperature: 0.7 }),
-        });
-      }
 
       if (!response.ok) {
         const errText = await response.text();
-        console.error("Free AI chat error:", errText);
-        return res.status(500).json({ error: "فشل الاتصال بالذكاء الاصطناعي" });
+        console.error("Groq chat error:", errText);
+        return res.status(500).json({ error: "فشل الاتصال بـ Groq" });
       }
 
       const data = await response.json() as any;
       const reply = data.choices?.[0]?.message?.content || "";
-      res.json({ reply, model: data.model || "openai-large" });
+      res.json({ reply, model: "groq/llama-3.3-70b-versatile" });
     } catch (error: any) {
       console.error("AI chat error:", error);
       res.status(500).json({ error: error.message || "خطأ في الذكاء الاصطناعي" });
@@ -17813,21 +17801,16 @@ ${growthPct ? `- النمو مقارنة بالأسبوع الماضي: ${growth
 لا تضف أي نص خارج الـ JSON.`;
 
       const insightsMsgs = [{ role: "user", content: prompt }];
-      let response = await fetch("https://text.pollinations.ai/openai", {
+      const groqKey = process.env.GROQ_API_KEY;
+      if (!groqKey) return res.status(500).json({ error: "مفتاح Groq غير مضبوط" });
+
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "openai-large", messages: insightsMsgs, max_tokens: 500, temperature: 0.6 }),
+        headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: insightsMsgs, max_tokens: 500, temperature: 0.6 }),
       });
 
-      if (!response.ok) {
-        response = await fetch("https://llm7.io/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer none" },
-          body: JSON.stringify({ model: "mistral-small-3.1-24b", messages: insightsMsgs, max_tokens: 500, temperature: 0.6 }),
-        });
-      }
-
-      if (!response.ok) return res.status(500).json({ error: "فشل الاتصال بالذكاء الاصطناعي" });
+      if (!response.ok) return res.status(500).json({ error: "فشل الاتصال بـ Groq" });
 
       const data = await response.json() as any;
       const content = (data.choices?.[0]?.message?.content || "").trim();
@@ -17946,29 +17929,24 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
         { role: "user", content: userPrompt },
       ];
 
-      let menuResponse = await fetch("https://text.pollinations.ai/openai", {
+      const menuGroqKey = process.env.GROQ_API_KEY;
+      if (!menuGroqKey) return res.status(500).json({ error: "مفتاح Groq غير مضبوط" });
+
+      const menuResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "openai-large", messages: menuMsgs, max_tokens: 600, temperature: 0.85 }),
+        headers: { "Authorization": `Bearer ${menuGroqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: menuMsgs, max_tokens: 600, temperature: 0.85 }),
       });
 
       if (!menuResponse.ok) {
-        menuResponse = await fetch("https://llm7.io/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer none" },
-          body: JSON.stringify({ model: "mistral-small-3.1-24b", messages: menuMsgs, max_tokens: 600, temperature: 0.85 }),
-        });
-      }
-
-      if (!menuResponse.ok) {
         const errText = await menuResponse.text();
-        console.error("Free AI menu error:", errText);
-        return res.status(500).json({ error: "فشل في الاتصال بالذكاء الاصطناعي" });
+        console.error("Groq menu error:", errText);
+        return res.status(500).json({ error: "فشل في الاتصال بـ Groq" });
       }
 
       const data = await menuResponse.json() as any;
       const content = data.choices?.[0]?.message?.content || "";
-      res.json({ result: content, task, model: data.model || "openai-large" });
+      res.json({ result: content, task, model: "groq/llama-3.3-70b-versatile" });
     } catch (error: any) {
       console.error("AI Menu Assist error:", error);
       res.status(500).json({ error: error.message || "حدث خطأ في الذكاء الاصطناعي" });
