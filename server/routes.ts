@@ -17647,9 +17647,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { message, history } = req.body;
       if (!message) return res.status(400).json({ error: "الرسالة مطلوبة" });
 
-      const apiKey = process.env.ZAI_API_KEY;
-      if (!apiKey) return res.status(500).json({ error: "مفتاح الذكاء الاصطناعي غير مضبوط - يرجى إضافة ZAI_API_KEY في الإعدادات" });
-
       // Gather business context
       const todayStart = getSaudiStartOfDay();
       const weekStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -17727,29 +17724,36 @@ ${businessContext}
         { role: "user", content: message },
       ];
 
-      const response = await fetch("https://api.z.ai/v1/chat/completions", {
+      const aiPayload = JSON.stringify({
+        model: "openai-large",
+        messages,
+        max_tokens: 1000,
+        temperature: 0.7,
+      });
+
+      let response = await fetch("https://text.pollinations.ai/openai", {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "glm-4-flash",
-          messages,
-          max_tokens: 1000,
-          temperature: 0.7,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: aiPayload,
       });
 
       if (!response.ok) {
+        response = await fetch("https://llm7.io/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer none" },
+          body: JSON.stringify({ model: "mistral-small-3.1-24b", messages, max_tokens: 1000, temperature: 0.7 }),
+        });
+      }
+
+      if (!response.ok) {
         const errText = await response.text();
-        console.error("Z.AI chat error:", errText);
+        console.error("Free AI chat error:", errText);
         return res.status(500).json({ error: "فشل الاتصال بالذكاء الاصطناعي" });
       }
 
       const data = await response.json() as any;
       const reply = data.choices?.[0]?.message?.content || "";
-      res.json({ reply, model: data.model });
+      res.json({ reply, model: data.model || "openai-large" });
     } catch (error: any) {
       console.error("AI chat error:", error);
       res.status(500).json({ error: error.message || "خطأ في الذكاء الاصطناعي" });
@@ -17759,8 +17763,6 @@ ${businessContext}
   // ─── AI Quick Insights (auto-generated) ──────────────────────────────────
   app.get("/api/ai/insights", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
-      const apiKey = process.env.ZAI_API_KEY;
-      if (!apiKey) return res.status(500).json({ error: "ZAI_API_KEY غير مضبوط" });
 
       const insightsTenantId = req.employee?.tenantId || 'demo-tenant';
       const todayStart = getSaudiStartOfDay();
@@ -17810,19 +17812,20 @@ ${growthPct ? `- النمو مقارنة بالأسبوع الماضي: ${growth
 ]
 لا تضف أي نص خارج الـ JSON.`;
 
-      const response = await fetch("https://api.z.ai/v1/chat/completions", {
+      const insightsMsgs = [{ role: "user", content: prompt }];
+      let response = await fetch("https://text.pollinations.ai/openai", {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "glm-4-flash",
-          messages: [{ role: "user", content: prompt }],
-          max_tokens: 500,
-          temperature: 0.6,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "openai-large", messages: insightsMsgs, max_tokens: 500, temperature: 0.6 }),
       });
+
+      if (!response.ok) {
+        response = await fetch("https://llm7.io/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer none" },
+          body: JSON.stringify({ model: "mistral-small-3.1-24b", messages: insightsMsgs, max_tokens: 500, temperature: 0.6 }),
+        });
+      }
 
       if (!response.ok) return res.status(500).json({ error: "فشل الاتصال بالذكاء الاصطناعي" });
 
@@ -17848,11 +17851,6 @@ ${growthPct ? `- النمو مقارنة بالأسبوع الماضي: ${growth
 
       if (!nameAr && !nameEn) {
         return res.status(400).json({ error: "يرجى إدخال اسم المنتج أولاً" });
-      }
-
-      const apiKey = process.env.ZAI_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ error: "مفتاح الذكاء الاصطناعي غير مضبوط" });
       }
 
       const categoryLabels: Record<string, string> = {
@@ -17943,32 +17941,34 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
 
       const userPrompt = tasks[task] || tasks.description_ar;
 
-      const response = await fetch("https://api.z.ai/v1/chat/completions", {
+      const menuMsgs = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ];
+
+      let menuResponse = await fetch("https://text.pollinations.ai/openai", {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "glm-4-flash",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          max_tokens: 600,
-          temperature: 0.85,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "openai-large", messages: menuMsgs, max_tokens: 600, temperature: 0.85 }),
       });
 
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error("OpenRouter error:", errText);
+      if (!menuResponse.ok) {
+        menuResponse = await fetch("https://llm7.io/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer none" },
+          body: JSON.stringify({ model: "mistral-small-3.1-24b", messages: menuMsgs, max_tokens: 600, temperature: 0.85 }),
+        });
+      }
+
+      if (!menuResponse.ok) {
+        const errText = await menuResponse.text();
+        console.error("Free AI menu error:", errText);
         return res.status(500).json({ error: "فشل في الاتصال بالذكاء الاصطناعي" });
       }
 
-      const data = await response.json() as any;
+      const data = await menuResponse.json() as any;
       const content = data.choices?.[0]?.message?.content || "";
-      res.json({ result: content, task, model: data.model });
+      res.json({ result: content, task, model: data.model || "openai-large" });
     } catch (error: any) {
       console.error("AI Menu Assist error:", error);
       res.status(500).json({ error: error.message || "حدث خطأ في الذكاء الاصطناعي" });
