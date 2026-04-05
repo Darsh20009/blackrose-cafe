@@ -23,6 +23,7 @@ import {
   buildEscPosReceipt,
   thermalPrint,
   testNetworkPrinter,
+  discoverNetworkPrinters,
   isBluetoothSupported,
   connectBluetoothPrinter,
   testBluetoothPrinter,
@@ -45,6 +46,10 @@ export default function PrinterSettingsPanel() {
   const [networkTesting, setNetworkTesting] = useState(false);
   const [networkStatus, setNetworkStatus] = useState<{ connected: boolean; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  // Network discovery state
+  const [discovering, setDiscovering] = useState(false);
+  const [discoveredPrinters, setDiscoveredPrinters] = useState<{ ip: string; port: number }[]>([]);
+  const [discoverProgress, setDiscoverProgress] = useState<string | null>(null);
   // Bluetooth state
   const [btConnecting, setBtConnecting] = useState(false);
   const [btTesting, setBtTesting] = useState(false);
@@ -96,6 +101,37 @@ export default function PrinterSettingsPanel() {
     savePrinterSettings({ mode: 'browser' });
     await refreshStatus();
     toast({ title: tc("تم قطع الاتصال", "Disconnected"), description: tc("سيتم استخدام الطباعة عبر المتصفح", "Browser print will be used") });
+  }
+
+  async function handleDiscoverPrinters() {
+    setDiscovering(true);
+    setDiscoverProgress(tc("جارٍ فحص الشبكة المحلية...", "Scanning local network..."));
+    setDiscoveredPrinters([]);
+    try {
+      const port = settings.networkPort || 9100;
+      setDiscoverProgress(tc(`فحص المنفذ ${port} على الشبكة المحلية — قد يستغرق دقيقة...`, `Scanning port ${port} on local network — may take a minute...`));
+      const found = await discoverNetworkPrinters(port, 300);
+      setDiscoveredPrinters(found);
+      if (found.length > 0) {
+        toast({
+          title: tc(`✅ تم العثور على ${found.length} طابعة`, `✅ Found ${found.length} printer(s)`),
+          description: found.map(p => p.ip).join(' • '),
+        });
+        // Auto-select if only one found
+        if (found.length === 1) {
+          updateSetting('networkIp', found[0].ip);
+          updateSetting('networkPort', found[0].port);
+          toast({ title: tc("✅ تم اختيار الطابعة تلقائياً", "✅ Printer auto-selected"), description: found[0].ip });
+        }
+      } else {
+        toast({ title: tc("لم يُعثر على طابعات", "No Printers Found"), description: tc(`لا توجد أجهزة على المنفذ ${port}. تأكد أن الطابعة متصلة بنفس الشبكة.`, `No devices found on port ${port}. Ensure the printer is on the same network.`), variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: tc("خطأ في الاكتشاف", "Discovery Error"), description: e?.message, variant: "destructive" });
+    } finally {
+      setDiscovering(false);
+      setDiscoverProgress(null);
+    }
   }
 
   async function handleConnectBluetooth() {
@@ -506,10 +542,73 @@ export default function PrinterSettingsPanel() {
             <>
               <Separator />
               <div className="space-y-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <div className="flex items-center gap-2 text-sm font-semibold text-blue-800">
-                  <Network className="w-4 h-4" />
-                  {tc("إعدادات الطابعة الشبكية (ProPos / LAN)", "Network Printer Settings (ProPos / LAN)")}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-blue-800">
+                    <Network className="w-4 h-4" />
+                    {tc("إعدادات الطابعة الشبكية (ProPos / LAN)", "Network Printer Settings (ProPos / LAN)")}
+                  </div>
                 </div>
+
+                {/* Auto-discover button */}
+                <Button
+                  onClick={handleDiscoverPrinters}
+                  disabled={discovering}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  data-testid="button-discover-printers"
+                >
+                  {discovering ? (
+                    <><RefreshCw className="w-4 h-4 ml-2 animate-spin" />{tc("جارٍ البحث...", "Searching...")}</>
+                  ) : (
+                    <><Network className="w-4 h-4 ml-2" />{tc("🔍 بحث تلقائي عن الطابعة", "🔍 Auto-Discover Printer")}</>
+                  )}
+                </Button>
+
+                {/* Scanning progress */}
+                {discoverProgress && (
+                  <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-100 rounded px-2 py-1.5">
+                    <RefreshCw className="w-3 h-3 animate-spin flex-shrink-0" />
+                    <span>{discoverProgress}</span>
+                  </div>
+                )}
+
+                {/* Discovered printers list */}
+                {discoveredPrinters.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-blue-800">
+                      {tc(`✅ تم العثور على ${discoveredPrinters.length} طابعة — انقر لاختيارها:`, `✅ Found ${discoveredPrinters.length} printer(s) — click to select:`)}
+                    </p>
+                    {discoveredPrinters.map((p) => (
+                      <button
+                        key={p.ip}
+                        onClick={() => { updateSetting('networkIp', p.ip); updateSetting('networkPort', p.port); setNetworkStatus(null); }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-sm transition-all ${settings.networkIp === p.ip ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-blue-300 text-blue-800 hover:bg-blue-100'}`}
+                        data-testid={`button-select-printer-${p.ip.replace(/\./g, '-')}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Printer className="w-4 h-4" />
+                          <span className="font-mono font-bold">{p.ip}</span>
+                        </div>
+                        <span className="text-xs opacity-75">{tc(`منفذ ${p.port}`, `Port ${p.port}`)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* No results message */}
+                {!discovering && discoveredPrinters.length === 0 && discoverProgress === null && (
+                  <p className="text-xs text-blue-500 italic text-center">
+                    {tc("انقر «بحث تلقائي» لفحص الشبكة، أو أدخل IP يدوياً", "Click 'Auto-Discover' to scan the network, or enter IP manually")}
+                  </p>
+                )}
+
+                {/* Separator */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 border-t border-blue-200" />
+                  <span className="text-xs text-blue-400">{tc("أو أدخل يدوياً", "or enter manually")}</span>
+                  <div className="flex-1 border-t border-blue-200" />
+                </div>
+
+                {/* Manual IP input */}
                 <div className="grid grid-cols-3 gap-2">
                   <div className="col-span-2 space-y-1">
                     <Label className="text-xs text-blue-700">{tc("عنوان IP الطابعة", "Printer IP Address")}</Label>
@@ -537,8 +636,8 @@ export default function PrinterSettingsPanel() {
                 </div>
                 <p className="text-xs text-blue-600">
                   {tc(
-                    "💡 افتح تطبيق ProPos أو لوحة إعدادات الطابعة للحصول على IP. البورت الافتراضي 9100.",
-                    "💡 Open the ProPos app or printer settings panel to find the IP. Default port is 9100."
+                    "💡 تأكد أن الطابعة والسيرفر على نفس الشبكة. البورت الافتراضي 9100.",
+                    "💡 Ensure the printer and server are on the same network. Default port is 9100."
                   )}
                 </p>
               </div>

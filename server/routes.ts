@@ -3972,6 +3972,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Automatic network printer discovery ──────────────────────────────────────
+  // Scans the server's local subnet(s) for open ESC/POS ports (default 9100).
+  // Uses parallel TCP probes with a short timeout so the scan finishes quickly.
+  app.post("/api/print/discover", requireAuth, async (req: AuthRequest, res) => {
+    const net   = await import('net');
+    const os    = await import('os');
+
+    const port       = Number(req.body?.port) || 9100;
+    const timeoutMs  = Number(req.body?.timeout) || 300; // ms per probe
+    const batchSize  = 50; // parallel probes at once
+
+    // Collect all local IPv4 subnets
+    const subnets: string[] = [];
+    const ifaces = os.networkInterfaces();
+    for (const iface of Object.values(ifaces)) {
+      if (!iface) continue;
+      for (const addr of iface) {
+        if (addr.family !== 'IPv4' || addr.internal) continue;
+        // Build subnet prefix, e.g. "192.168.1."
+        const parts = addr.address.split('.');
+        if (parts.length === 4) subnets.push(parts.slice(0, 3).join('.') + '.');
+      }
+    }
+
+    if (subnets.length === 0) {
+      return res.json({ success: true, found: [], message: 'لم يُعثر على شبكة محلية' });
+    }
+
+    // Probe a single IP:port — resolves with ip on success, null on failure
+    function probe(ip: string): Promise<string | null> {
+      return new Promise((resolve) => {
+        const socket = new net.Socket();
+        let done = false;
+        const finish = (ok: boolean) => {
+          if (done) return;
+          done = true;
+          socket.destroy();
+          resolve(ok ? ip : null);
+        };
+        socket.setTimeout(timeoutMs);
+        socket.on('connect',  () => finish(true));
+        socket.on('error',    () => finish(false));
+        socket.on('timeout',  () => finish(false));
+        socket.connect(port, ip);
+      });
+    }
+
+    const found: Array<{ ip: string; port: number }> = [];
+
+    for (const subnet of subnets) {
+      // Scan 1..254 in batches
+      for (let start = 1; start <= 254; start += batchSize) {
+        const batch: string[] = [];
+        for (let i = start; i < start + batchSize && i <= 254; i++) {
+          batch.push(subnet + i);
+        }
+        const results = await Promise.all(batch.map(probe));
+        for (const ip of results) {
+          if (ip) found.push({ ip, port });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      found,
+      scanned: subnets.map(s => `${s}1-254:${port}`),
+      message: found.length
+        ? `✅ تم العثور على ${found.length} طابعة`
+        : `لم يُعثر على طابعات على المنفذ ${port}`,
+    });
+  });
+
   // ==================== CASHIER SHIFT MANAGEMENT ====================
 
   // Open a new cashier shift

@@ -410,6 +410,24 @@ export async function networkPrint(escData: Uint8Array, ip: string, port: number
 }
 
 /**
+ * Scan the local network for printers on a given port.
+ * Calls the server-side discovery endpoint which probes the full /24 subnet.
+ */
+export async function discoverNetworkPrinters(
+  port: number = 9100,
+  timeoutMs: number = 300,
+): Promise<{ ip: string; port: number }[]> {
+  const resp = await fetch('/api/print/discover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ port, timeout: timeoutMs }),
+  });
+  if (!resp.ok) throw new Error('فشل طلب الاكتشاف');
+  const data = await resp.json();
+  return data.found ?? [];
+}
+
+/**
  * Test network printer connectivity (TCP ping).
  */
 export async function testNetworkPrinter(ip: string, port: number = 9100): Promise<{ connected: boolean; message: string }> {
