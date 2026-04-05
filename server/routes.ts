@@ -12157,6 +12157,160 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Comprehensive monthly attendance report
+  app.get("/api/attendance/monthly-report", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { AttendanceModel, EmployeeModel } = await import("@shared/schema");
+      const { year, month, employeeId, branchId } = req.query;
+
+      const y = parseInt(year as string) || new Date().getFullYear();
+      const m = parseInt(month as string) || (new Date().getMonth() + 1);
+
+      // Saudi timezone offset: +3 hours
+      const monthStart = new Date(`${y}-${String(m).padStart(2,'0')}-01T00:00:00+03:00`);
+      const monthEnd = new Date(monthStart);
+      monthEnd.setMonth(monthEnd.getMonth() + 1);
+
+      const query: any = { shiftDate: { $gte: monthStart, $lt: monthEnd } };
+
+      if (req.employee?.role === 'manager' && req.employee?.branchId) {
+        query.branchId = req.employee.branchId;
+      } else if (branchId) {
+        query.branchId = branchId;
+      }
+      if (employeeId) query.employeeId = employeeId;
+
+      const allAttendance = await AttendanceModel.find(query).lean();
+
+      // Group by employeeId
+      const byEmployee: Record<string, any[]> = {};
+      allAttendance.forEach((a: any) => {
+        const id = a.employeeId;
+        if (!byEmployee[id]) byEmployee[id] = [];
+        byEmployee[id].push(a);
+      });
+
+      // Get employees in scope
+      const empQuery: any = {};
+      if (req.employee?.role === 'manager' && req.employee?.branchId) {
+        empQuery.branchId = req.employee.branchId;
+      } else if (branchId) {
+        empQuery.branchId = branchId;
+      }
+      if (employeeId) {
+        empQuery.$or = [{ id: employeeId }, { _id: employeeId }];
+      }
+      const employees = await EmployeeModel.find({ ...empQuery, isActive: { $ne: false } }).lean();
+
+      // Count work days in month (Sun-Thu by default)
+      const daysInMonth = new Date(y, m, 0).getDate();
+      let workDaysInMonth = 0;
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dow = new Date(y, m - 1, d).getDay();
+        if (dow !== 5 && dow !== 6) workDaysInMonth++; // Skip Fri/Sat
+      }
+
+      // Orders for employee sales
+      const { OrderModel } = await import("@shared/schema");
+      const allOrders = await OrderModel.find({
+        createdAt: { $gte: monthStart, $lt: monthEnd },
+        status: { $in: ['completed', 'delivered'] },
+        ...(req.employee?.role === 'manager' && req.employee?.branchId ? { branchId: req.employee.branchId } : {}),
+      }).lean();
+
+      const salesByEmployee: Record<string, { count: number; total: number }> = {};
+      allOrders.forEach((o: any) => {
+        const empId = o.employeeId || o.servedBy || o.cashierId;
+        if (empId) {
+          if (!salesByEmployee[empId]) salesByEmployee[empId] = { count: 0, total: 0 };
+          salesByEmployee[empId].count++;
+          salesByEmployee[empId].total += parseFloat(o.total || o.totalAmount || '0');
+        }
+      });
+
+      const report = employees.map((emp: any) => {
+        const empId = emp.id || emp._id?.toString();
+        const records = byEmployee[empId] || [];
+        const presentDays = records.length;
+        const absentDays = Math.max(0, workDaysInMonth - presentDays);
+        const lateDays = records.filter((r: any) => r.isLate).length;
+        const totalLateMinutes = records.reduce((s: number, r: any) => s + (r.lateMinutes || 0), 0);
+        const totalWorkMinutes = records.reduce((s: number, r: any) => {
+          if (r.checkInTime && r.checkOutTime) {
+            return s + Math.floor((new Date(r.checkOutTime).getTime() - new Date(r.checkInTime).getTime()) / 60000);
+          }
+          return s;
+        }, 0);
+        const sales = salesByEmployee[empId] || { count: 0, total: 0 };
+        return {
+          employee: {
+            id: empId,
+            fullName: emp.fullName,
+            role: emp.role,
+            jobTitle: emp.jobTitle,
+            shiftTime: emp.shiftTime,
+            imageUrl: emp.imageUrl,
+          },
+          presentDays,
+          absentDays,
+          lateDays,
+          totalLateMinutes,
+          totalWorkHours: Math.floor(totalWorkMinutes / 60),
+          attendanceRate: workDaysInMonth > 0 ? Math.round((presentDays / workDaysInMonth) * 100) : 0,
+          salesCount: sales.count,
+          salesTotal: parseFloat(sales.total.toFixed(2)),
+          records: records.map(serializeDoc),
+        };
+      });
+
+      // Sort by attendance rate desc for "best employee"
+      report.sort((a, b) => b.attendanceRate - a.attendanceRate || b.salesTotal - a.salesTotal);
+
+      res.json({
+        year: y,
+        month: m,
+        workDaysInMonth,
+        totalEmployees: employees.length,
+        report,
+        bestEmployee: report[0] || null,
+      });
+    } catch (error) {
+      console.error("[ATTENDANCE REPORT]", error);
+      res.status(500).json({ error: "فشل في إنشاء التقرير الشهري" });
+    }
+  });
+
+  // Reset only operational data (orders, accounting) - keep products, employees, images
+  app.delete("/api/admin/reset-orders-only", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (req.employee?.role !== 'owner' && req.employee?.role !== 'admin') {
+        return res.status(403).json({ error: "فقط المالك أو المدير العام يمكنه تصفير البيانات" });
+      }
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const { OrderModel, CartItemModel } = await import("@shared/schema");
+      const DailyAccounting = mongoose.models['DailyAccounting'];
+
+      const results = await Promise.all([
+        OrderModel.deleteMany({ tenantId }),
+        CartItemModel.deleteMany({ tenantId }),
+        DailyAccounting ? DailyAccounting.deleteMany({ tenantId }) : Promise.resolve({ deletedCount: 0 }),
+      ]);
+
+      res.json({
+        success: true,
+        message: "تم تصفير الطلبات والمحاسبة بنجاح. المنتجات والموظفون والصور محفوظة.",
+        deleted: {
+          orders: results[0].deletedCount,
+          cartItems: results[1].deletedCount,
+          accountingRecords: (results[2] as any).deletedCount || 0,
+        }
+      });
+    } catch (error) {
+      console.error("[RESET ORDERS]", error);
+      res.status(500).json({ error: "فشل تصفير الطلبات" });
+    }
+  });
+
   // ============== LEAVE REQUEST ROUTES ==============
 
   // Submit a leave request

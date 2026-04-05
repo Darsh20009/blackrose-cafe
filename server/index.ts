@@ -65,7 +65,7 @@ async function connectDatabase() {
     try {
       const bcrypt = await import("bcryptjs");
       const EmployeeCollection = mongoose.connection.collection('employees');
-      const portalPassword = await bcrypt.hash("b2030", 10);
+      const portalPassword = await bcrypt.hash("123456", 10);
       const portalAccounts = ["admin", "owner"];
       for (const username of portalAccounts) {
         const result = await EmployeeCollection.updateOne(

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, MapPin, Phone, User, Store, ArrowRight, Loader2, Edit2, Trash2, Pentagon } from 'lucide-react';
 import BranchPolygonPicker from '@/components/branch-polygon-picker';
+import BranchLocationPicker from '@/components/branch-location-picker';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -277,29 +278,18 @@ export default function AdminBranches() {
                 <MapPin className="w-4 h-4" />
                 {tc("إعدادات الموقع والحدود الجغرافية", "Location & Geofence Settings")}
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="locationLat">خط العرض (Latitude)</Label>
-                  <Input 
-                    id="locationLat"
-                    type="number"
-                    step="any"
-                    value={formData.locationLat}
-                    onChange={(e) => setFormData({...formData, locationLat: e.target.value})}
-                    placeholder="24.7136"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="locationLng">خط الطول (Longitude)</Label>
-                  <Input 
-                    id="locationLng"
-                    type="number"
-                    step="any"
-                    value={formData.locationLng}
-                    onChange={(e) => setFormData({...formData, locationLng: e.target.value})}
-                    placeholder="46.6753"
-                  />
-                </div>
+              <div className="space-y-3">
+                <BranchLocationPicker
+                  initialLat={formData.locationLat ? parseFloat(formData.locationLat) : undefined}
+                  initialLng={formData.locationLng ? parseFloat(formData.locationLng) : undefined}
+                  onLocationSelect={(lat, lng) => setFormData(f => ({...f, locationLat: lat.toString(), locationLng: lng.toString()}))}
+                />
+                {formData.locationLat && formData.locationLng && (
+                  <p className="text-xs text-muted-foreground" dir="ltr">
+                    📍 {parseFloat(formData.locationLat).toFixed(6)}, {parseFloat(formData.locationLng).toFixed(6)}
+                  </p>
+                )}
+                <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="geofenceRadius">{tc("نطاق حدود الفرع الدائري (بالمتر) - اختياري", "Circular Geofence Radius (meters) - Optional")}</Label>
                   <Input 
@@ -340,6 +330,7 @@ export default function AdminBranches() {
                     onChange={(e) => setFormData({...formData, workingHoursClose: e.target.value})}
                   />
                 </div>
+              </div>
               </div>
             </div>
 
@@ -499,6 +490,24 @@ export default function AdminBranches() {
                   placeholder="0501234567"
                 />
               </div>
+            </div>
+
+            {/* موقع الفرع - التعديل */}
+            <div className="border-t pt-4 mt-4">
+              <h4 className="font-semibold mb-3 flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                {tc("موقع الفرع الجغرافي", "Branch Location")}
+              </h4>
+              <BranchLocationPicker
+                initialLat={formData.locationLat ? parseFloat(formData.locationLat) : undefined}
+                initialLng={formData.locationLng ? parseFloat(formData.locationLng) : undefined}
+                onLocationSelect={(lat, lng) => setFormData(f => ({...f, locationLat: lat.toString(), locationLng: lng.toString()}))}
+              />
+              {formData.locationLat && formData.locationLng && (
+                <p className="text-xs text-muted-foreground mt-2" dir="ltr">
+                  📍 {parseFloat(formData.locationLat).toFixed(6)}, {parseFloat(formData.locationLng).toFixed(6)}
+                </p>
+              )}
             </div>
 
             {/* رسم حدود الفرع متعددة النقاط - التعديل */}

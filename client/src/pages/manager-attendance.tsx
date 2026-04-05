@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Coffee, ArrowRight, Calendar, Clock, User, MapPin, 
   Camera, CheckCircle2, XCircle, AlertTriangle, Search,
-  Download, Filter, Users, FileText, Check, X
+  Download, Filter, Users, FileText, Check, X, Trophy, TrendingDown, TrendingUp, Star
 } from "lucide-react";
 import * as XLSX from 'xlsx';
 import type { Employee } from "@shared/schema";
@@ -86,12 +86,19 @@ export default function ManagerAttendance() {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'daily' | 'monthly'>('daily');
+  const [monthlyReport, setMonthlyReport] = useState<any>(null);
+  const [monthlyReportLoading, setMonthlyReportLoading] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
 
   useEffect(() => {
     const storedEmployee = localStorage.getItem("currentEmployee");
     if (storedEmployee) {
       const emp = JSON.parse(storedEmployee);
-      if (emp.role !== 'manager' && emp.role !== 'admin' && emp.role !== 'owner') {
+      if (emp.role !== 'manager' && emp.role !== 'branch_manager' && emp.role !== 'admin' && emp.role !== 'owner') {
         setLocation("/employee/gateway");
         return;
       }
@@ -183,6 +190,24 @@ export default function ManagerAttendance() {
       console.error("Error fetching attendance:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchMonthlyReport = async () => {
+    setMonthlyReportLoading(true);
+    try {
+      const [yearStr, monthStr] = selectedMonth.split('-');
+      let url = `/api/attendance/monthly-report?year=${yearStr}&month=${parseInt(monthStr)}`;
+      if (selectedBranch !== 'all') url += `&branchId=${selectedBranch}`;
+      const response = await fetch(url, { credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setMonthlyReport(data);
+      }
+    } catch (error) {
+      console.error("Error fetching monthly report:", error);
+    } finally {
+      setMonthlyReportLoading(false);
     }
   };
 
@@ -337,6 +362,192 @@ export default function ManagerAttendance() {
           </Card>
         </div>
 
+        {/* Tab Switcher */}
+        <div className="flex gap-2 mb-4">
+          <Button
+            size="sm"
+            variant={activeTab === 'daily' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('daily')}
+            className={activeTab === 'daily' ? 'bg-primary text-white' : 'border-primary/30 text-gray-400'}
+            data-testid="button-daily-tab"
+          >
+            <Calendar className="w-4 h-4 ml-2" />
+            التقرير اليومي
+          </Button>
+          <Button
+            size="sm"
+            variant={activeTab === 'monthly' ? 'default' : 'outline'}
+            onClick={() => { setActiveTab('monthly'); fetchMonthlyReport(); }}
+            className={activeTab === 'monthly' ? 'bg-accent text-white' : 'border-primary/30 text-gray-400'}
+            data-testid="button-monthly-tab"
+          >
+            <Trophy className="w-4 h-4 ml-2" />
+            التقرير الشهري
+          </Button>
+        </div>
+
+        {/* Monthly Report Section */}
+        {activeTab === 'monthly' && (
+          <div className="space-y-4">
+            <Card className="bg-gradient-to-br from-background to-background border-primary/20">
+              <CardContent className="p-4">
+                <div className="flex flex-wrap gap-3 items-center">
+                  <div>
+                    <label className="text-gray-400 text-xs block mb-1">الشهر</label>
+                    <Input
+                      type="month"
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(e.target.value)}
+                      className="bg-[#1a1410] border-primary/20 text-white w-44"
+                      data-testid="input-monthly-month"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-xs block mb-1">الفرع</label>
+                    <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+                      <SelectTrigger className="w-40 bg-[#1a1410] border-primary/20 text-white" data-testid="select-monthly-branch">
+                        <SelectValue placeholder="كل الفروع" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">كل الفروع</SelectItem>
+                        {branches.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>{b.nameAr || b.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="mt-4">
+                    <Button onClick={fetchMonthlyReport} className="bg-primary text-white" data-testid="button-fetch-monthly">
+                      <Download className="w-4 h-4 ml-2" />
+                      عرض التقرير
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {monthlyReportLoading ? (
+              <div className="text-center py-12">
+                <div className="animate-spin w-10 h-10 border-2 border-primary border-t-transparent rounded-full mx-auto" />
+                <p className="text-gray-400 mt-4">جاري تحميل التقرير...</p>
+              </div>
+            ) : monthlyReport ? (
+              <div className="space-y-4">
+                {/* Summary */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Card className="bg-gradient-to-br from-green-900/30 to-green-950/20 border-green-500/20">
+                    <CardContent className="p-4 text-center">
+                      <p className="text-green-400 text-2xl font-bold">{monthlyReport.workDaysInMonth || 0}</p>
+                      <p className="text-gray-400 text-xs mt-1">أيام العمل في الشهر</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-br from-blue-900/30 to-blue-950/20 border-blue-500/20">
+                    <CardContent className="p-4 text-center">
+                      <p className="text-blue-400 text-2xl font-bold">{monthlyReport.totalEmployees || 0}</p>
+                      <p className="text-gray-400 text-xs mt-1">عدد الموظفين</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-br from-red-900/30 to-red-950/20 border-red-500/20">
+                    <CardContent className="p-4 text-center">
+                      <p className="text-red-400 text-2xl font-bold">{(monthlyReport.report || []).reduce((s: number, r: any) => s + (r.absentDays || 0), 0)}</p>
+                      <p className="text-gray-400 text-xs mt-1">إجمالي الغيابات</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-br from-amber-900/30 to-amber-950/20 border-amber-500/20">
+                    <CardContent className="p-4 text-center">
+                      <p className="text-amber-400 text-2xl font-bold">{(monthlyReport.report || []).reduce((s: number, r: any) => s + (r.totalLateMinutes || 0), 0)}</p>
+                      <p className="text-gray-400 text-xs mt-1">إجمالي دقائق التأخير</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Best Employee Banner */}
+                {monthlyReport.bestEmployee && (
+                  <Card className="bg-gradient-to-br from-yellow-900/30 to-yellow-950/20 border-yellow-500/30">
+                    <CardContent className="p-4 flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center flex-shrink-0">
+                        <Trophy className="w-6 h-6 text-yellow-400" />
+                      </div>
+                      <div>
+                        <p className="text-yellow-400 font-bold text-lg">{monthlyReport.bestEmployee.employee?.fullName}</p>
+                        <p className="text-gray-400 text-sm">الموظف المثالي لشهر {selectedMonth}</p>
+                        <div className="flex gap-3 mt-1 flex-wrap">
+                          <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />{monthlyReport.bestEmployee.presentDays} يوم حضور</span>
+                          <span className="text-xs text-red-400 flex items-center gap-1"><XCircle className="w-3 h-3" />{monthlyReport.bestEmployee.absentDays} غياب</span>
+                          <span className="text-xs text-amber-400 flex items-center gap-1"><Clock className="w-3 h-3" />{monthlyReport.bestEmployee.lateDays} تأخير</span>
+                          <span className="text-xs text-blue-400 flex items-center gap-1"><Star className="w-3 h-3" />{monthlyReport.bestEmployee.attendanceRate?.toFixed(1)}% حضور</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Employee Ranking Table */}
+                <Card className="bg-gradient-to-br from-background to-background border-primary/20">
+                  <CardHeader>
+                    <CardTitle className="text-accent text-base flex items-center gap-2">
+                      <Users className="w-4 h-4" />
+                      ترتيب الموظفين حسب الالتزام
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-primary/20 bg-[#1a1410]">
+                            <th className="text-right py-3 px-4 text-gray-400 font-medium">#</th>
+                            <th className="text-right py-3 px-4 text-gray-400 font-medium">الموظف</th>
+                            <th className="text-right py-3 px-4 text-gray-400 font-medium">أيام الحضور</th>
+                            <th className="text-right py-3 px-4 text-gray-400 font-medium">أيام الغياب</th>
+                            <th className="text-right py-3 px-4 text-gray-400 font-medium">أيام التأخير</th>
+                            <th className="text-right py-3 px-4 text-gray-400 font-medium">ساعات التأخير</th>
+                            <th className="text-right py-3 px-4 text-gray-400 font-medium">ساعات العمل</th>
+                            <th className="text-right py-3 px-4 text-gray-400 font-medium">نسبة الحضور</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(monthlyReport.report || []).map((emp: any, idx: number) => (
+                            <tr key={emp.employee?.id || idx} className={`border-b border-primary/10 ${idx === 0 ? 'bg-yellow-900/10' : idx === 1 ? 'bg-gray-800/30' : idx === 2 ? 'bg-amber-900/10' : ''}`}>
+                              <td className="py-3 px-4">
+                                {idx === 0 ? <Trophy className="w-4 h-4 text-yellow-400" /> :
+                                 idx === 1 ? <span className="text-gray-400 font-bold">2</span> :
+                                 idx === 2 ? <span className="text-amber-600 font-bold">3</span> :
+                                 <span className="text-gray-500">{idx + 1}</span>}
+                              </td>
+                              <td className="py-3 px-4 text-white font-medium">{emp.employee?.fullName || '-'}</td>
+                              <td className="py-3 px-4 text-green-400 font-bold">{emp.presentDays}</td>
+                              <td className="py-3 px-4 text-red-400 font-bold">{emp.absentDays}</td>
+                              <td className="py-3 px-4 text-amber-400 font-bold">{emp.lateDays}</td>
+                              <td className="py-3 px-4 text-orange-400">{Math.round((emp.totalLateMinutes || 0) / 60 * 10) / 10}h</td>
+                              <td className="py-3 px-4 text-blue-400">{emp.totalWorkHours || 0}h</td>
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                    <div className="h-full bg-green-500 rounded-full" style={{ width: `${emp.attendanceRate || 0}%` }} />
+                                  </div>
+                                  <span className={`text-xs font-bold ${(emp.attendanceRate || 0) >= 80 ? 'text-green-400' : (emp.attendanceRate || 0) >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
+                                    {(emp.attendanceRate || 0).toFixed(1)}%
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-400">
+                <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p>اختر الشهر واضغط "عرض التقرير"</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'daily' && (<>
         <Card className="bg-gradient-to-br from-background to-background border-primary/20 mb-6">
           <CardContent className="p-4">
             <div className="space-y-3">
@@ -796,6 +1007,8 @@ export default function ManagerAttendance() {
             )}
           </CardContent>
         </Card>
+
+        </>)}
 
         {selectedPhoto && (
           <div

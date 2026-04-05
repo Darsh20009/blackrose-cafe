@@ -188,7 +188,6 @@ export default function BranchPolygonPicker({
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             maxZoom={19}
-            crossOrigin={true}
           />
           <MapCenterController center={mapCenter} />
           <PolygonDrawer points={points} setPoints={handlePointsChange} />

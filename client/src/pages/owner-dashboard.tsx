@@ -181,6 +181,25 @@ export default function OwnerDashboard() {
     }
   };
 
+  const handleResetOrdersOnly = async () => {
+    if (!confirm("سيتم حذف جميع الطلبات والمحاسبة. المنتجات والموظفون والصور ستبقى. هل أنت متأكد؟")) return;
+    try {
+      const response = await apiRequest('DELETE', '/api/admin/reset-orders-only');
+      const data = await response.json();
+      toast({
+        title: tc("تم التصفير", "Reset Done"),
+        description: data.message
+      });
+      fetchStats();
+    } catch (error: any) {
+      toast({
+        title: tc("خطأ", "Error"),
+        description: error.message || tc("فشل التصفير", "Reset failed"),
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleResetDatabase = async () => {
     if (resetConfirm !== 'احذف جميع البيانات') {
       toast({
@@ -499,7 +518,7 @@ export default function OwnerDashboard() {
               </Card>
             )}
 
-            {employee.role === 'owner' && (
+            {(employee.role === 'owner' || employee.role === 'admin') && (
               <Card className="bg-gradient-to-br from-red-900/20 to-red-950/10 border-red-500/20">
                 <CardHeader>
                   <CardTitle className="text-red-500 flex items-center gap-2">
@@ -510,12 +529,27 @@ export default function OwnerDashboard() {
                     عمليات لا يمكن التراجع عنها
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-3">
+                  {/* Reset Orders Only */}
+                  <div className="p-3 bg-amber-900/20 border border-amber-500/20 rounded-lg">
+                    <p className="text-amber-400 text-sm font-medium mb-1">تصفير الطلبات والمكاسب</p>
+                    <p className="text-gray-500 text-xs mb-3">يحذف الطلبات والمحاسبة فقط — المنتجات، الموظفون، والصور تبقى</p>
+                    <Button
+                      variant="outline"
+                      className="w-full border-amber-500/30 text-amber-400 hover:bg-amber-900/30"
+                      onClick={handleResetOrdersOnly}
+                      data-testid="button-reset-orders-only"
+                    >
+                      <ShoppingCart className="w-4 h-4 ml-2" />
+                      تصفير الطلبات فقط
+                    </Button>
+                  </div>
+
                   <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
                     <DialogTrigger asChild>
                       <Button variant="destructive" className="w-full" data-testid="button-reset-database">
                         <Trash2 className="w-4 h-4 ml-2" />
-                        إعادة تعيين قاعدة البيانات
+                        إعادة تعيين قاعدة البيانات الكاملة
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="bg-[#2d1f1a] border-red-500/20">

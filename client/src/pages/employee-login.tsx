@@ -22,6 +22,7 @@ function useAutoRedirectIfLoggedIn() {
           if (emp.role === "admin") setLocation("/admin/dashboard");
           else if (emp.role === "owner") setLocation("/owner/dashboard");
           else if (emp.role === "manager" || emp.role === "branch_manager") setLocation("/manager/dashboard");
+          else if (emp.role === "cleaner") setLocation("/employee/attendance");
           else setLocation("/employee/home");
         }
       } catch {}
@@ -57,6 +58,7 @@ export default function EmployeeLogin() {
           const r = parsed.role;
           if (r === "admin" || r === "owner") window.location.href = "/admin/dashboard";
           else if (r === "manager" || r === "branch_manager") window.location.href = "/manager/dashboard";
+          else if (r === "cleaner") window.location.href = "/employee/attendance";
           else window.location.href = "/employee/home";
           return;
         }
@@ -90,6 +92,7 @@ export default function EmployeeLogin() {
       if (role === "admin") window.location.href = "/admin/dashboard";
       else if (role === "owner") window.location.href = "/owner/dashboard";
       else if (role === "manager" || role === "branch_manager") window.location.href = "/manager/dashboard";
+      else if (role === "cleaner") window.location.href = "/employee/attendance";
       else window.location.href = "/employee/home";
     },
     onError: (err: any) => {

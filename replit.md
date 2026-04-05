@@ -28,6 +28,29 @@ This is the **single source of truth** for ALL branding across the entire system
 
 **Note for server-side branding** (email templates in `server/mail-service.ts`): These contain hardcoded brand strings that should be manually kept in sync with `brand.ts` values.
 
+## Latest Fixes (April 2026 - Attendance Report, Cleaner Role, Owner Dashboard)
+
+### Changes Applied (April 5, 2026)
+
+**1. Monthly Attendance Report in Manager Attendance Page**
+`client/src/pages/manager-attendance.tsx` now has a tab switcher between "Daily Report" and "Monthly Report":
+- Monthly report calls `/api/attendance/monthly-report?year=YYYY&month=M` (route already in server/routes.ts)
+- Shows per-employee: present days, absent days, late days, late hours, work hours, attendance rate %
+- Best Employee banner highlights top performer
+- Employee ranking table sorted by attendance rate
+- Summary cards: working days, total employees, total absences, total late minutes
+
+**2. Cleaner Role Redirect to Attendance**
+`client/src/pages/employee-login.tsx`: Employees with role `cleaner` are now automatically redirected to `/employee/attendance` instead of the full employee home — giving them an attendance-only interface.
+
+**3. Owner/Admin Dashboard — Reset Orders Only**
+`client/src/pages/owner-dashboard.tsx`:
+- Both `owner` and `admin` roles can now access the danger zone (previously only `owner`)
+- New "Reset Orders Only" button calls `DELETE /api/admin/reset-orders-only` — deletes orders + accounting while preserving products, employees, and images
+
+**4. Branch Manager Fix in Attendance**
+Fixed `manager-attendance.tsx` to allow `branch_manager` role (in addition to `manager`, `admin`, `owner`) — the role string `branch_manager` is the actual stored value.
+
 ## Latest Fixes (March 2026 - Timezone, Printing, Dashboard)
 
 ### Bug Fixes Applied (March 27, 2026)
