@@ -61,22 +61,43 @@ async function connectDatabase() {
       await OrderModel.collection.dropIndex("orderNumber_1").catch(() => {});
       console.log("✅ Order number uniqueness migrated to allow counter wrap-around");
     } catch (_) {}
-    // Ensure admin/owner accounts use the portal password
+    // Ensure admin/owner accounts exist and use the portal password
     try {
       const bcrypt = await import("bcryptjs");
-      const EmployeeCollection = mongoose.connection.collection('employees');
+      const { v4: uuidv4 } = await import("uuid");
+      const { EmployeeModel } = await import("@shared/schema");
       const portalPassword = await bcrypt.hash("123456", 10);
-      const portalAccounts = ["admin", "owner"];
-      for (const username of portalAccounts) {
-        const result = await EmployeeCollection.updateOne(
-          { username },
-          { $set: { password: portalPassword } }
-        );
-        if (result.matchedCount > 0) {
-          console.log(`✅ Portal account '${username}' password synced`);
-        }
+
+      // Sync admin password if exists
+      const adminResult = await EmployeeModel.updateOne(
+        { username: "admin" },
+        { $set: { password: portalPassword } }
+      );
+      if (adminResult.matchedCount > 0) {
+        console.log(`✅ Portal account 'admin' password synced`);
       }
-    } catch (_) {}
+
+      // Create owner account if it doesn't exist
+      const ownerExists = await EmployeeModel.findOne({ username: "owner" });
+      if (!ownerExists) {
+        await EmployeeModel.create({
+          id: uuidv4(),
+          tenantId: "demo-tenant",
+          username: "owner",
+          password: portalPassword,
+          fullName: "المالك",
+          role: "owner",
+          phone: "0000000001",
+          jobTitle: "المالك",
+          isActivated: 1,
+          isActive: 1,
+        });
+        console.log(`✅ Owner account created with password 123456`);
+      } else {
+        await EmployeeModel.updateOne({ username: "owner" }, { $set: { password: portalPassword, isActivated: 1, isActive: 1 } });
+        console.log(`✅ Portal account 'owner' password synced`);
+      }
+    } catch (err) { console.error("Owner sync error:", err); }
     // Ensure demo-tenant has Infinity plan — all features unlocked
     try {
       const { SubscriptionConfigModel } = await import("./qirox-admin");
