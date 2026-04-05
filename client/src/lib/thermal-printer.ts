@@ -31,7 +31,7 @@ const CMD = {
 
 export interface PrinterSettings {
   enabled: boolean;
-  mode: 'webusb' | 'browser';
+  mode: 'webusb' | 'network' | 'browser';
   paperWidth: '58mm' | '80mm';
   autoPrint: boolean;
   autoKitchenCopy: boolean;
@@ -41,6 +41,9 @@ export interface PrinterSettings {
   fontSize: 'small' | 'normal';
   cuttingMode: 'auto' | 'manual';
   feedLines: number;
+  // Network printer (LAN/TCP) — ProPos, Epson TM-T88 LAN, Xprinter NW, etc.
+  networkIp?: string;
+  networkPort?: number;
 }
 
 const DEFAULT_SETTINGS: PrinterSettings = {
@@ -52,6 +55,7 @@ const DEFAULT_SETTINGS: PrinterSettings = {
   fontSize: 'normal',
   cuttingMode: 'auto',
   feedLines: 3,
+  networkPort: 9100,
 };
 
 const SETTINGS_KEY = 'qirox-printer-settings';
@@ -375,18 +379,68 @@ export interface PrintResult {
 }
 
 /**
+ * Send ESC/POS data to a network printer (LAN/TCP) via server-side TCP socket.
+ * Works with ProPos, Epson TM-T88 LAN, Xprinter NW series, and any ESC/POS network printer.
+ */
+export async function networkPrint(escData: Uint8Array, ip: string, port: number = 9100): Promise<PrintResult> {
+  try {
+    const base64Data = btoa(String.fromCharCode(...escData));
+    const resp = await fetch('/api/print/network', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip, port, data: base64Data }),
+    });
+    const result = await resp.json();
+    if (!resp.ok || !result.success) {
+      return { success: false, mode: 'error', error: result.error || 'فشلت الطباعة الشبكية' };
+    }
+    return { success: true, mode: 'network' as any };
+  } catch (err: any) {
+    return { success: false, mode: 'error', error: err.message || 'خطأ في الاتصال بالطابعة' };
+  }
+}
+
+/**
+ * Test network printer connectivity (TCP ping).
+ */
+export async function testNetworkPrinter(ip: string, port: number = 9100): Promise<{ connected: boolean; message: string }> {
+  try {
+    const resp = await fetch('/api/print/network-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip, port }),
+    });
+    const result = await resp.json();
+    return { connected: !!result.connected, message: result.message || result.error || '' };
+  } catch {
+    return { connected: false, message: 'فشل الاتصال بالخادم' };
+  }
+}
+
+/**
  * High-level print function.
- * 1. Tries WebUSB if device is connected + mode=webusb
- * 2. Falls back to browser print dialog
+ * 1. Tries Network (LAN/TCP) if mode=network and IP is configured
+ * 2. Tries WebUSB if device is connected + mode=webusb
+ * 3. Falls back to browser print dialog
  */
 export async function thermalPrint(escData: Uint8Array, fallbackHtml: string, fallbackPaper: '58mm' | '80mm' = '80mm'): Promise<PrintResult> {
   const settings = loadPrinterSettings();
 
   if (!settings.enabled) return { success: false, mode: 'error', error: 'الطابعة معطّلة في الإعدادات' };
 
-  // Try WebUSB first
+  // Network (LAN/TCP) mode — ProPos, Epson LAN, Xprinter NW, etc.
+  if (settings.mode === 'network') {
+    if (!settings.networkIp) {
+      return { success: false, mode: 'error', error: 'لم يتم تحديد IP الطابعة الشبكية' };
+    }
+    const result = await networkPrint(escData, settings.networkIp, settings.networkPort || 9100);
+    if (result.success) return result;
+    // If network fails, fall through to browser
+    console.warn('[NetworkPrint] Falling back to browser:', result.error);
+  }
+
+  // WebUSB mode
   if (settings.mode === 'webusb') {
-    // Try to reconnect saved device if not connected
     if (!_usbDevice) {
       await reconnectSavedUSBPrinter();
     }
@@ -414,7 +468,11 @@ export async function autoPrintOrder(receiptEsc: Uint8Array, kitchenEsc: Uint8Ar
 
   if (kitchenEsc && settings.autoKitchenCopy) {
     await new Promise(r => setTimeout(r, 1500));
-    await _sendToUSB(kitchenEsc);
+    if (settings.mode === 'network' && settings.networkIp) {
+      await networkPrint(kitchenEsc, settings.networkIp, settings.networkPort || 9100);
+    } else if (_usbDevice) {
+      await _sendToUSB(kitchenEsc);
+    }
   }
 }
 

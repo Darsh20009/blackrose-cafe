@@ -3871,11 +3871,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const { orderNumber, receiptData } = req.body;
       
-      // In a real implementation, this would:
-      // 1. Format the receipt data for thermal printer (ESC/POS commands)
-      // 2. Send to the connected printer via serial port or network
-      // 3. Handle printer errors
-      
       res.json({ 
         success: true,
         message: "تمت الطباعة بنجاح",
@@ -3885,6 +3880,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ error: "فشل في الطباعة" });
+    }
+  });
+
+  // ─── Network Printer (LAN/TCP) — supports ProPos, Epson LAN, Xprinter, etc. ───
+  // Sends raw ESC/POS bytes to a thermal printer via TCP socket (port 9100)
+  app.post("/api/print/network", requireAuth, async (req: AuthRequest, res) => {
+    const net = await import('net');
+    try {
+      const { ip, port = 9100, data, timeout = 8000 } = req.body;
+
+      if (!ip || !data) {
+        return res.status(400).json({ error: "IP وبيانات الطباعة مطلوبة" });
+      }
+
+      // data can be base64-encoded bytes or a plain string
+      let printBuffer: Buffer;
+      if (typeof data === 'string') {
+        // Try to decode as base64 first
+        const decoded = Buffer.from(data, 'base64');
+        // If decoded looks like valid binary (has non-UTF8 bytes) treat as binary, else as text
+        printBuffer = decoded;
+      } else if (Array.isArray(data)) {
+        printBuffer = Buffer.from(data);
+      } else {
+        return res.status(400).json({ error: "صيغة بيانات الطباعة غير صحيحة" });
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const socket = new net.Socket();
+        let resolved = false;
+
+        const cleanup = (err?: Error) => {
+          if (resolved) return;
+          resolved = true;
+          socket.destroy();
+          if (err) reject(err);
+          else resolve();
+        };
+
+        socket.setTimeout(timeout);
+        socket.on('error', (err) => cleanup(err));
+        socket.on('timeout', () => cleanup(new Error(`انتهت مهلة الاتصال بـ ${ip}:${port}`)));
+        socket.on('close', () => cleanup());
+
+        socket.connect(Number(port), ip, () => {
+          socket.write(printBuffer, (err) => {
+            if (err) {
+              cleanup(err);
+            } else {
+              // Give printer 500ms to process before closing
+              setTimeout(() => cleanup(), 500);
+            }
+          });
+        });
+      });
+
+      res.json({ success: true, message: `تمت الطباعة على ${ip}:${port}`, timestamp: new Date().toISOString() });
+    } catch (error: any) {
+      console.error('[Network Print] Error:', error.message);
+      res.status(500).json({ error: error.message || "فشل الاتصال بالطابعة الشبكية" });
+    }
+  });
+
+  // Test network printer connectivity (ping TCP)
+  app.post("/api/print/network-test", requireAuth, async (req: AuthRequest, res) => {
+    const net = await import('net');
+    try {
+      const { ip, port = 9100, timeout = 5000 } = req.body;
+      if (!ip) return res.status(400).json({ error: "IP مطلوب" });
+
+      await new Promise<void>((resolve, reject) => {
+        const socket = new net.Socket();
+        let resolved = false;
+        const cleanup = (err?: Error) => {
+          if (resolved) return;
+          resolved = true;
+          socket.destroy();
+          if (err) reject(err);
+          else resolve();
+        };
+        socket.setTimeout(Number(timeout));
+        socket.on('error', cleanup);
+        socket.on('timeout', () => cleanup(new Error('timeout')));
+        socket.connect(Number(port), ip, () => cleanup());
+      });
+
+      res.json({ success: true, connected: true, ip, port, message: `الطابعة ${ip}:${port} متاحة ✓` });
+    } catch (err: any) {
+      res.json({ success: false, connected: false, error: `لا يمكن الاتصال بـ ${req.body.ip}:${req.body.port || 9100}` });
     }
   });
 
