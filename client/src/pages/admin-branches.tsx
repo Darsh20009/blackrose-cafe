@@ -222,7 +222,7 @@ export default function AdminBranches() {
 
       {/* Add Branch Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="max-w-2xl" dir="rtl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
           <DialogHeader>
             <DialogTitle>{tc("إضافة فرع جديد", "Add New Branch")}</DialogTitle>
             <DialogDescription>
@@ -425,7 +425,7 @@ export default function AdminBranches() {
           resetFormData();
         }
       }}>
-        <DialogContent className="max-w-2xl" dir="rtl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
           <DialogHeader>
             <DialogTitle>{tc("تعديل الفرع", "Edit Branch")}</DialogTitle>
             <DialogDescription>{tc("تعديل بيانات الفرع", "Update branch details")}</DialogDescription>

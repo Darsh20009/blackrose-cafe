@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import {
   Coffee, LogOut, ShoppingCart, ClipboardList, User, ChefHat,
   Warehouse, Eye, Calendar, FileText, BarChart3, Lock, Utensils,
-  ChevronLeft
+  ChevronLeft, Car, Copy
 } from "lucide-react";
 import type { Employee } from "@shared/schema";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
@@ -15,6 +16,7 @@ export default function EmployeeHome() {
   const [, setLocation] = useLocation();
   const [employee, setEmployee] = useState<Employee | null>(null);
   const tc = useTranslate();
+  const { toast } = useToast();
 
   useEffect(() => {
     const storedEmployee = localStorage.getItem("currentEmployee");
@@ -38,6 +40,13 @@ export default function EmployeeHome() {
     localStorage.removeItem("currentEmployee");
     setLocation("/employee/gateway");
   };
+
+  function copyDriveThroughLink() {
+    const link = `${window.location.origin}/drive-through`;
+    navigator.clipboard.writeText(link).then(() => {
+      toast({ title: tc("✅ تم نسخ رابط Drive-Through", "✅ Drive-Through link copied") });
+    });
+  }
 
   if (!employee) return null;
 
@@ -156,6 +165,49 @@ export default function EmployeeHome() {
             </div>
           </div>
         )}
+
+        {/* Drive-Through Link */}
+        <div className="space-y-3">
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
+            {tc("🚗 Drive-Through", "🚗 Drive-Through")}
+          </h2>
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-2xl p-4">
+            <div className="flex items-start gap-3 mb-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center flex-shrink-0">
+                <Car className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-300">
+                  {tc("منيو السيارات", "Car Order Menu")}
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-500 mt-0.5">
+                  {tc("شارك هذا الرابط مع عملاء السيارات", "Share this link with drive-through customers")}
+                </p>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-black/30 rounded-xl px-3 py-2 text-xs font-mono text-amber-700 dark:text-amber-400 mb-3 break-all">
+              {window.location.origin}/drive-through
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={copyDriveThroughLink}
+                className="flex-1 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium py-2.5 rounded-xl transition-colors"
+                data-testid="button-copy-drive-through"
+              >
+                <Copy className="w-4 h-4" />
+                {tc("نسخ الرابط", "Copy Link")}
+              </button>
+              <button
+                onClick={() => window.open("/drive-through", "_blank")}
+                className="flex-1 flex items-center justify-center gap-2 bg-white dark:bg-white/10 hover:bg-amber-50 dark:hover:bg-white/20 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700/40 text-sm font-medium py-2.5 rounded-xl transition-colors"
+                data-testid="button-open-drive-through"
+              >
+                <Car className="w-4 h-4" />
+                {tc("فتح المنيو", "Open Menu")}
+              </button>
+            </div>
+          </div>
+        </div>
 
       </div>
 
