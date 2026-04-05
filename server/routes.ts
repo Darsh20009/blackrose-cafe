@@ -11828,10 +11828,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "تم التحضير مسبقاً اليوم" });
       }
 
-      // Check if late (assuming 8 AM start time, can be customized per employee)
       const now = new Date();
-      const shiftStartHour = employee.shiftTime ? parseInt(employee.shiftTime.split('-')[0]) : 8;
-      const shiftStart = new Date(today.getTime() + shiftStartHour * 60 * 60 * 1000);
+      let shiftStartHour = 8;
+      let shiftStartMinute = 0;
+      if ((employee as any).shiftStartTime) {
+        const parts = (employee as any).shiftStartTime.split(':');
+        shiftStartHour = parseInt(parts[0]) || 8;
+        shiftStartMinute = parseInt(parts[1]) || 0;
+      } else if (employee.shiftTime) {
+        shiftStartHour = parseInt(employee.shiftTime.split('-')[0]) || 8;
+      }
+      const shiftStart = new Date(today.getTime() + shiftStartHour * 60 * 60 * 1000 + shiftStartMinute * 60 * 1000);
       
       const isLate = now > shiftStart;
       const lateMinutes = isLate ? Math.floor((now.getTime() - shiftStart.getTime()) / 60000) : 0;

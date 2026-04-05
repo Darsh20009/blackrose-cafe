@@ -35,11 +35,6 @@ export default function AdminNotificationsPage() {
 
   const { data: notifications = [], isLoading, refetch } = useQuery<NotifItem[]>({
     queryKey: ["/api/notifications"],
-    queryFn: async () => {
-      const res = await fetch("/api/notifications");
-      if (!res.ok) throw new Error("فشل");
-      return res.json();
-    },
     refetchInterval: 30000,
   });
 

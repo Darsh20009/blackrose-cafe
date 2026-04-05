@@ -13,6 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface Employee {
   id: string;
@@ -43,6 +45,7 @@ const WORK_DAYS = [
 export default function AdminEmployees() {
   const tc = useTranslate();
   const [, navigate] = useLocation();
+  const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -139,11 +142,6 @@ export default function AdminEmployees() {
 
   const { data: employees = [], refetch } = useQuery({
     queryKey: ['/api/employees'],
-    queryFn: async () => {
-      const res = await fetch('/api/employees');
-      if (!res.ok) throw new Error('Failed to fetch employees');
-      return res.json();
-    },
   });
 
   const resetForm = () => ({
@@ -161,53 +159,48 @@ export default function AdminEmployees() {
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await fetch('/api/employees', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to create employee');
-      }
+      const res = await apiRequest('POST', '/api/employees', data);
       return res.json();
     },
     onSuccess: () => {
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['/api/employees'] });
       setShowAddForm(false);
       setFormData(resetForm());
+      toast({ title: tc('تم إضافة الموظف بنجاح', 'Employee added successfully') });
+    },
+    onError: (err: any) => {
+      toast({ title: tc('خطأ', 'Error'), description: err.message, variant: 'destructive' });
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: any) => {
-      const res = await fetch(`/api/employees/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to update employee');
-      }
+      const res = await apiRequest('PATCH', `/api/employees/${id}`, data);
       return res.json();
     },
     onSuccess: () => {
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['/api/employees'] });
       setEditingId(null);
       setFormData(resetForm());
+      toast({ title: tc('تم تحديث الموظف بنجاح', 'Employee updated successfully') });
+    },
+    onError: (err: any) => {
+      toast({ title: tc('خطأ', 'Error'), description: err.message, variant: 'destructive' });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/employees/${id}`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) throw new Error('Failed to delete employee');
+      const res = await apiRequest('DELETE', `/api/employees/${id}`);
       return res.json();
     },
-    onSuccess: () => refetch(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/employees'] });
+      toast({ title: tc('تم حذف الموظف بنجاح', 'Employee deleted successfully') });
+    },
+    onError: (err: any) => {
+      toast({ title: tc('خطأ', 'Error'), description: err.message, variant: 'destructive' });
+    },
   });
 
   const handleSubmit = (e: any) => {
