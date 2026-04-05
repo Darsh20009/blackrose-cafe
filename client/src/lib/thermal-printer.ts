@@ -26,7 +26,12 @@ const CMD = {
   LINE_FEED:     [0x0a],
   FEED_3:        [ESC, 0x64, 0x03],
   FEED_5:        [ESC, 0x64, 0x05],
-  CUT_PAPER:     [GS,  0x56, 0x42, 0x00],
+  // Multi-variant cut for maximum compatibility:
+  // GS V 65 (0x41) = full cut after feed — works on Xprinter, Epson, most clones
+  // GS V 66 n (0x42 n) = partial cut after n-dot feed
+  // We use full cut (65) as primary
+  CUT_PAPER:     [GS,  0x56, 0x41, 0x03],  // GS V 65 3 — feed 3 lines + FULL CUT
+  PARTIAL_CUT:   [GS,  0x56, 0x42, 0x01],  // GS V 66 1 — partial cut (fallback)
   UNDERLINE_ON:  [ESC, 0x2d, 0x01],
   UNDERLINE_OFF: [ESC, 0x2d, 0x00],
   CHARSET_PC864: [ESC, 0x74, 0x1b],  // Arabic PC864
@@ -57,14 +62,15 @@ export interface PrinterSettings {
 
 const DEFAULT_SETTINGS: PrinterSettings = {
   enabled: true,
-  mode: 'browser',
+  mode: 'network',           // ← Direct network printing — no dialogs
   paperWidth: '80mm',
   autoPrint: true,
   autoKitchenCopy: true,
   fontSize: 'normal',
   cuttingMode: 'auto',
   feedLines: 3,
-  networkPort: 9100,
+  networkIp: '192.168.8.77',  // ← Default printer IP
+  networkPort: 9100,           // ← Default printer port
 };
 
 const SETTINGS_KEY = 'qirox-printer-settings';
@@ -75,7 +81,18 @@ const DEVICE_KEY   = 'qirox-printer-device';
 export function loadPrinterSettings(): PrinterSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    if (raw) {
+      const saved = JSON.parse(raw);
+      // Migration: if no networkIp saved, fill in the default printer
+      if (!saved.networkIp) saved.networkIp = DEFAULT_SETTINGS.networkIp;
+      if (!saved.networkPort) saved.networkPort = DEFAULT_SETTINGS.networkPort;
+      // Migration: if mode was 'browser' and no explicit mode override, switch to 'network'
+      // (Only applies if user never explicitly set the mode to browser themselves)
+      if (saved.mode === 'browser' && !saved._modeExplicitlySet) {
+        saved.mode = 'network';
+      }
+      return { ...DEFAULT_SETTINGS, ...saved };
+    }
   } catch {}
   return { ...DEFAULT_SETTINGS };
 }
@@ -191,22 +208,47 @@ function line(text: string): number[] {
   return [...textBytes(text), 0x0a];
 }
 
-function centerLine(text: string): number[] {
+/**
+ * Center a text string for ESC/POS printers.
+ * For Arabic/multilingual text the printer's ESC a 1 center command may miscalculate
+ * because UTF-8 bytes ≠ display columns. We pad manually instead.
+ * Arabic characters: 2 UTF-8 bytes each but 1 display column → divide byte length by 2.
+ */
+function centerLine(text: string, width: number = 48): number[] {
+  const encoder = new TextEncoder();
+  const encoded = encoder.encode(text);
+  // Estimate display width: ASCII = 1 col, non-ASCII (Arabic) ≈ 1 col per 2 bytes
+  let displayWidth = 0;
+  for (let i = 0; i < encoded.length; ) {
+    const b = encoded[i];
+    if (b < 0x80) { displayWidth += 1; i += 1; }       // ASCII
+    else if (b < 0xe0) { displayWidth += 1; i += 2; }  // 2-byte UTF-8 (Arabic, Latin ext)
+    else if (b < 0xf0) { displayWidth += 1; i += 3; }  // 3-byte UTF-8
+    else               { displayWidth += 1; i += 4; }  // 4-byte UTF-8
+  }
+  const pad = Math.max(0, Math.floor((width - displayWidth) / 2));
+  // Use printer center-align command — more reliable on most printers
   return [...CMD.ALIGN_CENTER, ...textBytes(text), 0x0a];
 }
 
-function dottedLine(width: number = 32): number[] {
-  return [...textBytes('-'.repeat(width)), 0x0a];
+function dottedLine(width: number = 48): number[] {
+  return [...CMD.ALIGN_LEFT, ...textBytes('='.repeat(width)), 0x0a];
 }
 
-function dashedLine(width: number = 32): number[] {
-  return [...textBytes('- '.repeat(Math.floor(width / 2))), 0x0a];
+function thinLine(width: number = 48): number[] {
+  return [...CMD.ALIGN_LEFT, ...textBytes('-'.repeat(width)), 0x0a];
 }
 
-function padRow(label: string, value: string, width: number = 32): number[] {
-  const space = width - label.length - value.length;
-  const row = label + (space > 0 ? ' '.repeat(space) : ' ') + value;
-  return [...textBytes(row), 0x0a];
+function padRow(label: string, value: string, width: number = 48): number[] {
+  // label is Arabic (RTL), value is LTR numbers — space between them
+  const labelBytes = new TextEncoder().encode(label).length;
+  const valueBytes = new TextEncoder().encode(value).length;
+  // Estimate display widths (Arabic chars: 2 bytes = 1 col)
+  const labelCols = Math.ceil(labelBytes / 2);
+  const valueCols = value.length; // numbers/ASCII = 1 col each
+  const space = Math.max(1, width - labelCols - valueCols);
+  const row = label + ' '.repeat(space) + value;
+  return [...CMD.ALIGN_LEFT, ...textBytes(row), 0x0a];
 }
 
 export interface EscPosReceiptData {
@@ -236,87 +278,94 @@ export interface EscPosReceiptData {
 }
 
 export function buildEscPosReceipt(data: EscPosReceiptData): Uint8Array {
-  const w = data.paperWidth === '58mm' ? 28 : 42;
+  // Standard ESC/POS widths:
+  // 58mm paper → 32 chars per line (standard is actually 32 at 12-dot font)
+  // 80mm paper → 48 chars per line (standard is 48 at 12-dot font, 203 DPI)
+  const w = data.paperWidth === '58mm' ? 32 : 48;
   const buf: number[] = [];
 
-  // Init
+  // ── Init printer ──────────────────────────────────────────────────────────
   buf.push(...CMD.INIT);
-  buf.push(...CMD.ALIGN_CENTER);
 
-  // Shop header
+  // ── Shop header (centered) ────────────────────────────────────────────────
+  buf.push(...CMD.ALIGN_CENTER);
   buf.push(...CMD.BOLD_ON, ...CMD.DOUBLE_SIZE);
   buf.push(...textBytes(data.shopName), 0x0a);
   buf.push(...CMD.NORMAL_SIZE, ...CMD.BOLD_OFF);
 
-  if (data.branchName) buf.push(...centerLine(data.branchName));
-  if (data.address)    buf.push(...centerLine(data.address));
-  buf.push(...textBytes(`VAT: ${data.vatNumber}`), 0x0a);
+  if (data.branchName) buf.push(...centerLine(data.branchName, w));
+  if (data.address)    buf.push(...centerLine(data.address, w));
+  buf.push(...CMD.ALIGN_CENTER, ...textBytes(`VAT: ${data.vatNumber}`), 0x0a);
   buf.push(...dottedLine(w));
 
-  // Invoice label
-  buf.push(...CMD.BOLD_ON);
-  buf.push(...centerLine('فاتورة ضريبية مبسطة'));
+  // ── Invoice label ─────────────────────────────────────────────────────────
+  buf.push(...CMD.ALIGN_CENTER, ...CMD.BOLD_ON);
+  buf.push(...textBytes('فاتورة ضريبية مبسطة'), 0x0a);
   buf.push(...CMD.BOLD_OFF);
 
-  // Order number
+  // ── Order number (large, centered) ───────────────────────────────────────
   buf.push(...CMD.DOUBLE_SIZE, ...CMD.ALIGN_CENTER);
   buf.push(...textBytes(fmtOrderNum(data.orderNumber)), 0x0a);
   buf.push(...CMD.NORMAL_SIZE);
 
-  buf.push(...dottedLine(w));
+  buf.push(...thinLine(w));
 
-  // Info
+  // ── Info block ────────────────────────────────────────────────────────────
   buf.push(...CMD.ALIGN_LEFT);
-  buf.push(...line(`التاريخ: ${data.date}`));
-  buf.push(...line(`الكاشير: ${data.cashierName}`));
+  buf.push(...line(`التاريخ : ${data.date}`));
+  buf.push(...line(`الكاشير : ${data.cashierName}`));
   if (data.customerName && data.customerName !== 'عميل نقدي') {
-    buf.push(...line(`العميل: ${data.customerName}`));
+    buf.push(...line(`العميل  : ${data.customerName}`));
   }
-  if (data.tableNumber) buf.push(...line(`الطاولة: ${data.tableNumber}`));
-  if (data.orderType)   buf.push(...line(`نوع الطلب: ${data.orderType}`));
-  buf.push(...dottedLine(w));
+  if (data.tableNumber) buf.push(...line(`الطاولة : ${data.tableNumber}`));
+  if (data.orderType)   buf.push(...line(`النوع   : ${data.orderType}`));
+  buf.push(...thinLine(w));
 
-  // Items
+  // ── Items ─────────────────────────────────────────────────────────────────
   for (const item of data.items) {
-    const total = (item.qty * item.price).toFixed(2);
+    const itemTotal = (item.qty * item.price).toFixed(2);
     buf.push(...CMD.BOLD_ON);
-    buf.push(...line(item.name));
+    buf.push(...CMD.ALIGN_LEFT, ...textBytes(item.name), 0x0a);
     buf.push(...CMD.BOLD_OFF);
-    buf.push(...padRow(`  ${item.qty} x ${item.price.toFixed(2)}`, `${total}`, w));
+    buf.push(...padRow(`  ${item.qty} x ${item.price.toFixed(2)}`, `${itemTotal} ر.س`, w));
     if (item.addons?.length) {
-      buf.push(...line(`  + ${item.addons.join('، ')}`));
+      for (const addon of item.addons) {
+        buf.push(...line(`    + ${addon}`));
+      }
     }
   }
 
   buf.push(...dottedLine(w));
 
-  // Totals
-  buf.push(...padRow('قبل الضريبة:', `${data.subtotal.toFixed(2)} ر.س`, w));
-  buf.push(...padRow('ضريبة 15%:', `${data.vat.toFixed(2)} ر.س`, w));
+  // ── Totals ────────────────────────────────────────────────────────────────
+  buf.push(...padRow('المجموع قبل الضريبة :', `${data.subtotal.toFixed(2)} ر.س`, w));
+  buf.push(...padRow('ضريبة القيمة 15%    :', `${data.vat.toFixed(2)} ر.س`, w));
   if (data.discount && data.discount > 0) {
-    buf.push(...padRow('خصم:', `-${data.discount.toFixed(2)} ر.س`, w));
+    buf.push(...padRow('الخصم               :', `-${data.discount.toFixed(2)} ر.س`, w));
   }
 
+  buf.push(...dottedLine(w));
   buf.push(...CMD.BOLD_ON, ...CMD.DOUBLE_SIZE, ...CMD.ALIGN_CENTER);
-  buf.push(...textBytes(`الإجمالي: ${data.total.toFixed(2)} ر.س`), 0x0a);
+  buf.push(...textBytes(`الاجمالي : ${data.total.toFixed(2)} ر.س`), 0x0a);
   buf.push(...CMD.NORMAL_SIZE, ...CMD.BOLD_OFF);
-
-  buf.push(...CMD.ALIGN_LEFT);
-  buf.push(...line(`طريقة الدفع: ${data.paymentMethod}`));
-
   buf.push(...dottedLine(w));
 
-  // Footer
+  buf.push(...CMD.ALIGN_LEFT);
+  buf.push(...line(`طريقة الدفع : ${data.paymentMethod}`));
+
+  // ── Footer ────────────────────────────────────────────────────────────────
   buf.push(...CMD.ALIGN_CENTER);
   buf.push(...CMD.BOLD_ON);
-  buf.push(...textBytes('شكراً لزيارتكم'), 0x0a);
+  buf.push(...textBytes('** شكراً لزيارتكم **'), 0x0a);
   buf.push(...CMD.BOLD_OFF);
-  buf.push(...textBytes('الأسعار شاملة ضريبة القيمة المضافة'), 0x0a);
+  buf.push(...textBytes('الاسعار شاملة ضريبة القيمة المضافة'), 0x0a);
+  buf.push(...textBytes('BLACK ROSE CAFE'), 0x0a);
 
-  // Feed and cut
-  const feedLines = data.feedLines ?? 3;
-  buf.push(ESC, 0x64, feedLines); // ESC d n — feed n lines
-  buf.push(...CMD.CUT_PAPER);
+  // ── Feed then FULL CUT ────────────────────────────────────────────────────
+  // GS V 0x41 n = feed n × (print_head_dots) lines then cut
+  // This is the most compatible cut command across Xprinter / Epson / clones
+  buf.push(ESC, 0x64, 4);      // Feed 4 lines before cut
+  buf.push(...CMD.CUT_PAPER);  // GS V 65 3 — full cut
 
   return new Uint8Array(buf);
 }
@@ -330,49 +379,63 @@ export function buildEscPosKitchenTicket(data: {
   notes?: string;
   paperWidth: '58mm' | '80mm';
 }): Uint8Array {
-  const w = data.paperWidth === '58mm' ? 28 : 42;
+  const w = data.paperWidth === '58mm' ? 32 : 48;
   const buf: number[] = [];
 
+  // ── Init ───────────────────────────────────────────────────────────────────
   buf.push(...CMD.INIT);
-  buf.push(...CMD.ALIGN_CENTER, ...CMD.BOLD_ON);
-  buf.push(...textBytes('--- نسخة المطبخ ---'), 0x0a);
-  buf.push(...CMD.BOLD_OFF);
 
+  // ── Kitchen header ─────────────────────────────────────────────────────────
+  buf.push(...CMD.ALIGN_CENTER, ...CMD.BOLD_ON, ...CMD.DOUBLE_SIZE);
+  buf.push(...textBytes('*** نسخة المطبخ ***'), 0x0a);
+  buf.push(...CMD.NORMAL_SIZE, ...CMD.BOLD_OFF);
+
+  // ── Order number (extra large) ─────────────────────────────────────────────
   buf.push(...CMD.DOUBLE_SIZE, ...CMD.ALIGN_CENTER);
   buf.push(...textBytes(fmtOrderNum(data.orderNumber)), 0x0a);
   buf.push(...CMD.NORMAL_SIZE);
 
   if (data.tableNumber) {
-    buf.push(...CMD.LARGE_TEXT, ...CMD.ALIGN_CENTER);
-    buf.push(...textBytes(`طاولة ${data.tableNumber}`), 0x0a);
-    buf.push(...CMD.NORMAL_SIZE);
+    buf.push(...CMD.LARGE_TEXT, ...CMD.ALIGN_CENTER, ...CMD.BOLD_ON);
+    buf.push(...textBytes(`طاولة رقم: ${data.tableNumber}`), 0x0a);
+    buf.push(...CMD.NORMAL_SIZE, ...CMD.BOLD_OFF);
   }
-  if (data.orderType) buf.push(...centerLine(data.orderType));
+  if (data.orderType) {
+    buf.push(...CMD.ALIGN_CENTER);
+    buf.push(...textBytes(`[ ${data.orderType} ]`), 0x0a);
+  }
   buf.push(...dottedLine(w));
 
+  // ── Items (large text for kitchen readability) ─────────────────────────────
   buf.push(...CMD.ALIGN_LEFT);
   for (const item of data.items) {
     buf.push(...CMD.BOLD_ON, ...CMD.LARGE_TEXT);
-    buf.push(...textBytes(`x${item.qty}  ${item.name}`), 0x0a);
+    buf.push(...textBytes(`${item.qty}x  ${item.name}`), 0x0a);
     buf.push(...CMD.NORMAL_SIZE, ...CMD.BOLD_OFF);
     if (item.addons?.length) {
-      buf.push(...line(`   + ${item.addons.join('، ')}`));
+      for (const addon of item.addons) {
+        buf.push(...line(`     --> ${addon}`));
+      }
     }
   }
 
+  // ── Notes ──────────────────────────────────────────────────────────────────
   if (data.notes) {
     buf.push(...dottedLine(w));
     buf.push(...CMD.BOLD_ON);
-    buf.push(...line('ملاحظات:'));
+    buf.push(...line('*** ملاحظات ***'));
     buf.push(...CMD.BOLD_OFF);
     buf.push(...line(data.notes));
   }
 
+  // ── Footer ─────────────────────────────────────────────────────────────────
   buf.push(...dottedLine(w));
   buf.push(...CMD.ALIGN_CENTER);
-  buf.push(...line(`الكاشير: ${data.cashierName}`));
-  buf.push(ESC, 0x64, 4);
-  buf.push(...CMD.CUT_PAPER);
+  buf.push(...textBytes(`الكاشير: ${data.cashierName}`), 0x0a);
+
+  // ── Feed then FULL CUT ─────────────────────────────────────────────────────
+  buf.push(ESC, 0x64, 4);      // Feed 4 lines
+  buf.push(...CMD.CUT_PAPER);  // GS V 65 3 — full cut
 
   return new Uint8Array(buf);
 }
