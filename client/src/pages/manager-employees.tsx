@@ -45,22 +45,43 @@ export default function ManagerEmployees() {
 
   useEffect(() => {
     if (editingEmployee) {
+      setSelectedRole(editingEmployee.role || 'cashier');
       setSelectedPermissions(editingEmployee.permissions || []);
       setSelectedPages(editingEmployee.allowedPages || []);
     } else {
+      setSelectedRole('cashier');
       setSelectedPermissions([]);
       setSelectedPages([]);
     }
   }, [editingEmployee]);
 
   const PERMISSIONS_OPTIONS = [
-    { id: 'create_order', label: tc('إنشاء طلبات', 'Create Orders') },
-    { id: 'cancel_order', label: tc('إلغاء طلبات', 'Cancel Orders') },
-    { id: 'manage_inventory', label: tc('إدارة المخزون', 'Manage Inventory') },
-    { id: 'view_reports', label: tc('عرض التقارير', 'View Reports') },
-    { id: 'manage_employees', label: tc('إدارة الموظفين', 'Manage Employees') },
-    { id: 'manage_branches', label: tc('إدارة الفروع', 'Manage Branches') },
-    { id: 'manage_settings', label: tc('إعدادات النظام', 'System Settings') },
+    { id: 'order.create', label: tc('إنشاء طلبات', 'Create Orders') },
+    { id: 'order.view', label: tc('عرض الطلبات', 'View Orders') },
+    { id: 'order.void', label: tc('إلغاء طلبات', 'Cancel Orders') },
+    { id: 'order.refund', label: tc('استرجاع طلبات', 'Refund Orders') },
+    { id: 'order.apply_discount', label: tc('تطبيق خصم', 'Apply Discount') },
+    { id: 'kitchen.view_queue', label: tc('عرض المطبخ', 'View Kitchen') },
+    { id: 'kitchen.update_status', label: tc('تحديث حالة الطلب', 'Update Order Status') },
+    { id: 'inventory.view', label: tc('عرض المخزون', 'View Inventory') },
+    { id: 'inventory.stock_in', label: tc('إدخال مخزون', 'Stock In') },
+    { id: 'inventory.stock_out', label: tc('إخراج مخزون', 'Stock Out') },
+    { id: 'menu.view', label: tc('عرض القائمة', 'View Menu') },
+    { id: 'menu.create', label: tc('إضافة صنف', 'Add Item') },
+    { id: 'menu.edit', label: tc('تعديل صنف', 'Edit Item') },
+    { id: 'reports.daily', label: tc('تقرير يومي', 'Daily Report') },
+    { id: 'reports.branch', label: tc('تقرير الفرع', 'Branch Report') },
+    { id: 'reports.export', label: tc('تصدير التقارير', 'Export Reports') },
+    { id: 'employees.view', label: tc('عرض الموظفين', 'View Employees') },
+    { id: 'employees.create', label: tc('إضافة موظف', 'Add Employee') },
+    { id: 'employees.edit', label: tc('تعديل موظف', 'Edit Employee') },
+    { id: 'shift.open', label: tc('فتح وردية', 'Open Shift') },
+    { id: 'shift.close', label: tc('إغلاق وردية', 'Close Shift') },
+    { id: 'pos.open_drawer', label: tc('فتح درج النقود', 'Open Cash Drawer') },
+    { id: 'delivery.manage', label: tc('إدارة التوصيل', 'Manage Delivery') },
+    { id: 'tables.manage', label: tc('إدارة الطاولات', 'Manage Tables') },
+    { id: 'accounting.view', label: tc('عرض المحاسبة', 'View Accounting') },
+    { id: 'settings.branch', label: tc('إعدادات الفرع', 'Branch Settings') },
   ];
 
   const PAGES_OPTIONS = [
@@ -233,16 +254,19 @@ export default function ManagerEmployees() {
 
  const formData = new FormData(e.currentTarget);
  const workDaysData = formData.getAll("workDays") as string[];
+ const shiftStartTime = formData.get("shiftStartTime") as string;
+ const shiftEndTime = formData.get("shiftEndTime") as string;
  const employeeData = {
  fullName: formData.get("fullName") as string,
  phone: formData.get("phone") as string,
  email: (formData.get("email") as string)?.trim().toLowerCase() || undefined,
  jobTitle: formData.get("jobTitle") as string,
+ role: selectedRole,
  permissions: selectedPermissions,
  allowedPages: selectedPages,
- shiftTime: formData.get("shiftTime") as string,
- shiftStartTime: formData.get("shiftStartTime") as string || undefined,
- shiftEndTime: formData.get("shiftEndTime") as string || undefined,
+ shiftTime: shiftStartTime && shiftEndTime ? `${shiftStartTime}-${shiftEndTime}` : undefined,
+ shiftStartTime: shiftStartTime || undefined,
+ shiftEndTime: shiftEndTime || undefined,
  workDays: workDaysData.length > 0 ? workDaysData : undefined,
  deviceBalance: parseInt(formData.get("deviceBalance") as string) || 0,
  salary: parseFloat(formData.get("salary") as string) || 0,
@@ -459,11 +483,14 @@ export default function ManagerEmployees() {
  <SelectValue placeholder="اختر الدور" />
  </SelectTrigger>
  <SelectContent className="bg-[#2d1f1a] border-primary/20 text-white">
- <SelectItem value="cashier">كاشير</SelectItem>
- <SelectItem value="accountant">محاسب</SelectItem>
+ <SelectItem value="cleaner">عامل نظافة</SelectItem>
  <SelectItem value="driver">سائق توصيل</SelectItem>
+ <SelectItem value="accountant">محاسب</SelectItem>
+ <SelectItem value="cashier">كاشير</SelectItem>
+ <SelectItem value="barista">باريستا</SelectItem>
+ <SelectItem value="supervisor">مشرف</SelectItem>
  {isAdminOrOwner && <SelectItem value="manager">مدير فرع</SelectItem>}
- {currentManager?.role === "admin" && <SelectItem value="admin">مدير عام</SelectItem>}
+ {(currentManager?.role === "admin" || currentManager?.role === "owner") && <SelectItem value="admin">مدير عام</SelectItem>}
  </SelectContent>
  </Select>
  </div>

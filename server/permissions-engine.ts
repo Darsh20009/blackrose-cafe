@@ -1,4 +1,4 @@
-export type Role = 'cashier' | 'barista' | 'supervisor' | 'branch_manager' | 'owner' | 'admin';
+export type Role = 'cashier' | 'barista' | 'supervisor' | 'branch_manager' | 'owner' | 'admin' | 'cleaner' | 'accountant' | 'driver';
 
 export type Permission = 
   | 'order.create'
@@ -62,6 +62,23 @@ export type PageId =
   | 'bi_analytics';
 
 const PERMISSION_MATRIX: Record<Role, Permission[]> = {
+  cleaner: [],
+
+  driver: [
+    'order.view',
+    'delivery.manage',
+  ],
+
+  accountant: [
+    'order.view',
+    'reports.daily',
+    'reports.branch',
+    'reports.export',
+    'accounting.view',
+    'accounting.export',
+    'inventory.view',
+  ],
+
   cashier: [
     'order.create',
     'order.view',
@@ -255,6 +272,9 @@ const PAGE_PERMISSIONS: Record<PageId, Permission[]> = {
 };
 
 const DEFAULT_PAGES: Record<Role, PageId[]> = {
+  cleaner: ['dashboard'],
+  driver: ['dashboard', 'orders', 'delivery'],
+  accountant: ['dashboard', 'orders', 'reports', 'accounting', 'inventory'],
   cashier: ['dashboard', 'cashier', 'pos', 'shifts', 'orders'],
   barista: ['dashboard', 'orders', 'kitchen', 'shifts'],
   supervisor: ['dashboard', 'cashier', 'pos', 'shifts', 'orders', 'kitchen', 'tables', 'menu_management', 'reports'],
@@ -264,6 +284,9 @@ const DEFAULT_PAGES: Record<Role, PageId[]> = {
 };
 
 const ROLE_HIERARCHY: Record<Role, number> = {
+  cleaner: 0,
+  driver: 1,
+  accountant: 1,
   cashier: 1,
   barista: 1,
   supervisor: 2,
@@ -273,6 +296,9 @@ const ROLE_HIERARCHY: Record<Role, number> = {
 };
 
 const ROLE_NAMES_AR: Record<Role, string> = {
+  cleaner: 'عامل نظافة',
+  driver: 'سائق توصيل',
+  accountant: 'محاسب',
   cashier: 'كاشير',
   barista: 'باريستا',
   supervisor: 'مشرف',
@@ -444,6 +470,9 @@ export class PermissionsEngine {
 
   private static normalizeRole(role: string): Role {
     const roleMap: Record<string, Role> = {
+      'cleaner': 'cleaner',
+      'driver': 'driver',
+      'accountant': 'accountant',
       'cashier': 'cashier',
       'barista': 'barista',
       'cook': 'barista',

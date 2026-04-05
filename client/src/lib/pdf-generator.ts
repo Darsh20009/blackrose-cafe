@@ -58,10 +58,10 @@ export const generatePDF = async (
     cash: 'الدفع عند الاستلام',
     pos: 'الدفع عبر جهاز POS',
     delivery: 'ادفع عند استلام الطلب',
-    stc: '+966532441566',
-    alinma: '+966532441566',
-    ur: '+966532441566',
-    barq: '+966532441566',
+    stc: '+966566507666',
+    alinma: '+966566507666',
+    ur: '+966566507666',
+    barq: '+966566507666',
     rajhi: 'SA78 8000 0539 6080 1942 4738',
     'qahwa-card': 'مشروب مجاني من بطاقة الولاء'
   };
@@ -155,7 +155,7 @@ export const generatePDF = async (
  <div style="margin-bottom: 20px; padding: 20px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #D4AF37;">
  <h3 style="color: #D4AF37; font-size: 18px; margin-bottom: 15px; font-weight: bold;">معلومات التواصل</h3>
  <div style="text-align: center; font-size: 14px;">
- <p style="margin: 0 0 10px 0;"><span style="font-weight: bold;">الهاتف:</span> +966532441566</p>
+ <p style="margin: 0 0 10px 0;"><span style="font-weight: bold;">الهاتف:</span> +966566507666</p>
  <p style="margin: 0 0 10px 0;"><span style="font-weight: bold;">الموقع الإلكتروني:</span> www.blackrose.com.sa</p>
  </div>
  </div>

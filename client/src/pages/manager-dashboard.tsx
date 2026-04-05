@@ -256,6 +256,12 @@ export default function ManagerDashboard() {
 
  const branches = isAdmin ? allBranches : allBranches.filter(branch => branch.id === managerBranchId);
 
+ const { data: systemStatus } = useQuery<any>({
+   queryKey: ["/api/system/status"],
+   enabled: !!manager,
+   refetchInterval: 30000,
+ });
+
  const availableManagers = allEmployees.filter(emp => 
  emp.role === "manager" || emp.role === "admin"
  );
@@ -755,6 +761,17 @@ export default function ManagerDashboard() {
          </div>
        </div>
        <div className="flex items-center gap-2">
+         {systemStatus && (
+           <div data-testid="system-status-badge" className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium border bg-emerald-500/10 text-emerald-400 border-emerald-500/25">
+             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+             {tc("النظام يعمل", "Online")}
+             {systemStatus.pendingOrders > 0 && (
+               <span className="mr-1 px-1.5 rounded-full bg-amber-500/20 text-amber-400 text-[9px]">
+                 {systemStatus.pendingOrders} {tc("معلقة", "pending")}
+               </span>
+             )}
+           </div>
+         )}
          <Select value={dateFilter} onValueChange={(value: any) => setDateFilter(value)}>
            <SelectTrigger className="h-8 w-32 text-xs bg-muted/50 border-border text-foreground/70">
              <Calendar className="w-3 h-3 ml-1" />

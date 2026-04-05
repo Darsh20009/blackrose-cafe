@@ -974,7 +974,7 @@ export default function CheckoutPage() {
       const msg = encodeURIComponent(
         `🗓️ طلب تأكيد حجز\n\nرقم الطلب: ${orderNum}\n\n${itemsText}${resLine}\n\nالإجمالي: ${orderTotal.toFixed(2)} ر.س\n\nالاسم: ${customerName || orderDetails?.customerName || '—'}\nالجوال: ${customerPhone || orderDetails?.customerPhone || '—'}\n\nأرجو التأكيد على هذا الحجز`
       );
-      window.open(`https://wa.me/${phone || '966920000000'}?text=${msg}`, '_blank');
+      window.open(`https://wa.me/${phone || '966566507666'}?text=${msg}`, '_blank');
     };
 
     return (

@@ -4886,10 +4886,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenantId = req.employee?.tenantId || 'demo-tenant';
       const bodyData = req.body;
 
-      // For non-admin managers, enforce their branch ID
-      if (req.employee?.role !== "admin") {
+      if (req.employee?.role !== "admin" && req.employee?.role !== "owner") {
         if (req.employee?.branchId) {
-          // Manager can only create employees in their branch
           if (bodyData.branchId && bodyData.branchId !== req.employee.branchId) {
             return res.status(403).json({ error: "Cannot create employee in different branch" });
           }
@@ -4933,15 +4931,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const allEmployees = await storage.getEmployees();
       
-      // Filter by branch for non-admin/owner managers
-      let employees = filterByBranch(allEmployees, req.employee);
-
-      // For non-admin/owner users, hide managers and admin roles
-      if (req.employee?.role !== "admin" && req.employee?.role !== "owner") {
+      let employees = allEmployees;
+      
+      if (req.employee?.role === "admin" || req.employee?.role === "owner") {
+        // Admin/Owner see all employees
+      } else {
+        employees = filterByBranch(allEmployees, req.employee);
         employees = employees.filter(emp => 
           emp.role !== "admin" && 
-          emp.role !== "owner" && 
-          emp.role !== "manager"
+          emp.role !== "owner"
         );
       }
 
@@ -4969,8 +4967,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Employee not found" });
       }
 
-      // Verify branch access for non-admin managers
-      if (req.employee?.role !== "admin" && existingEmployee.branchId !== req.employee?.branchId) {
+      if (req.employee?.role !== "admin" && req.employee?.role !== "owner" && existingEmployee.branchId !== req.employee?.branchId) {
         return res.status(403).json({ error: "Access denied - different branch" });
       }
 
@@ -4980,7 +4977,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Employee not found" });
       }
 
-      // Don't send password back, transform _id to id
       const { password: _, _id, ...employeeData } = updatedEmployee as any;
       res.json({ ...employeeData, id: _id || employeeData.id });
     } catch (error) {
@@ -12038,6 +12034,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/attendance/daily-summary", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { AttendanceModel, EmployeeModel } = await import("@shared/schema");
+      const { date } = req.query;
+      const targetDate = date ? new Date(date as string) : new Date();
+      const dayStart = getSaudiStartOfDay(targetDate);
+      const dayEnd = getSaudiEndOfDay(targetDate);
+
+      const branchQuery: any = {};
+      if (req.employee?.role !== 'admin' && req.employee?.role !== 'owner' && req.employee?.branchId) {
+        branchQuery.branchId = req.employee.branchId;
+      }
+
+      const allEmployees = await EmployeeModel.find({ ...branchQuery, isActive: { $ne: false } }).lean();
+      const todayAttendance = await AttendanceModel.find({ shiftDate: { $gte: dayStart, $lt: dayEnd }, ...branchQuery }).lean();
+
+      const attendanceMap = new Map();
+      todayAttendance.forEach((a: any) => attendanceMap.set(a.employeeId, serializeDoc(a)));
+
+      const dayIndex = targetDate.getDay();
+      const dayNameEn = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][dayIndex];
+      const dayNameAr = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'][dayIndex];
+
+      const summary = {
+        present: [] as any[],
+        late: [] as any[],
+        absent: [] as any[],
+        onLeave: [] as any[],
+        checkedOut: [] as any[],
+      };
+
+      for (const emp of allEmployees) {
+        const empId = (emp as any).id || (emp as any)._id?.toString();
+        const att = attendanceMap.get(empId);
+        const empInfo = { id: empId, fullName: (emp as any).fullName, role: (emp as any).role, jobTitle: (emp as any).jobTitle, shiftTime: (emp as any).shiftTime };
+
+        const workDays = (emp as any).workDays || [];
+        const isScheduledToday = workDays.length === 0 || workDays.some((d: string) => {
+          const dl = d.toLowerCase();
+          return dl === dayNameEn || d === dayNameAr;
+        });
+
+        if (!isScheduledToday) continue;
+
+        if (att) {
+          if (att.status === 'checked_out') {
+            summary.checkedOut.push({ ...empInfo, attendance: att });
+          } else if (att.isLate) {
+            summary.late.push({ ...empInfo, attendance: att, lateMinutes: att.lateMinutes });
+          } else {
+            summary.present.push({ ...empInfo, attendance: att });
+          }
+        } else {
+          summary.absent.push(empInfo);
+        }
+      }
+
+      res.json({
+        date: targetDate.toISOString().split('T')[0],
+        totalEmployees: allEmployees.length,
+        presentCount: summary.present.length,
+        lateCount: summary.late.length,
+        absentCount: summary.absent.length,
+        checkedOutCount: summary.checkedOut.length,
+        ...summary
+      });
+    } catch (error) {
+      console.error("Error getting daily attendance summary:", error);
+      res.status(500).json({ error: "فشل في جلب ملخص الحضور" });
+    }
+  });
+
   // Get my attendance status (for employee)
   app.get("/api/attendance/my-status", requireAuth, async (req: AuthRequest, res) => {
     try {
@@ -12453,8 +12521,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reset all data (owner only)
   app.post("/api/owner/reset-database", requireAuth, async (req: AuthRequest, res) => {
     try {
-      if (req.employee?.role !== 'owner') {
-        return res.status(403).json({ error: "فقط المالك يمكنه إعادة تعيين قاعدة البيانات" });
+      if (req.employee?.role !== 'owner' && req.employee?.role !== 'admin') {
+        return res.status(403).json({ error: "فقط المالك أو المدير يمكنه إعادة تعيين قاعدة البيانات" });
       }
 
       const { confirmPhrase } = req.body;
@@ -12955,7 +13023,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "البيانات المطلوبة غير مكتملة" });
       }
       
-      const rawItem = await RawItemModel.findById(rawItemId);
+      let rawItem = await RawItemModel.findById(rawItemId).catch(() => null);
+      if (!rawItem) {
+        rawItem = await RawItemModel.findOne({ id: rawItemId });
+      }
+      if (!rawItem) {
+        rawItem = await RawItemModel.findOne({ _id: rawItemId }).catch(() => null);
+      }
       if (!rawItem) {
         return res.status(404).json({ error: "المادة غير موجودة" });
       }
@@ -13097,7 +13171,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (adjustedQuantity > 0) {
         try {
           const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
-          const rawItem = await RawItemModel.findById(rawItemId);
+          let rawItem = await RawItemModel.findById(rawItemId).catch(() => null);
+          if (!rawItem) rawItem = await RawItemModel.findOne({ id: rawItemId });
           const unitCostValue = (rawItem as any)?.unitCost || (rawItem as any)?.lastCost || 0;
           const totalCost = unitCostValue * Math.abs(adjustedQuantity);
 
@@ -17640,7 +17715,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/reports/employee-sales", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { OrderModel, EmployeeModel } = await import("@shared/schema");
+      const { period, branchId } = req.query;
+      const now = new Date();
+      let startDate: Date;
+
+      switch (period) {
+        case 'today':
+          startDate = getSaudiStartOfDay();
+          break;
+        case 'week':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case 'month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        default:
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+
+      const orderQuery: any = { createdAt: { $gte: startDate }, status: { $in: ['completed', 'delivered'] } };
+      if (req.employee?.role !== 'admin' && req.employee?.role !== 'owner') {
+        orderQuery.branchId = req.employee?.branchId;
+      } else if (branchId) {
+        orderQuery.branchId = branchId;
+      }
+
+      const salesByEmployee = await OrderModel.aggregate([
+        { $match: orderQuery },
+        { $group: {
+          _id: "$employeeId",
+          totalSales: { $sum: "$totalAmount" },
+          orderCount: { $sum: 1 },
+          avgOrderValue: { $avg: "$totalAmount" }
+        }},
+        { $sort: { totalSales: -1 } }
+      ]);
+
+      const enriched = await Promise.all(salesByEmployee.map(async (s: any) => {
+        const emp = await EmployeeModel.findOne({ $or: [{ id: s._id }, { _id: s._id }] }).lean();
+        return {
+          employeeId: s._id,
+          employeeName: (emp as any)?.fullName || 'غير معروف',
+          role: (emp as any)?.role || 'unknown',
+          totalSales: Math.round(s.totalSales * 100) / 100,
+          orderCount: s.orderCount,
+          avgOrderValue: Math.round(s.avgOrderValue * 100) / 100
+        };
+      }));
+
+      const bestSellerItems = await OrderModel.aggregate([
+        { $match: orderQuery },
+        { $unwind: "$items" },
+        { $group: {
+          _id: "$items.name",
+          totalQuantity: { $sum: "$items.quantity" },
+          totalRevenue: { $sum: { $multiply: ["$items.price", "$items.quantity"] } }
+        }},
+        { $sort: { totalQuantity: -1 } },
+        { $limit: 10 }
+      ]);
+
+      res.json({
+        period: period || 'month',
+        startDate: startDate.toISOString(),
+        employees: enriched,
+        topItems: bestSellerItems.map((item: any) => ({
+          name: item._id,
+          quantity: item.totalQuantity,
+          revenue: Math.round(item.totalRevenue * 100) / 100
+        }))
+      });
+    } catch (error) {
+      console.error("Error getting employee sales report:", error);
+      res.status(500).json({ error: "فشل في جلب تقرير المبيعات" });
+    }
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
+  app.get("/api/system/status", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { OrderModel, EmployeeModel, AttendanceModel, CoffeeItem, BranchModel } = await import("@shared/schema");
+      const today = getSaudiStartOfDay();
+      const tomorrow = getSaudiEndOfDay();
+
+      const isGlobal = req.employee?.role === 'admin' || req.employee?.role === 'owner';
+      const branchFilter: any = isGlobal ? {} : { branchId: req.employee?.branchId };
+      const orderDateFilter = { createdAt: { $gte: today, $lt: tomorrow }, ...branchFilter };
+
+      const [todayOrders, activeEmployees, todayAttendance, menuItems, branches] = await Promise.all([
+        OrderModel.countDocuments(orderDateFilter),
+        EmployeeModel.countDocuments({ isActive: { $ne: false }, ...branchFilter }),
+        AttendanceModel.countDocuments({ shiftDate: { $gte: today, $lt: tomorrow }, status: 'checked_in', ...branchFilter }),
+        CoffeeItem.countDocuments({ isAvailable: { $ne: false } }),
+        BranchModel.countDocuments({ isActive: { $ne: false } })
+      ]);
+
+      const todayRevenue = await OrderModel.aggregate([
+        { $match: { ...orderDateFilter, status: { $in: ['completed', 'delivered'] } } },
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+      ]);
+
+      const pendingOrders = await OrderModel.countDocuments({ 
+        ...orderDateFilter, 
+        status: { $in: ['pending', 'preparing'] } 
+      });
+
+      res.json({
+        serverTime: new Date().toISOString(),
+        uptime: process.uptime(),
+        database: 'connected',
+        todayOrders,
+        todayRevenue: todayRevenue[0]?.total || 0,
+        pendingOrders,
+        activeEmployees,
+        presentToday: todayAttendance,
+        menuItemsActive: menuItems,
+        activeBranches: branches,
+        systemHealth: 'operational'
+      });
+    } catch (error) {
+      res.status(500).json({ error: "فشل في جلب حالة النظام", systemHealth: 'degraded' });
+    }
+  });
+
   // ─── AI Chat with Business Context ──────────────────────────────────────
   app.post("/api/ai/chat", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {

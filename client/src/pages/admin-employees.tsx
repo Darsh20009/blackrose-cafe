@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
-import { Plus, Search, Edit2, Trash2, ChevronDown, X, Download, Trash } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, ChevronDown, X, Download, Trash, Clock } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -23,7 +23,22 @@ interface Employee {
   role: string;
   isActivated: number;
   branchId?: string;
+  shiftStartTime?: string;
+  shiftEndTime?: string;
+  workDays?: string[];
+  allowedPages?: string[];
+  permissions?: string[];
 }
+
+const WORK_DAYS = [
+  { id: 'الأحد', name: 'الأحد' },
+  { id: 'الاثنين', name: 'الاثنين' },
+  { id: 'الثلاثاء', name: 'الثلاثاء' },
+  { id: 'الأربعاء', name: 'الأربعاء' },
+  { id: 'الخميس', name: 'الخميس' },
+  { id: 'الجمعة', name: 'الجمعة' },
+  { id: 'السبت', name: 'السبت' },
+];
 
 export default function AdminEmployees() {
   const tc = useTranslate();
@@ -40,6 +55,9 @@ export default function AdminEmployees() {
     phone: '',
     jobTitle: '',
     role: 'cashier',
+    shiftStartTime: '',
+    shiftEndTime: '',
+    workDays: [] as string[],
     allowedPages: [] as string[],
     permissions: [] as string[],
   });
@@ -128,6 +146,19 @@ export default function AdminEmployees() {
     },
   });
 
+  const resetForm = () => ({
+    fullName: '',
+    username: '',
+    phone: '',
+    jobTitle: '',
+    role: 'cashier',
+    shiftStartTime: '',
+    shiftEndTime: '',
+    workDays: [] as string[],
+    allowedPages: [] as string[],
+    permissions: [] as string[],
+  });
+
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await fetch('/api/employees', {
@@ -135,21 +166,16 @@ export default function AdminEmployees() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error('Failed to create employee');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to create employee');
+      }
       return res.json();
     },
     onSuccess: () => {
       refetch();
       setShowAddForm(false);
-      setFormData({ 
-        fullName: '', 
-        username: '', 
-        phone: '', 
-        jobTitle: '', 
-        role: 'cashier',
-        allowedPages: [],
-        permissions: []
-      });
+      setFormData(resetForm());
     },
   });
 
@@ -160,21 +186,16 @@ export default function AdminEmployees() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error('Failed to update employee');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to update employee');
+      }
       return res.json();
     },
     onSuccess: () => {
       refetch();
       setEditingId(null);
-      setFormData({ 
-        fullName: '', 
-        username: '', 
-        phone: '', 
-        jobTitle: '', 
-        role: 'cashier',
-        allowedPages: [],
-        permissions: []
-      });
+      setFormData(resetForm());
     },
   });
 
@@ -191,15 +212,21 @@ export default function AdminEmployees() {
 
   const handleSubmit = (e: any) => {
     e.preventDefault();
+    const payload = {
+      ...formData,
+      shiftTime: formData.shiftStartTime && formData.shiftEndTime
+        ? `${formData.shiftStartTime}-${formData.shiftEndTime}`
+        : undefined,
+    };
     if (editingId) {
-      updateMutation.mutate({ id: editingId, data: formData });
+      updateMutation.mutate({ id: editingId, data: payload });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(payload);
     }
   };
 
   const filteredEmployees = employees.filter((emp: Employee) => {
-    const matchSearch = emp.fullName.includes(search) || emp.phone.includes(search) || emp.username.includes(search);
+    const matchSearch = emp.fullName?.includes(search) || emp.phone?.includes(search) || emp.username?.includes(search);
     const matchRole = roleFilter === 'all' || emp.role === roleFilter;
     const matchStatus = statusFilter === 'all' || (statusFilter === 'active' ? emp.isActivated === 1 : emp.isActivated === 0);
     return matchSearch && matchRole && matchStatus;
@@ -253,9 +280,23 @@ export default function AdminEmployees() {
     link.click();
   };
 
+  const getRoleLabel = (role: string) => {
+    const labels: Record<string, string> = {
+      cleaner: tc('عامل نظافة','Cleaner'),
+      driver: tc('سائق توصيل','Driver'),
+      accountant: tc('محاسب','Accountant'),
+      cashier: tc('كاشير','Cashier'),
+      barista: tc('باريستا','Barista'),
+      supervisor: tc('مشرف','Supervisor'),
+      manager: tc('مدير فرع','Branch Manager'),
+      owner: tc('مالك','Owner'),
+      admin: tc('مدير النظام','Admin'),
+    };
+    return labels[role] || role;
+  };
+
   return (
     <div className="p-6 space-y-6 bg-background min-h-screen">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">{tc("إدارة الموظفين", "Employee Management")}</h1>
@@ -265,15 +306,7 @@ export default function AdminEmployees() {
           onClick={() => {
             setShowAddForm(!showAddForm);
             setEditingId(null);
-            setFormData({ 
-              fullName: '', 
-              username: '', 
-              phone: '', 
-              jobTitle: '', 
-              role: 'cashier',
-              allowedPages: [],
-              permissions: []
-            });
+            setFormData(resetForm());
           }}
           className="bg-accent hover:bg-accent"
           data-testid="button-add-employee"
@@ -283,7 +316,6 @@ export default function AdminEmployees() {
         </Button>
       </div>
 
-      {/* Add/Edit Form */}
       {(showAddForm || editingId) && (
         <Card className="border-primary/30 bg-background dark:bg-accent/10">
           <CardHeader className="pb-4">
@@ -335,17 +367,69 @@ export default function AdminEmployees() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="cleaner">{tc("عامل نظافة", "Cleaner")}</SelectItem>
+                      <SelectItem value="driver">{tc("سائق توصيل", "Driver")}</SelectItem>
+                      <SelectItem value="accountant">{tc("محاسب", "Accountant")}</SelectItem>
                       <SelectItem value="cashier">{tc("كاشير", "Cashier")}</SelectItem>
                       <SelectItem value="barista">{tc("باريستا", "Barista")}</SelectItem>
-                      <SelectItem value="manager">{tc("مدير", "Manager")}</SelectItem>
-                      <SelectItem value="admin">{tc("مسؤول", "Admin")}</SelectItem>
-                      <SelectItem value="driver">{tc("سائق", "Driver")}</SelectItem>
+                      <SelectItem value="supervisor">{tc("مشرف", "Supervisor")}</SelectItem>
+                      <SelectItem value="manager">{tc("مدير فرع", "Branch Manager")}</SelectItem>
+                      <SelectItem value="owner">{tc("مالك", "Owner")}</SelectItem>
+                      <SelectItem value="admin">{tc("مدير النظام", "Admin")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              {/* Page Access */}
+              <div className="p-4 bg-muted/30 rounded-lg border border-border">
+                <div className="flex items-center gap-2 mb-3">
+                  <Clock className="w-4 h-4 text-primary" />
+                  <label className="block text-sm font-bold">{tc("مواقيت الدوام", "Work Schedule")}</label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">{tc("بداية الدوام", "Shift Start")}</label>
+                    <Input
+                      type="time"
+                      value={formData.shiftStartTime}
+                      onChange={(e) => setFormData({ ...formData, shiftStartTime: e.target.value })}
+                      data-testid="input-shiftstart"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">{tc("نهاية الدوام", "Shift End")}</label>
+                    <Input
+                      type="time"
+                      value={formData.shiftEndTime}
+                      onChange={(e) => setFormData({ ...formData, shiftEndTime: e.target.value })}
+                      data-testid="input-shiftend"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-2">{tc("أيام العمل", "Work Days")}</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {WORK_DAYS.map(day => (
+                      <label key={day.id} className="flex items-center gap-2 p-2 hover:bg-background rounded cursor-pointer transition-colors border border-transparent hover:border-border">
+                        <input
+                          type="checkbox"
+                          checked={formData.workDays.includes(day.id)}
+                          onChange={(e) => {
+                            const days = e.target.checked
+                              ? [...formData.workDays, day.id]
+                              : formData.workDays.filter(d => d !== day.id);
+                            setFormData({ ...formData, workDays: days });
+                          }}
+                          className="w-4 h-4 rounded"
+                          data-testid={`checkbox-workday-${day.id}`}
+                        />
+                        <span className="text-sm">{day.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <div className="p-4 bg-muted/30 rounded-lg border border-border">
                 <div className="flex items-center justify-between mb-3">
                   <label className="block text-sm font-bold flex items-center gap-2">
@@ -392,7 +476,6 @@ export default function AdminEmployees() {
                 )}
               </div>
 
-              {/* Granular Permissions */}
               <div className="p-4 bg-muted/30 rounded-lg border border-border">
                 <div className="flex items-center justify-between mb-3">
                   <label className="block text-sm font-bold flex items-center gap-2">
@@ -459,7 +542,6 @@ export default function AdminEmployees() {
         </Card>
       )}
 
-      {/* Bulk Actions & Filters */}
       {selectedEmployees.size > 0 && (
         <div className="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
           <span className="text-sm font-medium">{selectedEmployees.size} {tc("موظف مختار", "employees selected")}</span>
@@ -487,10 +569,12 @@ export default function AdminEmployees() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{tc("جميع الأدوار", "All Roles")}</SelectItem>
+            <SelectItem value="cleaner">{tc("عامل نظافة", "Cleaner")}</SelectItem>
+            <SelectItem value="driver">{tc("سائق", "Driver")}</SelectItem>
+            <SelectItem value="accountant">{tc("محاسب", "Accountant")}</SelectItem>
             <SelectItem value="cashier">{tc("كاشير", "Cashier")}</SelectItem>
             <SelectItem value="barista">{tc("باريستا", "Barista")}</SelectItem>
             <SelectItem value="manager">{tc("مدير", "Manager")}</SelectItem>
-            <SelectItem value="driver">{tc("سائق", "Driver")}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -513,7 +597,6 @@ export default function AdminEmployees() {
         </Button>
       </div>
 
-      {/* Employees Table */}
       <Card className="border-0 bg-card">
         <CardHeader className="pb-4">
           <CardTitle className="text-lg">
@@ -539,6 +622,7 @@ export default function AdminEmployees() {
                     <th className="text-right p-4 font-semibold">{tc("رقم الهاتف", "Phone")}</th>
                     <th className="text-right p-4 font-semibold">{tc("المسمى الوظيفي", "Job Title")}</th>
                     <th className="text-right p-4 font-semibold">{tc("الدور", "Role")}</th>
+                    <th className="text-right p-4 font-semibold">{tc("الدوام", "Schedule")}</th>
                     <th className="text-right p-4 font-semibold">{tc("الحالة", "Status")}</th>
                     <th className="text-right p-4 font-semibold">{tc("الإجراءات", "Actions")}</th>
                   </tr>
@@ -560,8 +644,15 @@ export default function AdminEmployees() {
                       <td className="p-4 text-muted-foreground">{emp.jobTitle}</td>
                       <td className="p-4">
                         <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-                          {emp.role === 'cashier' ? tc('كاشير','Cashier') : emp.role === 'barista' ? tc('باريستا','Barista') : emp.role === 'manager' ? tc('مدير','Manager') : emp.role === 'driver' ? tc('سائق','Driver') : emp.role}
+                          {getRoleLabel(emp.role)}
                         </span>
+                      </td>
+                      <td className="p-4 text-xs text-muted-foreground">
+                        {(emp as any).shiftStartTime && (emp as any).shiftEndTime ? (
+                          <span>{(emp as any).shiftStartTime} - {(emp as any).shiftEndTime}</span>
+                        ) : (
+                          <span className="text-muted-foreground/50">—</span>
+                        )}
                       </td>
                       <td className="p-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -585,6 +676,9 @@ export default function AdminEmployees() {
                                 phone: emp.phone,
                                 jobTitle: emp.jobTitle,
                                 role: emp.role,
+                                shiftStartTime: (emp as any).shiftStartTime || '',
+                                shiftEndTime: (emp as any).shiftEndTime || '',
+                                workDays: (emp as any).workDays || [],
                                 allowedPages: (emp as any).allowedPages || [],
                                 permissions: (emp as any).permissions || [],
                               });
