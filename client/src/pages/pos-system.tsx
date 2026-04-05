@@ -891,7 +891,7 @@ export default function PosSystem() {
               title={tc("إعدادات الطابعة", "Printer Settings")}
             >
               <Printer className="w-4 h-4" />
-              <span className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full ${printerMode === 'network' ? 'bg-blue-500' : printerMode === 'webusb' ? 'bg-green-500' : 'bg-gray-400'}`} />
+              <span className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full ${printerMode === 'network' ? 'bg-blue-500' : printerMode === 'bluetooth' ? 'bg-purple-500' : printerMode === 'webusb' ? 'bg-green-500' : 'bg-gray-400'}`} />
             </Button>
             <Button 
               variant="ghost" 
@@ -960,7 +960,7 @@ export default function PosSystem() {
             title={tc("إعدادات الطابعة", "Printer Settings")}
           >
             <Printer className="w-4 h-4" />
-            <span className={`absolute top-0.5 right-0.5 w-2 h-2 rounded-full border border-background ${printerMode === 'network' ? 'bg-blue-500' : printerMode === 'webusb' ? 'bg-green-500' : 'bg-gray-400'}`} />
+            <span className={`absolute top-0.5 right-0.5 w-2 h-2 rounded-full border border-background ${printerMode === 'network' ? 'bg-blue-500' : printerMode === 'bluetooth' ? 'bg-purple-500' : printerMode === 'webusb' ? 'bg-green-500' : 'bg-gray-400'}`} />
           </Button>
 
           <Button
@@ -2358,15 +2358,17 @@ export default function PosSystem() {
                   <p className="text-xs text-muted-foreground">
                     {printerMode === 'network'
                       ? tc("شبكة LAN — ProPos / Epson LAN", "Network LAN — ProPos / Epson LAN")
-                      : printerMode === 'webusb'
-                        ? tc("USB مباشر — متصلة", "Direct USB — Connected")
-                        : tc("متصفح — انقر لإعداد الطابعة", "Browser — Click to configure printer")
+                      : printerMode === 'bluetooth'
+                        ? tc("بلوتوث BLE — انقر للإعداد", "Bluetooth BLE — Click to configure")
+                        : printerMode === 'webusb'
+                          ? tc("USB مباشر — متصلة", "Direct USB — Connected")
+                          : tc("متصفح — انقر لإعداد الطابعة", "Browser — Click to configure printer")
                     }
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${printerMode === 'network' ? 'bg-blue-500' : printerMode === 'webusb' ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <span className={`w-2.5 h-2.5 rounded-full ${printerMode === 'network' ? 'bg-blue-500' : printerMode === 'bluetooth' ? 'bg-purple-500' : printerMode === 'webusb' ? 'bg-green-500' : 'bg-gray-300'}`} />
                 <svg className="w-4 h-4 text-muted-foreground group-hover:text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </div>
             </button>

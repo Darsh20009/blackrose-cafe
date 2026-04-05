@@ -37,7 +37,7 @@ const CMD = {
 
 export interface PrinterSettings {
   enabled: boolean;
-  mode: 'webusb' | 'network' | 'browser';
+  mode: 'webusb' | 'network' | 'bluetooth' | 'browser';
   paperWidth: '58mm' | '80mm';
   autoPrint: boolean;
   autoKitchenCopy: boolean;
@@ -50,6 +50,9 @@ export interface PrinterSettings {
   // Network printer (LAN/TCP) — ProPos, Epson TM-T88 LAN, Xprinter NW, etc.
   networkIp?: string;
   networkPort?: number;
+  // Bluetooth printer
+  bluetoothDeviceName?: string;
+  bluetoothDeviceId?: string;
 }
 
 const DEFAULT_SETTINGS: PrinterSettings = {
@@ -380,7 +383,7 @@ export type PrintJobType = 'receipt' | 'kitchen' | 'employee-card';
 
 export interface PrintResult {
   success: boolean;
-  mode: 'webusb' | 'browser' | 'error';
+  mode: 'webusb' | 'bluetooth' | 'network' | 'browser' | 'error';
   error?: string;
 }
 
@@ -423,11 +426,192 @@ export async function testNetworkPrinter(ip: string, port: number = 9100): Promi
   }
 }
 
+// ─── Bluetooth (BLE) Printer ──────────────────────────────────────────────────
+// Works with any ESC/POS BLE printer: Xprinter XP-P300BT, MUNBYN BT, Rongta, etc.
+// Uses Web Bluetooth API — Chrome/Edge desktop & Android only.
+
+/** Known BLE printer service UUIDs (ordered by prevalence) */
+const BT_SERVICE_UUIDS = [
+  '000018f0-0000-1000-8000-00805f9b34fb', // Generic BLE SPP (most common)
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // Bluetooth printer SP service
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC Transparent UART
+  '0000ff00-0000-1000-8000-00805f9b34fb', // Generic custom FF00
+  '00001101-0000-1000-8000-00805f9b34fb', // SPP (classic, limited BLE support)
+];
+
+/** Known write characteristic UUIDs */
+const BT_CHAR_UUIDS = [
+  '00002af1-0000-1000-8000-00805f9b34fb', // Generic BLE write
+  'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f', // BLE printer write
+  '49535343-8841-43f4-a8d4-ecbe34729bb3', // ISSC UART write
+  '0000ff02-0000-1000-8000-00805f9b34fb', // FF00 write char
+  '0000ff01-0000-1000-8000-00805f9b34fb', // FF00 write alt
+];
+
+const BT_DEVICE_KEY = 'qirox-bt-printer';
+
+/** Cache connected BLE device & write characteristic */
+let _btDevice: BluetoothDevice | null = null;
+let _btCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
+
+/** Is Web Bluetooth supported in this browser? */
+export function isBluetoothSupported(): boolean {
+  return typeof navigator !== 'undefined' && 'bluetooth' in navigator;
+}
+
+/** Save BT device name/id to localStorage */
+function saveBtDevice(name: string, id: string) {
+  try { localStorage.setItem(BT_DEVICE_KEY, JSON.stringify({ name, id })); } catch {}
+}
+
+/** Load saved BT device info */
+export function loadSavedBtDevice(): { name: string; id: string } | null {
+  try {
+    const raw = localStorage.getItem(BT_DEVICE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+/** Forget the paired BT printer */
+export function forgetBluetoothPrinter() {
+  _btDevice = null;
+  _btCharacteristic = null;
+  try { localStorage.removeItem(BT_DEVICE_KEY); } catch {}
+}
+
+/**
+ * Open the OS Bluetooth device picker and connect to the selected BLE printer.
+ * Returns the device name on success, or throws an error.
+ */
+export async function connectBluetoothPrinter(): Promise<string> {
+  if (!isBluetoothSupported()) throw new Error('Web Bluetooth غير مدعوم في هذا المتصفح — استخدم Chrome أو Edge');
+
+  const bt = (navigator as any).bluetooth as Bluetooth;
+
+  const device: BluetoothDevice = await bt.requestDevice({
+    acceptAllDevices: true,
+    optionalServices: BT_SERVICE_UUIDS,
+  });
+
+  if (!device.gatt) throw new Error('GATT غير متوفر لهذا الجهاز');
+
+  const server = await device.gatt.connect();
+  const characteristic = await _findWriteCharacteristic(server);
+  if (!characteristic) throw new Error('لم يُعثر على طابعة BLE متوافقة — تأكد من دعم الطابعة لـ ESC/POS');
+
+  _btDevice = device;
+  _btCharacteristic = characteristic;
+  saveBtDevice(device.name ?? device.id, device.id);
+
+  device.addEventListener('gattserverdisconnected', () => {
+    _btDevice = null;
+    _btCharacteristic = null;
+  });
+
+  return device.name ?? device.id;
+}
+
+/** Attempt to find a writable GATT characteristic across known service UUIDs. */
+async function _findWriteCharacteristic(
+  server: BluetoothRemoteGATTServer,
+): Promise<BluetoothRemoteGATTCharacteristic | null> {
+  for (const svcUuid of BT_SERVICE_UUIDS) {
+    try {
+      const service = await server.getPrimaryService(svcUuid);
+      // Try known char UUIDs first
+      for (const charUuid of BT_CHAR_UUIDS) {
+        try {
+          const char = await service.getCharacteristic(charUuid);
+          if (char.properties.write || char.properties.writeWithoutResponse) return char;
+        } catch {}
+      }
+      // Fall back: enumerate all characteristics
+      try {
+        const chars = await service.getCharacteristics();
+        for (const char of chars) {
+          if (char.properties.write || char.properties.writeWithoutResponse) return char;
+        }
+      } catch {}
+    } catch {}
+  }
+  return null;
+}
+
+/** Reconnect if the device is known but disconnected. */
+async function _ensureBtConnected(): Promise<BluetoothRemoteGATTCharacteristic> {
+  if (_btCharacteristic && _btDevice?.gatt?.connected) return _btCharacteristic;
+
+  // Try to reconnect to cached device
+  if (_btDevice && _btDevice.gatt) {
+    try {
+      const server = await _btDevice.gatt.connect();
+      const char = await _findWriteCharacteristic(server);
+      if (char) { _btCharacteristic = char; return char; }
+    } catch {}
+  }
+  throw new Error('الطابعة البلوتوث غير متصلة — أعد الاقتران من الإعدادات');
+}
+
+/**
+ * Send ESC/POS bytes to connected BLE printer.
+ * Automatically chunks data into 512-byte packets (BLE MTU limit).
+ */
+export async function bluetoothPrint(escData: Uint8Array): Promise<PrintResult> {
+  try {
+    const char = await _ensureBtConnected();
+    const useWriteWithoutResponse = char.properties.writeWithoutResponse && !char.properties.write;
+    const CHUNK = 512;
+    for (let i = 0; i < escData.length; i += CHUNK) {
+      const chunk = escData.slice(i, i + CHUNK);
+      if (useWriteWithoutResponse) {
+        await char.writeValueWithoutResponse(chunk);
+      } else {
+        await char.writeValue(chunk);
+      }
+      // Small delay between chunks to avoid buffer overflow
+      if (i + CHUNK < escData.length) await new Promise(r => setTimeout(r, 20));
+    }
+    return { success: true, mode: 'bluetooth' };
+  } catch (err: any) {
+    return { success: false, mode: 'error', error: err.message || 'خطأ في الطباعة عبر البلوتوث' };
+  }
+}
+
+/**
+ * Test BLE connection by sending a blank line + beep.
+ */
+export async function testBluetoothPrinter(): Promise<{ connected: boolean; message: string }> {
+  try {
+    const char = await _ensureBtConnected();
+    // Just ping with ESC @  (printer init — safe no-op)
+    const ping = new Uint8Array([0x1B, 0x40, 0x0A]);
+    if (char.properties.writeWithoutResponse) {
+      await char.writeValueWithoutResponse(ping);
+    } else {
+      await char.writeValue(ping);
+    }
+    const name = _btDevice?.name ?? 'الطابعة';
+    return { connected: true, message: `✅ متصل بـ "${name}" — الطابعة جاهزة` };
+  } catch (err: any) {
+    return { connected: false, message: err.message || 'الطابعة غير متاحة' };
+  }
+}
+
+/** Return current BT connection state */
+export function getBluetoothState(): { connected: boolean; deviceName: string | null } {
+  return {
+    connected: !!(_btDevice?.gatt?.connected && _btCharacteristic),
+    deviceName: _btDevice?.name ?? null,
+  };
+}
+
 /**
  * High-level print function.
  * 1. Tries Network (LAN/TCP) if mode=network and IP is configured
- * 2. Tries WebUSB if device is connected + mode=webusb
- * 3. Falls back to browser print dialog
+ * 2. Tries Bluetooth (BLE) if mode=bluetooth
+ * 3. Tries WebUSB if device is connected + mode=webusb
+ * 4. Falls back to browser print dialog
  */
 export async function thermalPrint(escData: Uint8Array, fallbackHtml: string, fallbackPaper: '58mm' | '80mm' = '80mm'): Promise<PrintResult> {
   const settings = loadPrinterSettings();
@@ -441,8 +625,14 @@ export async function thermalPrint(escData: Uint8Array, fallbackHtml: string, fa
     }
     const result = await networkPrint(escData, settings.networkIp, settings.networkPort || 9100);
     if (result.success) return result;
-    // If network fails, fall through to browser
     console.warn('[NetworkPrint] Falling back to browser:', result.error);
+  }
+
+  // Bluetooth (BLE) mode
+  if (settings.mode === 'bluetooth') {
+    const result = await bluetoothPrint(escData);
+    if (result.success) return result;
+    console.warn('[BluetoothPrint] Falling back to browser:', result.error);
   }
 
   // WebUSB mode
@@ -476,6 +666,8 @@ export async function autoPrintOrder(receiptEsc: Uint8Array, kitchenEsc: Uint8Ar
     await new Promise(r => setTimeout(r, 1500));
     if (settings.mode === 'network' && settings.networkIp) {
       await networkPrint(kitchenEsc, settings.networkIp, settings.networkPort || 9100);
+    } else if (settings.mode === 'bluetooth') {
+      await bluetoothPrint(kitchenEsc);
     } else if (_usbDevice) {
       await _sendToUSB(kitchenEsc);
     }

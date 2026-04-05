@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import {
   Printer, Usb, Wifi, Network, CheckCircle2, XCircle,
-  AlertCircle, RefreshCw, Trash2, TestTube2, Settings2,
+  AlertCircle, RefreshCw, Trash2, TestTube2, Settings2, Bluetooth, BluetoothConnected, BluetoothOff,
 } from "lucide-react";
 import {
   loadPrinterSettings,
@@ -23,6 +23,12 @@ import {
   buildEscPosReceipt,
   thermalPrint,
   testNetworkPrinter,
+  isBluetoothSupported,
+  connectBluetoothPrinter,
+  testBluetoothPrinter,
+  forgetBluetoothPrinter,
+  loadSavedBtDevice,
+  getBluetoothState,
   type PrinterSettings,
   type PrinterStatus,
 } from "@/lib/thermal-printer";
@@ -39,6 +45,12 @@ export default function PrinterSettingsPanel() {
   const [networkTesting, setNetworkTesting] = useState(false);
   const [networkStatus, setNetworkStatus] = useState<{ connected: boolean; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  // Bluetooth state
+  const [btConnecting, setBtConnecting] = useState(false);
+  const [btTesting, setBtTesting] = useState(false);
+  const [btStatus, setBtStatus] = useState<{ connected: boolean; message: string } | null>(null);
+  const [btState, setBtState] = useState<{ connected: boolean; deviceName: string | null }>(() => getBluetoothState());
+  const savedBtDevice = loadSavedBtDevice();
 
   useEffect(() => {
     refreshStatus();
@@ -84,6 +96,56 @@ export default function PrinterSettingsPanel() {
     savePrinterSettings({ mode: 'browser' });
     await refreshStatus();
     toast({ title: tc("تم قطع الاتصال", "Disconnected"), description: tc("سيتم استخدام الطباعة عبر المتصفح", "Browser print will be used") });
+  }
+
+  async function handleConnectBluetooth() {
+    if (!isBluetoothSupported()) {
+      toast({ title: tc("غير مدعوم", "Not Supported"), description: tc("Web Bluetooth يتطلب Chrome أو Edge على سطح المكتب أو Android", "Web Bluetooth requires Chrome or Edge on desktop or Android"), variant: "destructive" });
+      return;
+    }
+    setBtConnecting(true);
+    setBtStatus(null);
+    try {
+      const deviceName = await connectBluetoothPrinter();
+      savePrinterSettings({ mode: 'bluetooth', bluetoothDeviceName: deviceName });
+      setSettings(loadPrinterSettings());
+      const state = getBluetoothState();
+      setBtState(state);
+      setBtStatus({ connected: true, message: `✅ ${tc("تم الاتصال بـ", "Connected to")} "${deviceName}"` });
+      toast({ title: tc("✅ تم الاتصال بالبلوتوث", "✅ Bluetooth Connected"), description: `${tc("الطابعة", "Printer")}: ${deviceName}` });
+    } catch (e: any) {
+      setBtStatus({ connected: false, message: e?.message || tc("فشل الاتصال", "Connection failed") });
+      toast({ title: tc("خطأ في البلوتوث", "Bluetooth Error"), description: e?.message || tc("فشل الاتصال بالطابعة", "Failed to connect to printer"), variant: "destructive" });
+    } finally {
+      setBtConnecting(false);
+    }
+  }
+
+  async function handleTestBluetooth() {
+    setBtTesting(true);
+    setBtStatus(null);
+    try {
+      const result = await testBluetoothPrinter();
+      setBtStatus(result);
+      toast({
+        title: result.connected ? tc("✅ الطابعة متاحة", "✅ Printer Ready") : tc("❌ لا يمكن الاتصال", "❌ Cannot Connect"),
+        description: result.message,
+        variant: result.connected ? "default" : "destructive",
+      });
+    } catch (e: any) {
+      toast({ title: tc("خطأ", "Error"), description: e?.message, variant: "destructive" });
+    } finally {
+      setBtTesting(false);
+    }
+  }
+
+  function handleForgetBluetooth() {
+    forgetBluetoothPrinter();
+    savePrinterSettings({ mode: 'browser', bluetoothDeviceName: undefined, bluetoothDeviceId: undefined });
+    setSettings(loadPrinterSettings());
+    setBtState({ connected: false, deviceName: null });
+    setBtStatus(null);
+    toast({ title: tc("تم إزالة الطابعة", "Printer Removed"), description: tc("سيتم استخدام الطباعة عبر المتصفح", "Browser print will be used") });
   }
 
   async function handleTestNetworkPrinter() {
@@ -156,23 +218,33 @@ export default function PrinterSettingsPanel() {
   }
 
   const webUsbAvailable = isWebUSBSupported();
+  const btAvailable = isBluetoothSupported();
   const isUsbConnected = status?.isDeviceConnected;
   const savedDevice = status?.savedDevice;
   const isNetworkMode = settings.mode === 'network';
+  const isBluetoothMode = settings.mode === 'bluetooth';
 
   const statusBadgeColor = isNetworkMode
     ? (networkStatus?.connected ? '#16a34a' : '#f59e0b')
-    : isUsbConnected
-      ? '#16a34a'
-      : '#e5e7eb';
+    : isBluetoothMode
+      ? (btState.connected ? '#16a34a' : (savedBtDevice ? '#f59e0b' : '#e5e7eb'))
+      : isUsbConnected
+        ? '#16a34a'
+        : '#e5e7eb';
 
   const statusBadgeLabel = isNetworkMode
     ? (settings.networkIp ? `LAN: ${settings.networkIp}` : tc("طابعة شبكية", "Network Printer"))
-    : isUsbConnected
-      ? tc("متصلة (USB)", "Connected (USB)")
-      : settings.mode === 'browser'
-        ? tc("طباعة المتصفح", "Browser Print")
-        : tc("غير متصلة", "Disconnected");
+    : isBluetoothMode
+      ? (btState.connected
+          ? `BT: ${btState.deviceName || tc("متصلة", "Connected")}`
+          : savedBtDevice
+            ? `BT: ${savedBtDevice.name} (${tc("غير متصلة", "Disconnected")})`
+            : tc("طابعة بلوتوث", "Bluetooth Printer"))
+      : isUsbConnected
+        ? tc("متصلة (USB)", "Connected (USB)")
+        : settings.mode === 'browser'
+          ? tc("طباعة المتصفح", "Browser Print")
+          : tc("غير متصلة", "Disconnected");
 
   return (
     <div className="space-y-4">
@@ -197,7 +269,7 @@ export default function PrinterSettingsPanel() {
         </CardHeader>
         <CardContent className="space-y-3">
           {/* WebUSB availability */}
-          {!isNetworkMode && (
+          {!isNetworkMode && !isBluetoothMode && (
             <div className="flex items-center gap-2 text-sm">
               {webUsbAvailable ? (
                 <CheckCircle2 className="w-4 h-4 text-green-600" />
@@ -213,8 +285,29 @@ export default function PrinterSettingsPanel() {
             </div>
           )}
 
+          {/* Bluetooth availability */}
+          {isBluetoothMode && (
+            <div className="flex items-center gap-2 text-sm">
+              {btAvailable ? (
+                btState.connected
+                  ? <BluetoothConnected className="w-4 h-4 text-green-600" />
+                  : <Bluetooth className="w-4 h-4 text-blue-500" />
+              ) : (
+                <BluetoothOff className="w-4 h-4 text-red-500" />
+              )}
+              <span className={btAvailable ? (btState.connected ? 'text-green-700' : 'text-blue-600') : 'text-red-600'}>
+                {btAvailable
+                  ? btState.connected
+                    ? tc(`متصلة بـ "${btState.deviceName}"`, `Connected to "${btState.deviceName}"`)
+                    : tc("المتصفح يدعم Web Bluetooth — انقر للاقتران", "Browser supports Web Bluetooth — click to pair")
+                  : tc("Web Bluetooth غير مدعوم — استخدم Chrome أو Edge", "Web Bluetooth not supported — use Chrome or Edge")
+                }
+              </span>
+            </div>
+          )}
+
           {/* USB device info */}
-          {savedDevice && !isNetworkMode && (
+          {savedDevice && !isNetworkMode && !isBluetoothMode && (
             <div className="flex items-center gap-2 text-sm bg-green-50 border border-green-200 rounded-lg px-3 py-2">
               <Usb className="w-4 h-4 text-green-600" />
               <span className="flex-1 font-medium text-green-800">
@@ -228,6 +321,34 @@ export default function PrinterSettingsPanel() {
               ) : (
                 <AlertCircle className="w-4 h-4 text-amber-500" />
               )}
+            </div>
+          )}
+
+          {/* Bluetooth device info */}
+          {isBluetoothMode && (savedBtDevice || btState.connected) && (
+            <div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 border ${btState.connected ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+              {btState.connected
+                ? <BluetoothConnected className="w-4 h-4 text-green-600" />
+                : <Bluetooth className="w-4 h-4 text-amber-600" />
+              }
+              <span className={`flex-1 font-medium ${btState.connected ? 'text-green-800' : 'text-amber-700'}`}>
+                {btState.deviceName || savedBtDevice?.name || tc("طابعة بلوتوث", "Bluetooth Printer")}
+              </span>
+              {btState.connected
+                ? <CheckCircle2 className="w-4 h-4 text-green-600" />
+                : <AlertCircle className="w-4 h-4 text-amber-500" />
+              }
+            </div>
+          )}
+
+          {/* BT test status */}
+          {isBluetoothMode && btStatus && (
+            <div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 border ${btStatus.connected ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+              {btStatus.connected
+                ? <CheckCircle2 className="w-4 h-4 text-green-600" />
+                : <XCircle className="w-4 h-4 text-red-500" />
+              }
+              <span className={`flex-1 font-medium ${btStatus.connected ? 'text-green-800' : 'text-red-700'}`}>{btStatus.message}</span>
             </div>
           )}
 
@@ -247,7 +368,7 @@ export default function PrinterSettingsPanel() {
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-2">
-            {webUsbAvailable && !isNetworkMode && (
+            {webUsbAvailable && !isNetworkMode && !isBluetoothMode && (
               <Button
                 size="sm"
                 onClick={handleConnectUSB}
@@ -257,6 +378,44 @@ export default function PrinterSettingsPanel() {
               >
                 <Usb className="w-4 h-4 ml-1" />
                 {connecting ? tc("جارٍ الاتصال...", "Connecting...") : tc("اختر الطابعة (USB)", "Select Printer (USB)")}
+              </Button>
+            )}
+            {isBluetoothMode && btAvailable && (
+              <Button
+                size="sm"
+                onClick={handleConnectBluetooth}
+                disabled={btConnecting}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                data-testid="button-connect-bluetooth-printer"
+              >
+                {btState.connected
+                  ? <BluetoothConnected className="w-4 h-4 ml-1" />
+                  : <Bluetooth className="w-4 h-4 ml-1" />
+                }
+                {btConnecting
+                  ? tc("جارٍ الاقتران...", "Pairing...")
+                  : btState.connected
+                    ? tc("تغيير الطابعة", "Change Printer")
+                    : tc("اقتران بطابعة بلوتوث", "Pair Bluetooth Printer")
+                }
+              </Button>
+            )}
+            {isBluetoothMode && btState.connected && (
+              <Button
+                size="sm"
+                onClick={handleTestBluetooth}
+                disabled={btTesting}
+                className="bg-purple-600 hover:bg-purple-700 text-white"
+                data-testid="button-test-bluetooth-printer"
+              >
+                <TestTube2 className="w-4 h-4 ml-1" />
+                {btTesting ? tc("جارٍ الفحص...", "Testing...") : tc("اختبار الاتصال", "Test Connection")}
+              </Button>
+            )}
+            {isBluetoothMode && (savedBtDevice || btState.connected) && (
+              <Button size="sm" variant="outline" onClick={handleForgetBluetooth} className="text-red-600 border-red-200" data-testid="button-forget-bluetooth-printer">
+                <BluetoothOff className="w-4 h-4 ml-1" />
+                {tc("إلغاء الاقتران", "Forget Printer")}
               </Button>
             )}
             {isNetworkMode && (
@@ -271,7 +430,7 @@ export default function PrinterSettingsPanel() {
                 {networkTesting ? tc("جارٍ الفحص...", "Testing...") : tc("اختبار الاتصال", "Test Connection")}
               </Button>
             )}
-            {savedDevice && !isNetworkMode && (
+            {savedDevice && !isNetworkMode && !isBluetoothMode && (
               <Button size="sm" variant="outline" onClick={handleDisconnect} className="text-red-600 border-red-200" data-testid="button-disconnect-printer">
                 <Trash2 className="w-4 h-4 ml-1" />
                 {tc("إزالة الطابعة", "Remove Printer")}
@@ -313,9 +472,11 @@ export default function PrinterSettingsPanel() {
               <p className="text-xs text-muted-foreground mt-0.5">
                 {settings.mode === 'network'
                   ? tc("طابعة شبكية (LAN/WiFi) — ProPos، Epson، Xprinter", "Network printer (LAN/WiFi) — ProPos, Epson, Xprinter")
-                  : settings.mode === 'webusb'
-                    ? tc("اتصال USB مباشر — بدون نوافذ طباعة", "Direct USB — no print dialogs")
-                    : tc("طباعة عبر المتصفح — تظهر نافذة الطباعة", "Browser print — dialog will appear")
+                  : settings.mode === 'bluetooth'
+                    ? tc("طابعة بلوتوث (BLE) — Xprinter BT، MUNBYN، Rongta", "Bluetooth printer (BLE) — Xprinter BT, MUNBYN, Rongta")
+                    : settings.mode === 'webusb'
+                      ? tc("اتصال USB مباشر — بدون نوافذ طباعة", "Direct USB — no print dialogs")
+                      : tc("طباعة عبر المتصفح — تظهر نافذة الطباعة", "Browser print — dialog will appear")
                 }
               </p>
             </div>
@@ -326,6 +487,9 @@ export default function PrinterSettingsPanel() {
               <SelectContent>
                 <SelectItem value="network">
                   <span className="flex items-center gap-1"><Network className="w-3 h-3" /> {tc("شبكة LAN", "Network LAN")}</span>
+                </SelectItem>
+                <SelectItem value="bluetooth">
+                  <span className="flex items-center gap-1"><Bluetooth className="w-3 h-3" /> {tc("بلوتوث", "Bluetooth")}</span>
                 </SelectItem>
                 <SelectItem value="webusb">
                   <span className="flex items-center gap-1"><Usb className="w-3 h-3" /> USB</span>
@@ -375,6 +539,74 @@ export default function PrinterSettingsPanel() {
                   {tc(
                     "💡 افتح تطبيق ProPos أو لوحة إعدادات الطابعة للحصول على IP. البورت الافتراضي 9100.",
                     "💡 Open the ProPos app or printer settings panel to find the IP. Default port is 9100."
+                  )}
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* Bluetooth Printer Settings (shown only in bluetooth mode) */}
+          {isBluetoothMode && (
+            <>
+              <Separator />
+              <div className="space-y-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-purple-800">
+                  <Bluetooth className="w-4 h-4" />
+                  {tc("إعدادات الطابعة اللاسلكية (BLE Bluetooth)", "Bluetooth Wireless Printer Settings (BLE)")}
+                </div>
+
+                {/* Connection button */}
+                <Button
+                  onClick={handleConnectBluetooth}
+                  disabled={btConnecting || !btAvailable}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                  data-testid="button-pair-bluetooth-printer-main"
+                >
+                  {btConnecting ? (
+                    <><RefreshCw className="w-4 h-4 ml-2 animate-spin" />{tc("جارٍ الاقتران...", "Pairing...")}</>
+                  ) : btState.connected ? (
+                    <><BluetoothConnected className="w-4 h-4 ml-2" />{tc("تغيير الطابعة", "Change Printer")}</>
+                  ) : (
+                    <><Bluetooth className="w-4 h-4 ml-2" />{tc("ابحث عن طابعة بلوتوث", "Search for Bluetooth Printer")}</>
+                  )}
+                </Button>
+
+                {/* Device name display */}
+                {(btState.deviceName || savedBtDevice?.name) && (
+                  <div className="text-xs text-purple-700 text-center font-medium">
+                    {tc("آخر طابعة مقترنة:", "Last paired:")} <strong>{btState.deviceName || savedBtDevice?.name}</strong>
+                    {btState.connected
+                      ? <span className="text-green-600 mr-1"> ● {tc("متصلة", "Connected")}</span>
+                      : <span className="text-amber-600 mr-1"> ○ {tc("غير متصلة", "Disconnected")}</span>
+                    }
+                  </div>
+                )}
+
+                {/* Compatible printers */}
+                <div className="text-xs text-purple-600 space-y-1">
+                  <p className="font-semibold">{tc("🖨️ طابعات متوافقة:", "🖨️ Compatible printers:")}</p>
+                  <p>• Xprinter XP-P300BT / XP-58BT / XP-80BT</p>
+                  <p>• MUNBYN ITPP941 Bluetooth</p>
+                  <p>• Rongta RPP300 / RPP200 BT</p>
+                  <p>• EPSON TM-P20 / TM-P60II Bluetooth</p>
+                  <p>• {tc("أي طابعة حرارية تدعم BLE ESC/POS", "Any thermal printer supporting BLE ESC/POS")}</p>
+                </div>
+
+                {/* Browser requirement */}
+                {!btAvailable && (
+                  <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">
+                    <BluetoothOff className="w-3 h-3 flex-shrink-0" />
+                    {tc(
+                      "Web Bluetooth غير مدعوم في هذا المتصفح. استخدم Google Chrome أو Microsoft Edge على سطح المكتب أو Android.",
+                      "Web Bluetooth is not supported in this browser. Use Google Chrome or Microsoft Edge on desktop or Android."
+                    )}
+                  </div>
+                )}
+
+                <p className="text-xs text-purple-600">
+                  {tc(
+                    "💡 تأكد من تشغيل البلوتوث على جهازك وأن الطابعة في وضع الاقتران قبل النقر على الزر أعلاه.",
+                    "💡 Make sure Bluetooth is enabled on your device and the printer is in pairing mode before clicking the button above."
                   )}
                 </p>
               </div>
