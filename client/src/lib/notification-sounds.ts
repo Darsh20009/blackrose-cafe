@@ -118,24 +118,31 @@ function markPlayed(type: NotificationSoundType): void {
   } catch {}
 }
 
-// ─── Play the real MP4 alert file (online orders) ────────────────────────────
+// ─── Play the real alert file at maximum volume ───────────────────────────────
+// Uses HTML Audio (media channel) so it respects device MEDIA volume,
+// not notification volume — exactly what the user wants.
 
-async function playFileSound(volume = 1.0): Promise<void> {
-  return new Promise<void>((resolve) => {
-    try {
-      const audio = new Audio('/notification-sound.mp4');
-      audio.volume = Math.max(0, Math.min(1, volume));
-      const timer = setTimeout(resolve, 8000);
-      audio.onended = () => { clearTimeout(timer); resolve(); };
-      audio.onerror = () => { clearTimeout(timer); resolve(); };
-      const p = audio.play();
-      if (p && typeof p.catch === 'function') {
-        p.catch(() => { clearTimeout(timer); resolve(); });
+const ALERT_FILES = ['/online-order-alert.mp4', '/notification-sound.mp3'];
+
+async function playFileSound(): Promise<void> {
+  for (const src of ALERT_FILES) {
+    const played = await new Promise<boolean>((resolve) => {
+      try {
+        const audio = new Audio(src);
+        audio.volume = 1.0; // maximum
+        const timer = setTimeout(() => resolve(false), 10000);
+        audio.onended = () => { clearTimeout(timer); resolve(true); };
+        audio.onerror = () => { clearTimeout(timer); resolve(false); };
+        const p = audio.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => { clearTimeout(timer); resolve(false); });
+        }
+      } catch {
+        resolve(false);
       }
-    } catch {
-      resolve();
-    }
-  });
+    });
+    if (played) return; // success — stop trying fallbacks
+  }
 }
 
 // ─── WAV Beep Generator ───────────────────────────────────────────────────────
@@ -282,10 +289,12 @@ export async function playNotificationSound(
   markPlayed(type);
 
   if (type === 'onlineOrderVoice') {
-    // Play the real MP4 alert sound twice for online orders
-    await playFileSound(volume);
-    await new Promise(r => setTimeout(r, 600));
-    await playFileSound(volume);
+    // Play the real alert sound 3× at max volume for online orders
+    await playFileSound();
+    await new Promise(r => setTimeout(r, 400));
+    await playFileSound();
+    await new Promise(r => setTimeout(r, 400));
+    await playFileSound();
   } else if (type === 'newOrder') {
     await playBeep('newOrder', volume);
     await new Promise(r => setTimeout(r, 400));
