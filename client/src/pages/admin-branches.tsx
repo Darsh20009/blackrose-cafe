@@ -15,7 +15,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Plus, MapPin, Phone, User, Store, ArrowRight, Loader2, Edit2, Trash2, Pentagon } from 'lucide-react';
+import { Plus, MapPin, Phone, User, Store, ArrowRight, Loader2, Edit2, Trash2, Pentagon, Navigation, CheckCircle2, Map } from 'lucide-react';
 import BranchMapPicker from '@/components/branch-map-picker';
 import {
   AlertDialog,
@@ -47,10 +47,13 @@ export default function AdminBranches() {
   const tc = useTranslate();
   const { toast } = useToast();
   const [, navigate] = useLocation();
+
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isMapDialogOpen, setIsMapDialogOpen] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
+
   const [formData, setFormData] = useState({
     nameAr: '',
     nameEn: '',
@@ -87,7 +90,7 @@ export default function AdminBranches() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: { id: string; updates: any }) => 
+    mutationFn: (data: { id: string; updates: any }) =>
       apiRequest('PUT', `/api/branches/${data.id}`, data.updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/branches'] });
@@ -195,9 +198,57 @@ export default function AdminBranches() {
       return;
     }
     createMutation.mutate(prepareSubmitData());
-    setIsAddDialogOpen(false);
-    resetFormData();
   };
+
+  const hasLocation = formData.locationLat && formData.locationLng;
+  const hasGeofence = geofenceBoundary.length >= 3;
+
+  function LocationCard() {
+    return (
+      <div className="border rounded-xl p-4 space-y-3 bg-muted/30">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-accent" />
+            <span className="font-medium text-sm">{tc("موقع الفرع والجيوفينس", "Location & Geofence")}</span>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setIsMapDialogOpen(true)}
+            className="flex items-center gap-1.5"
+            data-testid="button-open-map"
+          >
+            <Map className="w-4 h-4" />
+            {hasLocation ? tc("تعديل الخريطة", "Edit Map") : tc("تحديد على الخريطة", "Select on Map")}
+          </Button>
+        </div>
+
+        {hasLocation ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{tc("تم تحديد الموقع", "Location selected")}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground bg-background rounded-lg px-3 py-2 border">
+              <span>خط العرض: <strong className="text-foreground">{parseFloat(formData.locationLat).toFixed(5)}</strong></span>
+              <span>خط الطول: <strong className="text-foreground">{parseFloat(formData.locationLng).toFixed(5)}</strong></span>
+            </div>
+            {hasGeofence && (
+              <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+                <Pentagon className="w-4 h-4" />
+                <span>{tc(`تم رسم حدود الجيوفينس (${geofenceBoundary.length} نقطة)`, `Geofence drawn (${geofenceBoundary.length} points)`)}</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {tc("لم يتم تحديد موقع بعد. اضغط على الزر لتحديد موقع الفرع على الخريطة.", "No location selected yet. Click the button to set the branch location on the map.")}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6 bg-white dark:bg-background min-h-screen" dir="rtl">
@@ -211,140 +262,17 @@ export default function AdminBranches() {
             <p className="text-muted-foreground mt-1">{tc("إضافة وتعديل فروع المقهى", "Add and edit cafe branches")}</p>
           </div>
         </div>
-        <Button 
-          onClick={() => setIsAddDialogOpen(true)}
+        <Button
+          onClick={() => { resetFormData(); setIsAddDialogOpen(true); }}
           className="bg-accent hover:bg-accent"
+          data-testid="button-add-branch"
         >
           <Plus className="w-4 h-4 ml-2" />
           {tc("إضافة فرع جديد", "Add New Branch")}
         </Button>
       </div>
 
-      {/* Add Branch Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
-          <DialogHeader>
-            <DialogTitle>{tc("إضافة فرع جديد", "Add New Branch")}</DialogTitle>
-            <DialogDescription>
-              {tc("سيتم إنشاء حساب مدير للفرع تلقائياً عند الحفظ", "A manager account will be created automatically upon saving")}
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="nameAr">{tc("اسم الفرع (بالعربية) *", "Branch Name (Arabic) *")}</Label>
-                <Input 
-                  id="nameAr"
-                  required
-                  value={formData.nameAr}
-                  onChange={(e) => setFormData({...formData, nameAr: e.target.value})}
-                  placeholder="فرع المربع"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="nameEn">{tc("اسم الفرع (بالإنجليزي)", "Branch Name (English)")}</Label>
-                <Input 
-                  id="nameEn"
-                  value={formData.nameEn}
-                  onChange={(e) => setFormData({...formData, nameEn: e.target.value})}
-                  placeholder="Al-Murabba Branch"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">{tc("العنوان", "Address")}</Label>
-                <Input 
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) => setFormData({...formData, address: e.target.value})}
-                  placeholder={tc("الرياض، طريق الملك فهد", "Riyadh, King Fahd Road")}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">{tc("رقم الهاتف", "Phone Number")}</Label>
-                <Input 
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                  placeholder="0501234567"
-                />
-              </div>
-            </div>
-
-            {/* خريطة موحدة: تحديد الموقع + رسم الحدود */}
-            <div className="border-t pt-4 mt-4">
-              <h4 className="font-semibold mb-3 flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                {tc("موقع الفرع والحدود الجغرافية", "Branch Location & Geofence")}
-              </h4>
-              <BranchMapPicker
-                initialLat={formData.locationLat ? parseFloat(formData.locationLat) : undefined}
-                initialLng={formData.locationLng ? parseFloat(formData.locationLng) : undefined}
-                initialPoints={geofenceBoundary}
-                geofenceRadius={formData.geofenceRadius ? parseInt(formData.geofenceRadius) : undefined}
-                onLocationSelect={(lat, lng) => setFormData(f => ({...f, locationLat: lat.toString(), locationLng: lng.toString()}))}
-                onBoundaryChange={handleBoundaryChange}
-              />
-              <div className="grid grid-cols-2 gap-4 mt-3">
-                <div className="space-y-2">
-                  <Label htmlFor="geofenceRadius">{tc("نطاق دائري (بالمتر) - اختياري", "Circle Radius (m) - Optional")}</Label>
-                  <Input 
-                    id="geofenceRadius"
-                    type="number"
-                    value={formData.geofenceRadius}
-                    onChange={(e) => setFormData({...formData, geofenceRadius: e.target.value})}
-                    placeholder="200"
-                  />
-                  <p className="text-xs text-muted-foreground">{tc("يُستخدم إذا لم ترسم حدود", "Used if no polygon drawn")}</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lateThresholdMinutes">{tc("عتبة التأخير (دقائق)", "Late Threshold (min)")}</Label>
-                  <Input 
-                    id="lateThresholdMinutes"
-                    type="number"
-                    value={formData.lateThresholdMinutes}
-                    onChange={(e) => setFormData({...formData, lateThresholdMinutes: e.target.value})}
-                    placeholder="15"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="workingHoursOpen">{tc("وقت الافتتاح", "Opening Time")}</Label>
-                  <Input 
-                    id="workingHoursOpen"
-                    type="time"
-                    value={formData.workingHoursOpen}
-                    onChange={(e) => setFormData({...formData, workingHoursOpen: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="workingHoursClose">{tc("وقت الإغلاق", "Closing Time")}</Label>
-                  <Input 
-                    id="workingHoursClose"
-                    type="time"
-                    value={formData.workingHoursClose}
-                    onChange={(e) => setFormData({...formData, workingHoursClose: e.target.value})}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                {tc("إلغاء", "Cancel")}
-              </Button>
-              <Button type="submit" className="bg-accent hover:bg-accent" disabled={createMutation.isPending}>
-                {createMutation.isPending ? (
-                  <><Loader2 className="w-4 h-4 animate-spin ml-2" />{tc("جاري الحفظ...", "Saving...")}</>
-                ) : (
-                  <><Plus className="w-4 h-4 ml-2" />{tc("حفظ الفرع", "Save Branch")}</>
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Branches Grid */}
+      {/* ═══ Branches Grid ═══ */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isLoading ? (
           <div className="col-span-full text-center py-12">
@@ -382,10 +310,19 @@ export default function AdminBranches() {
                       {tc("المدير:", "Manager:")} {branch.managerName}
                     </div>
                   )}
+                  {branch.location && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Navigation className="w-3 h-3" />
+                      <span>{branch.location.lat.toFixed(4)}, {branch.location.lng.toFixed(4)}</span>
+                      {branch.geofenceBoundary && branch.geofenceBoundary.length >= 3 && (
+                        <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs px-1.5 py-0.5 rounded">جيوفينس</span>
+                      )}
+                    </div>
+                  )}
                   <div className="flex gap-2 pt-2 border-t">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleEdit(branch)}
                       className="flex-1"
                       data-testid={`button-edit-branch-${branchId}`}
@@ -393,9 +330,9 @@ export default function AdminBranches() {
                       <Edit2 className="w-4 h-4 ml-1" />
                       {tc("تعديل", "Edit")}
                     </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleDelete(branch)}
                       className="flex-1 text-destructive hover:text-destructive"
                       data-testid={`button-delete-branch-${branchId}`}
@@ -417,110 +354,197 @@ export default function AdminBranches() {
         )}
       </div>
 
-      {/* Edit Branch Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
-        setIsEditDialogOpen(open);
-        if (!open) {
-          setSelectedBranch(null);
-          resetFormData();
-        }
-      }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
-          <DialogHeader>
-            <DialogTitle>{tc("تعديل الفرع", "Edit Branch")}</DialogTitle>
-            <DialogDescription>{tc("تعديل بيانات الفرع", "Update branch details")}</DialogDescription>
+      {/* ═══ Add Branch Dialog ═══ */}
+      <Dialog open={isAddDialogOpen} onOpenChange={(v) => { setIsAddDialogOpen(v); if (!v) resetFormData(); }}>
+        <DialogContent className="max-w-2xl flex flex-col max-h-[92vh]" dir="rtl">
+          <DialogHeader className="flex-shrink-0 border-b pb-4">
+            <DialogTitle>{tc("إضافة فرع جديد", "Add New Branch")}</DialogTitle>
+            <DialogDescription>
+              {tc("سيتم إنشاء حساب مدير للفرع تلقائياً عند الحفظ", "A manager account will be created automatically upon saving")}
+            </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleEditSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-nameAr">{tc("اسم الفرع (بالعربية) *", "Branch Name (Arabic) *")}</Label>
-                <Input 
-                  id="edit-nameAr"
-                  required
-                  value={formData.nameAr}
-                  onChange={(e) => setFormData({...formData, nameAr: e.target.value})}
-                  placeholder="فرع المربع"
-                />
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto py-4 px-1 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="nameAr">{tc("اسم الفرع (بالعربية) *", "Branch Name (Arabic) *")}</Label>
+                  <Input id="nameAr" required value={formData.nameAr} onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })} placeholder="فرع المربع" data-testid="input-nameAr" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="nameEn">{tc("اسم الفرع (بالإنجليزي)", "Branch Name (English)")}</Label>
+                  <Input id="nameEn" value={formData.nameEn} onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })} placeholder="Al-Murabba Branch" data-testid="input-nameEn" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="address">{tc("العنوان", "Address")}</Label>
+                  <Input id="address" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} placeholder={tc("الرياض، طريق الملك فهد", "Riyadh, King Fahd Road")} data-testid="input-address" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">{tc("رقم الهاتف", "Phone Number")}</Label>
+                  <Input id="phone" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="0501234567" data-testid="input-phone" />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-nameEn">{tc("اسم الفرع (بالإنجليزي)", "Branch Name (English)")}</Label>
-                <Input 
-                  id="edit-nameEn"
-                  value={formData.nameEn}
-                  onChange={(e) => setFormData({...formData, nameEn: e.target.value})}
-                  placeholder="Al-Murabba Branch"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-address">{tc("العنوان", "Address")}</Label>
-                <Input 
-                  id="edit-address"
-                  value={formData.address}
-                  onChange={(e) => setFormData({...formData, address: e.target.value})}
-                  placeholder="الرياض، طريق الملك فهد"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-phone">{tc("رقم الهاتف", "Phone Number")}</Label>
-                <Input 
-                  id="edit-phone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                  placeholder="0501234567"
-                />
+
+              <LocationCard />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="geofenceRadius">{tc("نطاق دائري (متر)", "Circle Radius (m)")}</Label>
+                  <Input id="geofenceRadius" type="number" value={formData.geofenceRadius} onChange={(e) => setFormData({ ...formData, geofenceRadius: e.target.value })} placeholder="200" data-testid="input-geofenceRadius" />
+                  <p className="text-xs text-muted-foreground">{tc("يُستخدم إذا لم ترسم حدود", "Used if no polygon drawn")}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lateThresholdMinutes">{tc("عتبة التأخير (دقيقة)", "Late Threshold (min)")}</Label>
+                  <Input id="lateThresholdMinutes" type="number" value={formData.lateThresholdMinutes} onChange={(e) => setFormData({ ...formData, lateThresholdMinutes: e.target.value })} placeholder="15" data-testid="input-lateThreshold" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="workingHoursOpen">{tc("وقت الافتتاح", "Opening Time")}</Label>
+                  <Input id="workingHoursOpen" type="time" value={formData.workingHoursOpen} onChange={(e) => setFormData({ ...formData, workingHoursOpen: e.target.value })} data-testid="input-openTime" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="workingHoursClose">{tc("وقت الإغلاق", "Closing Time")}</Label>
+                  <Input id="workingHoursClose" type="time" value={formData.workingHoursClose} onChange={(e) => setFormData({ ...formData, workingHoursClose: e.target.value })} data-testid="input-closeTime" />
+                </div>
               </div>
             </div>
 
-            {/* خريطة موحدة: تحديد الموقع + رسم الحدود - التعديل */}
-            <div className="border-t pt-4 mt-4">
-              <h4 className="font-semibold mb-3 flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                {tc("موقع الفرع والحدود الجغرافية", "Branch Location & Geofence")}
-              </h4>
-              <BranchMapPicker
-                initialLat={formData.locationLat ? parseFloat(formData.locationLat) : undefined}
-                initialLng={formData.locationLng ? parseFloat(formData.locationLng) : undefined}
-                initialPoints={geofenceBoundary}
-                geofenceRadius={formData.geofenceRadius ? parseInt(formData.geofenceRadius) : undefined}
-                onLocationSelect={(lat, lng) => setFormData(f => ({...f, locationLat: lat.toString(), locationLng: lng.toString()}))}
-                onBoundaryChange={handleBoundaryChange}
-              />
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                {tc("إلغاء", "Cancel")}
-              </Button>
-              <Button type="submit" className="bg-accent hover:bg-accent" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? (
-                  <><Loader2 className="w-4 h-4 animate-spin ml-2" />{tc("جاري الحفظ...", "Saving...")}</>
-                ) : (
-                  <><Edit2 className="w-4 h-4 ml-2" />{tc("حفظ التعديلات", "Save Changes")}</>
-                )}
+            <DialogFooter className="flex-shrink-0 border-t pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>{tc("إلغاء", "Cancel")}</Button>
+              <Button type="submit" className="bg-accent hover:bg-accent" disabled={createMutation.isPending} data-testid="button-save-branch">
+                {createMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin ml-2" />{tc("جاري الحفظ...", "Saving...")}</> : <><Plus className="w-4 h-4 ml-2" />{tc("حفظ الفرع", "Save Branch")}</>}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* ═══ Edit Branch Dialog ═══ */}
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => { setIsEditDialogOpen(open); if (!open) { setSelectedBranch(null); resetFormData(); } }}>
+        <DialogContent className="max-w-2xl flex flex-col max-h-[92vh]" dir="rtl">
+          <DialogHeader className="flex-shrink-0 border-b pb-4">
+            <DialogTitle>{tc("تعديل الفرع", "Edit Branch")}</DialogTitle>
+            <DialogDescription>{tc("تعديل بيانات الفرع", "Update branch details")}</DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleEditSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto py-4 px-1 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-nameAr">{tc("اسم الفرع (بالعربية) *", "Branch Name (Arabic) *")}</Label>
+                  <Input id="edit-nameAr" required value={formData.nameAr} onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })} placeholder="فرع المربع" data-testid="input-edit-nameAr" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-nameEn">{tc("اسم الفرع (بالإنجليزي)", "Branch Name (English)")}</Label>
+                  <Input id="edit-nameEn" value={formData.nameEn} onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })} placeholder="Al-Murabba Branch" data-testid="input-edit-nameEn" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-address">{tc("العنوان", "Address")}</Label>
+                  <Input id="edit-address" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} placeholder="الرياض، طريق الملك فهد" data-testid="input-edit-address" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-phone">{tc("رقم الهاتف", "Phone Number")}</Label>
+                  <Input id="edit-phone" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="0501234567" data-testid="input-edit-phone" />
+                </div>
+              </div>
+
+              <LocationCard />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{tc("نطاق دائري (متر)", "Circle Radius (m)")}</Label>
+                  <Input type="number" value={formData.geofenceRadius} onChange={(e) => setFormData({ ...formData, geofenceRadius: e.target.value })} placeholder="200" data-testid="input-edit-radius" />
+                  <p className="text-xs text-muted-foreground">{tc("يُستخدم إذا لم ترسم حدود", "Used if no polygon drawn")}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>{tc("عتبة التأخير (دقيقة)", "Late Threshold (min)")}</Label>
+                  <Input type="number" value={formData.lateThresholdMinutes} onChange={(e) => setFormData({ ...formData, lateThresholdMinutes: e.target.value })} placeholder="15" data-testid="input-edit-lateThreshold" />
+                </div>
+                <div className="space-y-2">
+                  <Label>{tc("وقت الافتتاح", "Opening Time")}</Label>
+                  <Input type="time" value={formData.workingHoursOpen} onChange={(e) => setFormData({ ...formData, workingHoursOpen: e.target.value })} data-testid="input-edit-openTime" />
+                </div>
+                <div className="space-y-2">
+                  <Label>{tc("وقت الإغلاق", "Closing Time")}</Label>
+                  <Input type="time" value={formData.workingHoursClose} onChange={(e) => setFormData({ ...formData, workingHoursClose: e.target.value })} data-testid="input-edit-closeTime" />
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="flex-shrink-0 border-t pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>{tc("إلغاء", "Cancel")}</Button>
+              <Button type="submit" className="bg-accent hover:bg-accent" disabled={updateMutation.isPending} data-testid="button-save-edit">
+                {updateMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin ml-2" />{tc("جاري الحفظ...", "Saving...")}</> : <><Edit2 className="w-4 h-4 ml-2" />{tc("حفظ التعديلات", "Save Changes")}</>}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ Map Dialog (Full Screen) ═══ */}
+      <Dialog open={isMapDialogOpen} onOpenChange={setIsMapDialogOpen}>
+        <DialogContent className="max-w-3xl w-full flex flex-col" style={{ height: '90vh', maxHeight: '90vh' }} dir="rtl">
+          <DialogHeader className="flex-shrink-0 pb-2">
+            <DialogTitle className="flex items-center gap-2">
+              <Map className="w-5 h-5 text-accent" />
+              {tc("تحديد موقع الفرع والحدود الجغرافية", "Set Branch Location & Geofence")}
+            </DialogTitle>
+            <DialogDescription>
+              {tc("اضغط على الخريطة لتحديد الموقع، أو ارسم حدود الجيوفينس", "Click the map to set location, or draw geofence boundary")}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <BranchMapPicker
+              initialLat={formData.locationLat ? parseFloat(formData.locationLat) : undefined}
+              initialLng={formData.locationLng ? parseFloat(formData.locationLng) : undefined}
+              initialPoints={geofenceBoundary}
+              geofenceRadius={formData.geofenceRadius ? parseInt(formData.geofenceRadius) : undefined}
+              onLocationSelect={(lat, lng) => setFormData(f => ({ ...f, locationLat: lat.toString(), locationLng: lng.toString() }))}
+              onBoundaryChange={handleBoundaryChange}
+            />
+          </div>
+
+          <DialogFooter className="flex-shrink-0 border-t pt-4">
+            <div className="flex items-center gap-3 w-full">
+              {hasLocation && (
+                <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-400 ml-auto">
+                  <CheckCircle2 className="w-4 h-4" />
+                  {tc("تم تحديد الموقع", "Location set")}
+                  {hasGeofence && ` · ${geofenceBoundary.length} ${tc("نقاط حدود", "boundary points")}`}
+                </span>
+              )}
+              <Button
+                type="button"
+                onClick={() => setIsMapDialogOpen(false)}
+                className="bg-accent hover:bg-accent mr-auto"
+                data-testid="button-confirm-map"
+              >
+                <CheckCircle2 className="w-4 h-4 ml-2" />
+                {tc("تأكيد وإغلاق", "Confirm & Close")}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ Delete Confirmation ═══ */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>{tc("تأكيد حذف الفرع", "Confirm Delete Branch")}</AlertDialogTitle>
+            <AlertDialogTitle>{tc("تأكيد حذف الفرع", "Confirm Branch Deletion")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {tc(`هل أنت متأكد من حذف الفرع "${selectedBranch?.nameAr}"؟ هذا الإجراء لا يمكن التراجع عنه.`, `Are you sure you want to delete "${selectedBranch?.nameAr}"? This action cannot be undone.`)}
+              {tc(`هل أنت متأكد من حذف فرع "${selectedBranch?.nameAr}"؟ هذا الإجراء لا يمكن التراجع عنه.`,
+                `Are you sure you want to delete branch "${selectedBranch?.nameAr}"? This action cannot be undone.`)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setSelectedBranch(null)}>{tc("إلغاء", "Cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              {deleteMutation.isPending ? (
-                <><Loader2 className="w-4 h-4 animate-spin ml-2" />{tc("جاري الحذف...", "Deleting...")}</>
-              ) : (
-                <><Trash2 className="w-4 h-4 ml-2" />{tc("تأكيد الحذف", "Confirm Delete")}</>
-              )}
+            <AlertDialogCancel>{tc("إلغاء", "Cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : tc("حذف", "Delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

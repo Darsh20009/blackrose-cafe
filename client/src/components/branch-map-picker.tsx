@@ -225,7 +225,7 @@ export default function BranchMapPicker({
       </div>
 
       {/* Unified Map */}
-      <div className="h-96 rounded-lg overflow-hidden border border-border">
+      <div className="h-[52vh] min-h-64 rounded-lg overflow-hidden border border-border">
         <MapContainer
           center={mapCenter}
           zoom={16}
