@@ -7,6 +7,12 @@
 const ESC = 0x1b;
 const GS  = 0x1d;
 
+function fmtOrderNum(n: string | number): string {
+  const digits = String(n).replace(/\D/g, '');
+  if (!digits) return `#${n}`;
+  return `#${digits.padStart(4, '0')}`;
+}
+
 const CMD = {
   INIT:          [ESC, 0x40],
   ALIGN_LEFT:    [ESC, 0x61, 0x00],
@@ -251,7 +257,7 @@ export function buildEscPosReceipt(data: EscPosReceiptData): Uint8Array {
 
   // Order number
   buf.push(...CMD.DOUBLE_SIZE, ...CMD.ALIGN_CENTER);
-  buf.push(...textBytes(`#${data.orderNumber}`), 0x0a);
+  buf.push(...textBytes(fmtOrderNum(data.orderNumber)), 0x0a);
   buf.push(...CMD.NORMAL_SIZE);
 
   buf.push(...dottedLine(w));
@@ -330,7 +336,7 @@ export function buildEscPosKitchenTicket(data: {
   buf.push(...CMD.BOLD_OFF);
 
   buf.push(...CMD.DOUBLE_SIZE, ...CMD.ALIGN_CENTER);
-  buf.push(...textBytes(`#${data.orderNumber}`), 0x0a);
+  buf.push(...textBytes(fmtOrderNum(data.orderNumber)), 0x0a);
   buf.push(...CMD.NORMAL_SIZE);
 
   if (data.tableNumber) {

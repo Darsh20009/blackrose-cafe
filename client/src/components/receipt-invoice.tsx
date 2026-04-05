@@ -8,7 +8,7 @@ import { brand } from "@/lib/brand";
 import { useRef, useState, useEffect } from "react";
 import QRCode from "qrcode";
 import SarIcon from "@/components/sar-icon";
-import { printHtmlInPage } from "@/lib/print-utils";
+import { printHtmlInPage, fmtOrderNum } from "@/lib/print-utils";
 
 interface ReceiptInvoiceProps {
   order: Order;
@@ -293,7 +293,7 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
           <div className="space-y-0.5">
             <div className="flex justify-between">
               <span className="opacity-60">رقم الفاتورة:</span>
-              <span className="font-mono">{order.orderNumber}</span>
+              <span className="font-mono">{fmtOrderNum(order.orderNumber)}</span>
             </div>
             <div className="flex justify-between">
               <span className="opacity-60">التاريخ:</span>

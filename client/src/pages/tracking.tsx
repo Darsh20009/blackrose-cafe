@@ -14,6 +14,7 @@ import LocationPreparationCheck from "@/components/location-preparation-check";
 import type { Order } from "@shared/schema";
 import { useTranslation } from 'react-i18next';
 import SarIcon from "@/components/sar-icon";
+import { fmtOrderNum } from "@/lib/print-utils";
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
@@ -237,7 +238,7 @@ export default function OrderTrackingPage() {
                   <div className="space-y-4">
                     <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
                       <span className="text-muted-foreground">{t("tracking.order_number")}:</span>
-                      <span className="font-bold text-primary" dir="ltr">{order.orderNumber}</span>
+                      <span className="font-bold text-primary" dir="ltr">{fmtOrderNum(order.orderNumber)}</span>
                     </div>
                     <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
                       <span className="text-muted-foreground">{t("tracking.total_amount")}:</span>

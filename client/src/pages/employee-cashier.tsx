@@ -22,7 +22,7 @@ import QRScanner from "@/components/qr-scanner";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { TableOccupancyAlerts } from "@/components/table-occupancy-alerts";
 import { ClassicCashierLayout, POSCashierLayout, SplitCashierLayout } from "@/components/cashier-layouts";
-import { printTaxInvoice, printSimpleReceipt, printCustomerPickupReceipt, printCashierReceipt, printAllReceipts } from "@/lib/print-utils";
+import { printTaxInvoice, printSimpleReceipt, printCustomerPickupReceipt, printCashierReceipt, printAllReceipts, fmtOrderNum } from "@/lib/print-utils";
 import type { Employee, CoffeeItem, PaymentMethod, LoyaltyCard } from "@shared/schema";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import PrinterSettingsPanel from "@/components/printer-settings-panel";
@@ -52,7 +52,7 @@ function generateWhatsAppLink(data: WhatsAppMessageData): string {
 
 تم استلام طلبك بنجاح!
 
-رقم الطلب: ${data.orderNumber}
+رقم الطلب: ${fmtOrderNum(data.orderNumber)}
 
 تفاصيل الطلب:
 ${data.items.map(item => {
@@ -389,7 +389,7 @@ export default function EmployeeCashier() {
    window.open(whatsappLink, '_blank');
    toast({
      title: tc("تم إنشاء الطلب بنجاح", "Order created successfully"),
-     description: `${tc("رقم الطلب","Order #")}: ${order.orderNumber}`,
+     description: `${tc("رقم الطلب","Order #")}: ${fmtOrderNum(order.orderNumber)}`,
      className: "bg-green-600 text-white",
    });
  }

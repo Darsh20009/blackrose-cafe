@@ -1,6 +1,18 @@
 import QRCode from "qrcode";
 import { VAT_RATE } from "@/lib/constants";
 
+/**
+ * Formats an order number for employee display: #0042
+ * Pads the numeric part to at least 4 digits with # prefix.
+ */
+export function fmtOrderNum(n: string | number): string {
+  const str = String(n).trim();
+  // Extract only digits for padding
+  const digits = str.replace(/\D/g, '');
+  if (!digits) return `#${str}`;
+  return `#${digits.padStart(4, '0')}`;
+}
+
 interface OrderItem {
   coffeeItem: {
     nameAr: string;
@@ -292,7 +304,7 @@ export async function printKitchenOrder(data: KitchenOrderData): Promise<void> {
 <body>
   <div class="ticket">
     <div class="header">
-      <div class="order-number">${data.orderNumber}</div>
+      <div class="order-number">${fmtOrderNum(data.orderNumber)}</div>
       ${data.priority === 'urgent' ? '<div class="urgent">عاجل!</div>' : ''}
       ${data.tableNumber ? `<div class="table-info">طاولة ${data.tableNumber}</div>` : ''}
       <div class="timestamp">${data.timestamp}</div>
@@ -475,7 +487,7 @@ export async function printUnifiedReceipt(data: TaxInvoiceData): Promise<void> {
 
     <div style="text-align:center;margin:6px 0;padding:6px;background:#f0f0f0;border-radius:6px;border:1.5px solid #ccc;">
       <div style="font-size:9px;color:#666;">رقم الطلب</div>
-      <div style="font-size:20px;font-weight:700;font-family:monospace;direction:ltr;">${data.orderNumber}</div>
+      <div style="font-size:20px;font-weight:700;font-family:monospace;direction:ltr;">${fmtOrderNum(data.orderNumber)}</div>
     </div>
 
     <div class="info">
@@ -506,7 +518,7 @@ export async function printUnifiedReceipt(data: TaxInvoiceData): Promise<void> {
   <!-- ════ صفحة 2: نسخة الموظف (بدون أسعار) ════ -->
   <div class="page">
     <div class="k-header">نسخة الموظف - ملخص الطلب</div>
-    <div class="k-order">${data.orderNumber}</div>
+    <div class="k-order">${fmtOrderNum(data.orderNumber)}</div>
     ${data.tableNumber ? `<div class="k-table"><span>طاولة ${data.tableNumber}</span></div>` : ''}
     ${orderTypeLabel ? `<div class="k-type">${orderTypeLabel}</div>` : ''}
     <div>${kitchenItemsHtml}</div>
@@ -543,7 +555,7 @@ export async function printBulkEmployeeInvoices(orders: any[]): Promise<void> {
     <div class="invoice-page">
       <div class="header">
         <h3>ملخص طلب موظف</h3>
-        <div>رقم الطلب: ${order.orderNumber}</div>
+        <div>رقم الطلب: ${fmtOrderNum(order.orderNumber)}</div>
         <div>التاريخ: ${dateStr} ${timeStr}</div>
       </div>
       <div class="content">
@@ -775,7 +787,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     <!-- صفحة 2: نسخة الموظف/المطبخ — بدون أسعار -->
     <div class="emp-section">
       <div class="emp-header">نسخة الموظف - ملخص الطلب</div>
-      <div class="emp-order">${data.orderNumber}</div>
+      <div class="emp-order">${fmtOrderNum(data.orderNumber)}</div>
       ${data.tableNumber ? `<div style="text-align:center;"><span class="emp-table">طاولة ${data.tableNumber}</span></div>` : ''}
       ${orderTypeLabel ? `<div class="emp-type">${orderTypeLabel}</div>` : ''}
       
@@ -866,7 +878,7 @@ export async function printCustomerPickupReceipt(data: TaxInvoiceData & { delive
       <h1 class="company-name">${COMPANY_NAME}</h1>
       <p style="color: #666; font-size: 14px;">إيصال الاستلام</p>
       <div class="order-badge">
-        <div class="order-number">${data.orderNumber}</div>
+        <div class="order-number">${fmtOrderNum(data.orderNumber)}</div>
       </div>
       <div class="order-type">${deliveryTypeAr}</div>
     </div>
@@ -964,7 +976,7 @@ export async function printCashierReceipt(data: TaxInvoiceData & { deliveryType?
   <div class="receipt">
     <div class="header">
       <span class="title">نسخة الكاشير</span>
-      <div class="order-number">${data.orderNumber}</div>
+      <div class="order-number">${fmtOrderNum(data.orderNumber)}</div>
       <div class="order-type">${deliveryTypeAr}</div>
     </div>
 
@@ -1062,7 +1074,7 @@ export async function printAllReceipts(data: TaxInvoiceData & { deliveryType?: s
       const fallbackHtml = `<div style="text-align:center;font-family:Cairo,Arial,sans-serif;padding:20px;max-width:80mm;margin:auto">
         <b style="font-size:18px">BLACK ROSE CAFE</b><br/>
         <small>${data.branchName || ''}</small><br/><hr/>
-        <div style="font-size:22px;font-weight:700;padding:8px;background:#eee;border-radius:4px">#${data.orderNumber}</div>
+        <div style="font-size:22px;font-weight:700;padding:8px;background:#eee;border-radius:4px">${fmtOrderNum(data.orderNumber)}</div>
         <small>${dateStr}</small><br/>
         <small>الكاشير: ${data.employeeName}</small>
         <hr style="border-style:dashed"/>
@@ -1219,7 +1231,7 @@ export async function printSimpleReceipt(data: TaxInvoiceData): Promise<void> {
 
     <div class="order-num-block">
       <div class="order-num-label">رقم الطلب</div>
-      <div class="order-num-value">${data.orderNumber}</div>
+      <div class="order-num-value">${fmtOrderNum(data.orderNumber)}</div>
     </div>
 
     <div class="section">
@@ -1287,7 +1299,7 @@ export async function printSimpleReceipt(data: TaxInvoiceData): Promise<void> {
     <div style="text-align: center; padding: 16px 0; border-top: 2px dashed #333; margin-top: 16px;">
       <p style="font-size: 12px; color: #666; margin-bottom: 8px;">امسح لتتبع طلبك</p>
       <img src="${trackingQRCode}" alt="تتبع الطلب" style="width: 80px; height: 80px;" />
-      <p style="font-size: 10px; color: #888; margin-top: 4px;">رقم الطلب: ${data.orderNumber}</p>
+      <p style="font-size: 10px; color: #888; margin-top: 4px;">رقم الطلب: ${fmtOrderNum(data.orderNumber)}</p>
     </div>
     ` : ''}
 

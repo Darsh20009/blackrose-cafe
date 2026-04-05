@@ -33,7 +33,8 @@ import type { CoffeeItem, Order, Table, Employee } from "@shared/schema";
 import { 
   printSimpleReceipt, 
   printTaxInvoice, 
-  printKitchenOrder 
+  printKitchenOrder,
+  fmtOrderNum
 } from "@/lib/print-utils";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -143,7 +144,7 @@ export default function PosSystem() {
         }
         toast({
           title: t('pos.new_order_toast'),
-          description: t('pos.new_order_toast_desc', { number: order?.orderNumber || '', amount: order?.totalAmount || 0 }),
+          description: t('pos.new_order_toast_desc', { number: order?.orderNumber ? fmtOrderNum(order.orderNumber) : '', amount: order?.totalAmount || 0 }),
         });
       } else if (!isPosOrder && soundEnabled) {
         playNotificationSound('newOrder', 0.6);
@@ -1588,7 +1589,7 @@ export default function PosSystem() {
                         <div className="flex justify-between items-start mb-3">
                           <div>
                             <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <span className="font-black text-lg">{order.orderNumber}</span>
+                              <span className="font-black text-lg">{fmtOrderNum(order.orderNumber)}</span>
                               <Badge variant={order.status === 'ready' ? 'default' : 'secondary'} className="text-xs">
                                 {statusLabels[order.status] || order.status}
                               </Badge>
@@ -1974,7 +1975,7 @@ export default function PosSystem() {
                     {i18n.language === 'ar' ? 'رقم الطلب' : 'Order Number'}
                   </p>
                   <p className={`text-4xl font-black tracking-wide ${lastOrder.isOffline ? 'text-amber-600 dark:text-amber-400' : 'text-primary'}`}>
-                    #{lastOrder.orderNumber}
+                    {fmtOrderNum(lastOrder.orderNumber)}
                   </p>
                   {lastOrder.isOffline && (
                     <p className="text-xs text-amber-500 dark:text-amber-500 mt-1">
@@ -2198,7 +2199,7 @@ export default function PosSystem() {
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-black text-lg">{t('pos.table_number_label', { number: order.tableNumber })}</span>
-                              <Badge variant="secondary" className="text-xs">{order.orderNumber}</Badge>
+                              <Badge variant="secondary" className="text-xs">{fmtOrderNum(order.orderNumber)}</Badge>
                               <Badge variant="outline" className="text-xs">
                                 {statusLabels[order.status] || order.status}
                               </Badge>
