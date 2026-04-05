@@ -16,8 +16,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Plus, MapPin, Phone, User, Store, ArrowRight, Loader2, Edit2, Trash2, Pentagon } from 'lucide-react';
-import BranchPolygonPicker from '@/components/branch-polygon-picker';
-import BranchLocationPicker from '@/components/branch-location-picker';
+import BranchMapPicker from '@/components/branch-map-picker';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -272,26 +271,23 @@ export default function AdminBranches() {
               </div>
             </div>
 
-            {/* إعدادات الموقع والحدود الجغرافية */}
+            {/* خريطة موحدة: تحديد الموقع + رسم الحدود */}
             <div className="border-t pt-4 mt-4">
               <h4 className="font-semibold mb-3 flex items-center gap-2">
                 <MapPin className="w-4 h-4" />
-                {tc("إعدادات الموقع والحدود الجغرافية", "Location & Geofence Settings")}
+                {tc("موقع الفرع والحدود الجغرافية", "Branch Location & Geofence")}
               </h4>
-              <div className="space-y-3">
-                <BranchLocationPicker
-                  initialLat={formData.locationLat ? parseFloat(formData.locationLat) : undefined}
-                  initialLng={formData.locationLng ? parseFloat(formData.locationLng) : undefined}
-                  onLocationSelect={(lat, lng) => setFormData(f => ({...f, locationLat: lat.toString(), locationLng: lng.toString()}))}
-                />
-                {formData.locationLat && formData.locationLng && (
-                  <p className="text-xs text-muted-foreground" dir="ltr">
-                    📍 {parseFloat(formData.locationLat).toFixed(6)}, {parseFloat(formData.locationLng).toFixed(6)}
-                  </p>
-                )}
-                <div className="grid grid-cols-2 gap-4">
+              <BranchMapPicker
+                initialLat={formData.locationLat ? parseFloat(formData.locationLat) : undefined}
+                initialLng={formData.locationLng ? parseFloat(formData.locationLng) : undefined}
+                initialPoints={geofenceBoundary}
+                geofenceRadius={formData.geofenceRadius ? parseInt(formData.geofenceRadius) : undefined}
+                onLocationSelect={(lat, lng) => setFormData(f => ({...f, locationLat: lat.toString(), locationLng: lng.toString()}))}
+                onBoundaryChange={handleBoundaryChange}
+              />
+              <div className="grid grid-cols-2 gap-4 mt-3">
                 <div className="space-y-2">
-                  <Label htmlFor="geofenceRadius">{tc("نطاق حدود الفرع الدائري (بالمتر) - اختياري", "Circular Geofence Radius (meters) - Optional")}</Label>
+                  <Label htmlFor="geofenceRadius">{tc("نطاق دائري (بالمتر) - اختياري", "Circle Radius (m) - Optional")}</Label>
                   <Input 
                     id="geofenceRadius"
                     type="number"
@@ -299,10 +295,10 @@ export default function AdminBranches() {
                     onChange={(e) => setFormData({...formData, geofenceRadius: e.target.value})}
                     placeholder="200"
                   />
-                  <p className="text-xs text-muted-foreground">{tc("يُستخدم فقط إذا لم ترسم حدود متعددة النقاط", "Used only if no polygon boundary is drawn")}</p>
+                  <p className="text-xs text-muted-foreground">{tc("يُستخدم إذا لم ترسم حدود", "Used if no polygon drawn")}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lateThresholdMinutes">{tc("عتبة التأخير (بالدقائق)", "Late Threshold (minutes)")}</Label>
+                  <Label htmlFor="lateThresholdMinutes">{tc("عتبة التأخير (دقائق)", "Late Threshold (min)")}</Label>
                   <Input 
                     id="lateThresholdMinutes"
                     type="number"
@@ -310,7 +306,6 @@ export default function AdminBranches() {
                     onChange={(e) => setFormData({...formData, lateThresholdMinutes: e.target.value})}
                     placeholder="15"
                   />
-                  <p className="text-xs text-muted-foreground">{tc("بعد كم دقيقة يُعتبر الموظف متأخراً", "After how many minutes an employee is considered late")}</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="workingHoursOpen">{tc("وقت الافتتاح", "Opening Time")}</Label>
@@ -331,21 +326,6 @@ export default function AdminBranches() {
                   />
                 </div>
               </div>
-              </div>
-            </div>
-
-            {/* رسم حدود الفرع متعددة النقاط */}
-            <div className="border-t pt-4 mt-4">
-              <h4 className="font-semibold mb-3 flex items-center gap-2">
-                <Pentagon className="w-4 h-4" />
-                {tc("رسم حدود الفرع (اختياري - أدق من الدائرة)", "Draw Branch Boundary (Optional - More Precise)")}
-              </h4>
-              <BranchPolygonPicker
-                initialPoints={geofenceBoundary}
-                centerLat={formData.locationLat ? parseFloat(formData.locationLat) : undefined}
-                centerLng={formData.locationLng ? parseFloat(formData.locationLng) : undefined}
-                onBoundaryChange={handleBoundaryChange}
-              />
             </div>
 
             <DialogFooter>
@@ -492,34 +472,18 @@ export default function AdminBranches() {
               </div>
             </div>
 
-            {/* موقع الفرع - التعديل */}
+            {/* خريطة موحدة: تحديد الموقع + رسم الحدود - التعديل */}
             <div className="border-t pt-4 mt-4">
               <h4 className="font-semibold mb-3 flex items-center gap-2">
                 <MapPin className="w-4 h-4" />
-                {tc("موقع الفرع الجغرافي", "Branch Location")}
+                {tc("موقع الفرع والحدود الجغرافية", "Branch Location & Geofence")}
               </h4>
-              <BranchLocationPicker
+              <BranchMapPicker
                 initialLat={formData.locationLat ? parseFloat(formData.locationLat) : undefined}
                 initialLng={formData.locationLng ? parseFloat(formData.locationLng) : undefined}
-                onLocationSelect={(lat, lng) => setFormData(f => ({...f, locationLat: lat.toString(), locationLng: lng.toString()}))}
-              />
-              {formData.locationLat && formData.locationLng && (
-                <p className="text-xs text-muted-foreground mt-2" dir="ltr">
-                  📍 {parseFloat(formData.locationLat).toFixed(6)}, {parseFloat(formData.locationLng).toFixed(6)}
-                </p>
-              )}
-            </div>
-
-            {/* رسم حدود الفرع متعددة النقاط - التعديل */}
-            <div className="border-t pt-4 mt-4">
-              <h4 className="font-semibold mb-3 flex items-center gap-2">
-                <Pentagon className="w-4 h-4" />
-                {tc("تعديل حدود الفرع", "Edit Branch Boundary")}
-              </h4>
-              <BranchPolygonPicker
                 initialPoints={geofenceBoundary}
-                centerLat={formData.locationLat ? parseFloat(formData.locationLat) : undefined}
-                centerLng={formData.locationLng ? parseFloat(formData.locationLng) : undefined}
+                geofenceRadius={formData.geofenceRadius ? parseInt(formData.geofenceRadius) : undefined}
+                onLocationSelect={(lat, lng) => setFormData(f => ({...f, locationLat: lat.toString(), locationLng: lng.toString()}))}
                 onBoundaryChange={handleBoundaryChange}
               />
             </div>
