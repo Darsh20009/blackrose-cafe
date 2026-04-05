@@ -1017,13 +1017,97 @@ export async function printCashierReceipt(data: TaxInvoiceData & { deliveryType?
 }
 
 export async function printAllReceipts(data: TaxInvoiceData & { deliveryType?: string; deliveryTypeAr?: string }): Promise<void> {
-  await printTaxInvoice(data);
-  setTimeout(async () => {
-    await printCustomerPickupReceipt(data);
-  }, 500);
-  setTimeout(async () => {
-    await printCashierReceipt(data);
-  }, 1000);
+  // Try thermal printer (WebUSB) first
+  try {
+    const { loadPrinterSettings, buildEscPosReceipt, buildEscPosKitchenTicket, thermalPrint } = await import('./thermal-printer');
+    const printerSettings = loadPrinterSettings();
+
+    if (printerSettings.enabled && printerSettings.autoPrint) {
+      const { date: fmtDate, time: fmtTime } = formatDate(data.date);
+      const dateStr = `${fmtDate} ${fmtTime}`;
+      const totalAmount = parseNumber(data.total);
+      const subtotalBeforeTax = totalAmount / (1 + VAT_RATE);
+      const vatAmount = totalAmount - subtotalBeforeTax;
+
+      const orderTypeLabel = data.orderTypeName || (data.orderType === 'dine_in' ? 'محلي' : data.orderType === 'takeaway' ? 'سفري' : data.orderType === 'delivery' ? 'توصيل' : data.deliveryTypeAr || '');
+
+      // Build ESC/POS receipt
+      const escData = buildEscPosReceipt({
+        shopName: COMPANY_NAME,
+        vatNumber: data.vatNumber || VAT_NUMBER,
+        branchName: data.branchName,
+        address: data.branchAddress,
+        orderNumber: data.orderNumber,
+        date: dateStr,
+        cashierName: data.employeeName,
+        customerName: data.customerName !== 'عميل نقدي' ? data.customerName : undefined,
+        tableNumber: data.tableNumber,
+        orderType: orderTypeLabel || undefined,
+        items: data.items.map(item => ({
+          name: item.coffeeItem.nameAr,
+          qty: item.quantity,
+          price: parseNumber(item.coffeeItem.price),
+          addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
+        })),
+        subtotal: subtotalBeforeTax,
+        vat: vatAmount,
+        total: totalAmount,
+        discount: data.invoiceDiscount ? parseNumber(data.invoiceDiscount) : undefined,
+        paymentMethod: data.paymentMethod,
+        paperWidth: printerSettings.paperWidth,
+        feedLines: printerSettings.feedLines,
+      });
+
+      // Build fallback HTML
+      const fallbackHtml = `<div style="text-align:center;font-family:Cairo,Arial,sans-serif;padding:20px;max-width:80mm;margin:auto">
+        <b style="font-size:18px">BLACK ROSE CAFE</b><br/>
+        <small>${data.branchName || ''}</small><br/><hr/>
+        <div style="font-size:22px;font-weight:700;padding:8px;background:#eee;border-radius:4px">#${data.orderNumber}</div>
+        <small>${dateStr}</small><br/>
+        <small>الكاشير: ${data.employeeName}</small>
+        <hr style="border-style:dashed"/>
+        ${data.items.map(item => `<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">
+          <span>${item.coffeeItem.nameAr} x${item.quantity}</span>
+          <span>${(parseNumber(item.coffeeItem.price) * item.quantity).toFixed(2)}</span>
+        </div>`).join('')}
+        <hr style="border-style:dashed"/>
+        <div style="display:flex;justify-content:space-between;font-size:12px"><span>ضريبة 15%:</span><span>${vatAmount.toFixed(2)} ر.س</span></div>
+        <div style="font-size:18px;font-weight:700;margin-top:6px">${totalAmount.toFixed(2)} ر.س</div>
+        <small>${data.paymentMethod}</small>
+        <hr style="border-style:dashed"/>
+        <small>شكراً لزيارتكم</small>
+      </div>`;
+
+      const result = await thermalPrint(escData, fallbackHtml, printerSettings.paperWidth);
+      console.log('[PrintAllReceipts] Result:', result.mode, result.success);
+
+      // If WebUSB successful, also print kitchen copy
+      if (result.mode === 'webusb' && printerSettings.autoKitchenCopy) {
+        await new Promise(r => setTimeout(r, 1200));
+        const kitchenEsc = buildEscPosKitchenTicket({
+          orderNumber: data.orderNumber,
+          tableNumber: data.tableNumber,
+          orderType: orderTypeLabel || undefined,
+          cashierName: data.employeeName,
+          items: data.items.map(item => ({
+            name: item.coffeeItem.nameAr,
+            qty: item.quantity,
+            addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
+          })),
+          paperWidth: printerSettings.paperWidth,
+        });
+        const { thermalPrint: tp2 } = await import('./thermal-printer');
+        await tp2(kitchenEsc, '', printerSettings.paperWidth);
+      }
+
+      return; // Done — thermal printer handled it
+    }
+  } catch (e) {
+    console.error('[PrintAllReceipts] Thermal printer error, falling back:', e);
+  }
+
+  // Fallback: browser iframe print (existing logic)
+  await printUnifiedReceipt(data as any);
 }
 
 export async function printSimpleReceipt(data: TaxInvoiceData): Promise<void> {

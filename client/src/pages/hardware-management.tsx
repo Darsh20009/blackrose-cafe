@@ -23,6 +23,7 @@ import {
   searchDevices, getDevicesByCategory, getSaudiPopularDevices,
   type HardwareCategory, type HardwareDevice, type ConnectionType
 } from "@/lib/hardware-catalog";
+import PrinterSettingsPanel from "@/components/printer-settings-panel";
 
 const ESC = 0x1B;
 const GS = 0x1D;
@@ -185,7 +186,7 @@ export default function HardwareManagementPage() {
   const { toast } = useToast();
   const tc = useTranslate();
 
-  const [activeTab, setActiveTab] = useState('catalog');
+  const [activeTab, setActiveTab] = useState('print-settings');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterConnection, setFilterConnection] = useState<string>('all');
@@ -373,17 +374,25 @@ export default function HardwareManagementPage() {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-3 w-full max-w-lg">
+            <TabsList className="grid grid-cols-4 w-full">
+              <TabsTrigger value="print-settings" data-testid="tab-print-settings">
+                <Printer className="w-4 h-4 ml-1" />{tc('إعدادات الطباعة', 'Print Settings')}
+              </TabsTrigger>
               <TabsTrigger value="catalog" data-testid="tab-catalog">
-                <Search className="w-4 h-4 ml-1" />{tc('قاعدة الأجهزة', 'Device Catalog')}
+                <Search className="w-4 h-4 ml-1" />{tc('الأجهزة', 'Devices')}
               </TabsTrigger>
               <TabsTrigger value="connect" data-testid="tab-connect">
                 <Usb className="w-4 h-4 ml-1" />{tc('ربط مباشر', 'Direct Connect')}
               </TabsTrigger>
               <TabsTrigger value="network" data-testid="tab-network">
-                <Globe className="w-4 h-4 ml-1" />{tc('أجهزة الشبكة', 'Network Devices')}
+                <Globe className="w-4 h-4 ml-1" />{tc('الشبكة', 'Network')}
               </TabsTrigger>
             </TabsList>
+
+            {/* ═══════════════ PRINT SETTINGS TAB ═══════════════ */}
+            <TabsContent value="print-settings" className="space-y-4">
+              <PrinterSettingsPanel />
+            </TabsContent>
 
             {/* ═══════════════ CATALOG TAB ═══════════════ */}
             <TabsContent value="catalog" className="space-y-4">

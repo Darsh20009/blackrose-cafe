@@ -25,6 +25,7 @@ import { ClassicCashierLayout, POSCashierLayout, SplitCashierLayout } from "@/co
 import { printTaxInvoice, printSimpleReceipt, printCustomerPickupReceipt, printCashierReceipt, printAllReceipts } from "@/lib/print-utils";
 import type { Employee, CoffeeItem, PaymentMethod, LoyaltyCard } from "@shared/schema";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
+import PrinterSettingsPanel from "@/components/printer-settings-panel";
 
 interface OrderItem {
  coffeeItem: CoffeeItem;
@@ -103,6 +104,7 @@ export default function EmployeeCashier() {
  const [posConnected, setPosConnected] = useState(false);
  const [isPosSettingsOpen, setIsPosSettingsOpen] = useState(false);
  const [isTogglingPos, setIsTogglingPos] = useState(false);
+ const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
  const [stampsToUse, setStampsToUse] = useState(0);
  const [pointsToRedeem, setPointsToRedeem] = useState(0);
  const [usePointsDiscount, setUsePointsDiscount] = useState(false);
@@ -1098,6 +1100,16 @@ export default function EmployeeCashier() {
  <Wallet className="w-5 h-5" />
  </Button>
  <Button
+ size="icon"
+ variant="outline"
+ onClick={() => setIsPrinterSettingsOpen(true)}
+ className="border-primary/50 text-primary hover:bg-primary hover:text-white"
+ data-testid="button-printer-settings"
+ title={tc("إعدادات الطابعة", "Printer Settings")}
+ >
+ <Printer className="w-5 h-5" />
+ </Button>
+ <Button
  variant="outline"
  onClick={() => setLocation("/employee/home")}
  className="border-primary/50 text-primary hover:bg-primary hover:text-white"
@@ -1109,6 +1121,18 @@ export default function EmployeeCashier() {
  </div>
  </div>
 
+ {/* Printer Settings Dialog */}
+ <Dialog open={isPrinterSettingsOpen} onOpenChange={setIsPrinterSettingsOpen}>
+   <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+     <DialogHeader>
+       <DialogTitle className="flex items-center gap-2">
+         <Printer className="w-5 h-5 text-primary" />
+         {tc("إعدادات الطابعة", "Printer Settings")}
+       </DialogTitle>
+     </DialogHeader>
+     <PrinterSettingsPanel />
+   </DialogContent>
+ </Dialog>
 
  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
  {/* Menu Section */}
