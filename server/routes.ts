@@ -4427,11 +4427,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log(`[AUTH] Login attempt for: ${username}`);
-      // Support login by username OR email
-      const isEmail = username.includes("@");
-      const employee = await EmployeeModel.findOne(
-        isEmail ? { email: username.toLowerCase().trim() } : { username }
-      );
+
+      // Support login by username, email, or phone number (case-insensitive)
+      const trimmedUsername = username.trim();
+      const isEmail = trimmedUsername.includes("@");
+      // Phone detection: starts with 05, 5, +966, or 00966
+      const isPhone = /^(\+966|00966|05|5)\d{7,9}$/.test(trimmedUsername.replace(/\s/g, ''));
+
+      let employee: any = null;
+
+      if (isEmail) {
+        employee = await EmployeeModel.findOne({ email: trimmedUsername.toLowerCase() });
+      } else if (isPhone) {
+        // Normalize phone to 9-digit format starting with 5
+        const normalizedPhone = trimmedUsername.replace(/\D/g, '').replace(/^00966/, '').replace(/^\+966/, '').replace(/^966/, '').replace(/^0/, '');
+        employee = await EmployeeModel.findOne({ phone: { $in: [normalizedPhone, `0${normalizedPhone}`, `+966${normalizedPhone}`, `966${normalizedPhone}`] } });
+      } else {
+        // Username search — case-insensitive
+        employee = await EmployeeModel.findOne({ username: { $regex: `^${trimmedUsername}$`, $options: 'i' } });
+      }
 
       if (!employee || !employee.password) {
         console.log(`[AUTH] Employee not found or no password: ${username}`);
@@ -4446,8 +4460,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "اسم المستخدم أو كلمة المرور غير صحيحة" });
       }
 
-      if (employee.isActivated === 0) {
-        return res.status(403).json({ error: "هذا الحساب غير مفعل" });
+      // Check activation — isActivated can be 0, false, or "0" to mean inactive
+      const notActivated = employee.isActivated === 0 || employee.isActivated === false || employee.isActivated === "0";
+      if (notActivated) {
+        return res.status(403).json({ error: "هذا الحساب غير مفعل. تواصل مع المدير لتفعيل الحساب" });
       }
 
       // Create session
@@ -5610,12 +5626,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       } else {
-        // Login with phone
-        if (!/^5\d{8}$/.test(cleanIdentifier)) {
-          return res.status(400).json({ error: "صيغة رقم الهاتف أو البريد الإلكتروني غير صحيحة" });
+        // Login with phone — normalize: strip leading 0, +966, 00966, 966
+        const normalizedPhone = cleanIdentifier.replace(/\D/g, '').replace(/^00966/, '').replace(/^\+966/, '').replace(/^966/, '').replace(/^0/, '');
+        if (!/^5\d{8}$/.test(normalizedPhone)) {
+          return res.status(400).json({ error: "صيغة رقم الهاتف غير صحيحة (يجب أن يكون 10 أرقام مثل 0512345678)" });
         }
         
-        foundCustomer = await storage.getCustomerByPhone(cleanIdentifier);
+        foundCustomer = await storage.getCustomerByPhone(normalizedPhone);
         if (foundCustomer) {
           if (!foundCustomer.password) {
             // Customer exists but has no password (cashier-registered)
@@ -5625,7 +5642,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               requiresPasswordSetup: true
             });
           }
-          customer = await storage.verifyCustomerPassword(cleanIdentifier, password);
+          customer = await storage.verifyCustomerPassword(normalizedPhone, password);
         }
       }
 
@@ -5921,10 +5938,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Phone number required" });
       }
 
-      // Validate phone format
-      const cleanPhone = phone.trim().replace(/\s/g, '');
+      // Validate phone format — accept 05xxxxxxxx, 5xxxxxxxx, +9665xxxxxxxx
+      const rawPhone = phone.trim().replace(/\s/g, '');
+      const cleanPhone = rawPhone.replace(/\D/g, '').replace(/^00966/, '').replace(/^\+966/, '').replace(/^966/, '').replace(/^0/, '');
       if (!/^5\d{8}$/.test(cleanPhone)) {
-        return res.status(400).json({ error: "Invalid phone number format" });
+        return res.status(400).json({ error: "رقم الجوال غير صحيح. أدخل الرقم بصيغة 0512345678" });
       }
 
       // If password provided, try login first
@@ -6338,12 +6356,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Helper: normalize Saudi phone to 9-digit format (starting with 5)
+  const normalizeSaudiPhone = (p: string): string =>
+    String(p).replace(/\D/g, '').replace(/^00966/, '').replace(/^\+966/, '').replace(/^966/, '').replace(/^0/, '');
+
+  const phoneQuery = (p: string) => {
+    const n = normalizeSaudiPhone(p);
+    return { $in: [n, `0${n}`, `+966${n}`, `966${n}`] };
+  };
+
   app.get("/api/customers/favorites", async (req, res) => {
     try {
       const { CustomerModel } = await import("@shared/schema");
       const { phone, customerId } = req.query;
       const query: any = {};
-      if (phone) query.phone = String(phone).replace(/^0/, '');
+      if (phone) query.phone = phoneQuery(String(phone));
       else if (customerId) query._id = customerId;
       else return res.status(400).json({ error: "يجب تحديد العميل" });
       const customer = await CustomerModel.findOne(query);
@@ -6359,7 +6386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { CustomerModel } = await import("@shared/schema");
       const { phone, customerId } = req.body;
       const query: any = {};
-      if (phone) query.phone = String(phone).replace(/^0/, '');
+      if (phone) query.phone = phoneQuery(String(phone));
       else if (customerId) query._id = customerId;
       else return res.status(400).json({ error: "يجب تحديد العميل" });
       const customer = await CustomerModel.findOne(query);
@@ -6380,7 +6407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { CustomerModel } = await import("@shared/schema");
       const { phone, customerId } = req.query;
       const query: any = {};
-      if (phone) query.phone = String(phone).replace(/^0/, '');
+      if (phone) query.phone = phoneQuery(String(phone));
       else if (customerId) query._id = customerId;
       else return res.status(400).json({ error: "يجب تحديد العميل" });
       const customer = await CustomerModel.findOne(query);

@@ -181,13 +181,13 @@ export default function EmployeeLogin() {
                   <AtSign className="absolute right-3 top-3 h-5 w-5 text-primary" />
                   <Input
                     type="text"
-                    placeholder={tc("اسم المستخدم أو البريد الإلكتروني", "Username or Email")}
+                    placeholder={tc("اسم المستخدم أو الجوال أو الإيميل", "Username, Phone or Email")}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     className="pr-10 bg-white border-gray-300"
                     data-testid="input-username"
                     autoFocus
-                    autoComplete="username email"
+                    autoComplete="username email tel"
                     disabled={loginMutation.isPending}
                   />
                 </div>
