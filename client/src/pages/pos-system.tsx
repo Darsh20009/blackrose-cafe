@@ -41,6 +41,8 @@ import { Label } from "@/components/ui/label";
 import { LoadingState } from "@/components/ui/loading-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import DrinkCustomizationDialog, { type DrinkCustomization } from "@/components/drink-customization-dialog";
+import PrinterSettingsPanel from "@/components/printer-settings-panel";
+import { loadPrinterSettings } from "@/lib/thermal-printer";
 
 type OrderType = "dine_in" | "takeaway" | "delivery" | "car_pickup";
 type PaymentMethod = "cash" | "card" | "qahwa-card";
@@ -116,6 +118,8 @@ export default function PosSystem() {
   const [selectedTableForBill, setSelectedTableForBill] = useState<any>(null);
   const [billPaymentMethod, setBillPaymentMethod] = useState<PaymentMethod>("cash");
   const [showPOSSettings, setShowPOSSettings] = useState(false);
+  const [showPrinterSettings, setShowPrinterSettings] = useState(false);
+  const [printerMode] = useState(() => loadPrinterSettings().mode);
   const [autoPrint, setAutoPrint] = useState(() => localStorage.getItem("pos-auto-print") === "true");
   const [showVatLabel, setShowVatLabel] = useState(() => localStorage.getItem("pos-show-vat-label") === "true");
   const [posCustomizationItem, setPosCustomizationItem] = useState<{ item: CoffeeItem; group: CoffeeItem[] } | null>(null);
@@ -881,6 +885,17 @@ export default function PosSystem() {
             <Button 
               variant="ghost" 
               size="sm"
+              onClick={() => setShowPrinterSettings(true)}
+              className="relative"
+              data-testid="button-mobile-printer-settings"
+              title={tc("إعدادات الطابعة", "Printer Settings")}
+            >
+              <Printer className="w-4 h-4" />
+              <span className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full ${printerMode === 'network' ? 'bg-blue-500' : printerMode === 'webusb' ? 'bg-green-500' : 'bg-gray-400'}`} />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
               onClick={() => setShowPOSSettings(true)}
               data-testid="button-mobile-settings"
             >
@@ -934,6 +949,18 @@ export default function PosSystem() {
           >
             <SplitSquareVertical className="w-4 h-4" />
             <span className="text-xs">{t('pos.customer_display')}</span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowPrinterSettings(true)}
+            className="hidden sm:flex relative"
+            data-testid="button-pos-printer-settings"
+            title={tc("إعدادات الطابعة", "Printer Settings")}
+          >
+            <Printer className="w-4 h-4" />
+            <span className={`absolute top-0.5 right-0.5 w-2 h-2 rounded-full border border-background ${printerMode === 'network' ? 'bg-blue-500' : printerMode === 'webusb' ? 'bg-green-500' : 'bg-gray-400'}`} />
           </Button>
 
           <Button
@@ -2297,12 +2324,53 @@ export default function PosSystem() {
         </DialogContent>
       </Dialog>
 
+      {/* ─── Printer Settings Dialog ─────────────────────────────────────────── */}
+      <Dialog open={showPrinterSettings} onOpenChange={setShowPrinterSettings}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" dir={dir}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-right font-bold text-xl">
+              <Printer className="w-5 h-5" />
+              {tc("إعدادات الطابعة", "Printer Settings")}
+            </DialogTitle>
+          </DialogHeader>
+          <PrinterSettingsPanel />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showPOSSettings} onOpenChange={setShowPOSSettings}>
         <DialogContent className="max-w-md" dir={dir}>
           <DialogHeader>
             <DialogTitle className="text-right font-bold text-xl">{t('pos.settings_title')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-4">
+            {/* Printer quick link */}
+            <button
+              onClick={() => { setShowPOSSettings(false); setShowPrinterSettings(true); }}
+              className="w-full flex items-center justify-between p-3 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary hover:bg-primary/5 transition-all group"
+              data-testid="button-open-printer-settings"
+            >
+              <div className="flex items-center gap-3">
+                <div className="bg-primary/10 p-2 rounded-lg group-hover:bg-primary/20">
+                  <Printer className="w-5 h-5 text-primary" />
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold">{tc("إعدادات الطابعة", "Printer Settings")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {printerMode === 'network'
+                      ? tc("شبكة LAN — ProPos / Epson LAN", "Network LAN — ProPos / Epson LAN")
+                      : printerMode === 'webusb'
+                        ? tc("USB مباشر — متصلة", "Direct USB — Connected")
+                        : tc("متصفح — انقر لإعداد الطابعة", "Browser — Click to configure printer")
+                    }
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${printerMode === 'network' ? 'bg-blue-500' : printerMode === 'webusb' ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <svg className="w-4 h-4 text-muted-foreground group-hover:text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </div>
+            </button>
+            <Separator />
             <div className="flex items-center justify-between">
               <Label htmlFor="auto-print" className="text-sm font-bold cursor-pointer">{t('pos.auto_print')}</Label>
               <Switch id="auto-print" checked={autoPrint} onCheckedChange={setAutoPrint} />
