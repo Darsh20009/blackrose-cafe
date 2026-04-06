@@ -757,21 +757,70 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 
   const shouldAutoPrint = config.autoPrint !== undefined ? config.autoPrint : true;
 
-  // Job 1: Customer receipt
-  openPrintWindow(customerHtml, `فاتورة العميل - ${displayInvoiceNumber}`, {
+  // ── Extract body content from each receipt ──
+  // customerHtml and empHtml are full <!DOCTYPE html> documents.
+  // We strip them down to their <body> content and merge into ONE document
+  // with a page-break between them. A single print() call reliably prints
+  // both copies on any thermal printer without needing a second user gesture.
+
+  const extractBody = (fullHtml: string): string => {
+    const match = fullHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    return match ? match[1].trim() : fullHtml;
+  };
+
+  const extractStyles = (fullHtml: string): string => {
+    const matches = fullHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
+    return matches ? matches.join('\n') : '';
+  };
+
+  const customerStyles = extractStyles(customerHtml);
+  const customerBody = extractBody(customerHtml);
+  const empBody = extractBody(empHtml);
+
+  const combinedHtml = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>فاتورة - ${displayInvoiceNumber}</title>
+  ${customerStyles}
+  <style>
+    /* Employee copy styles (prefixed to avoid conflicts) */
+    .emp-section .ehdr{text-align:center;font-size:13px;font-weight:700;background:#000;color:#fff;padding:5px 4px;border-radius:4px;margin-bottom:8px;}
+    .emp-section .eorder{font-size:34px;font-weight:700;text-align:center;margin:4px 0;letter-spacing:3px;font-family:monospace;border:2px solid #000;border-radius:6px;padding:4px 0;}
+    .emp-section .etable{text-align:center;}
+    .emp-section .etag{display:inline-block;font-size:20px;font-weight:700;border:2px solid #b45309;color:#b45309;padding:3px 14px;border-radius:5px;margin:4px auto;}
+    .emp-section .etype{text-align:center;font-size:14px;font-weight:700;background:#f0f0f0;padding:4px;border-radius:4px;margin:4px 0 8px;}
+    .emp-section .eitems{border-top:2px dashed #000;margin-top:4px;padding-top:4px;}
+    .emp-section .eitem{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed #ccc;align-items:flex-start;}
+    .emp-section .ename{font-size:15px;font-weight:600;flex:1;}
+    .emp-section .eaddons{font-size:10px;color:#555;margin-top:2px;}
+    .emp-section .eqty{font-size:22px;font-weight:700;background:#000;color:#fff;padding:2px 14px;border-radius:4px;flex-shrink:0;margin-right:6px;min-width:48px;text-align:center;}
+    .emp-section .etotal{display:flex;justify-content:space-between;font-weight:700;font-size:15px;margin-top:8px;padding-top:6px;border-top:1.5px solid #000;}
+    .emp-section .einfo{font-size:10px;color:#666;text-align:center;margin-top:8px;}
+    .emp-section .wrap{width:76mm;margin:0 auto;padding:6px 4px;}
+    /* Page break between customer and employee copies */
+    .page-break { page-break-before: always; break-before: page; }
+    @media print { body { margin: 0; } .no-print { display: none !important; } }
+  </style>
+</head>
+<body>
+  <!-- ── نسخة العميل ── -->
+  <div class="customer-section">
+    ${customerBody}
+  </div>
+
+  <!-- ── فاصل صفحة ── -->
+  <div class="page-break emp-section">
+    ${empBody}
+  </div>
+</body>
+</html>`;
+
+  openPrintWindow(combinedHtml, `فاتورة - ${displayInvoiceNumber}`, {
     paperWidth: '80mm',
     autoPrint: shouldAutoPrint,
     showPrintButton: !shouldAutoPrint
   });
-
-  // Job 2: Employee copy — queued after short delay so printer cuts between them
-  setTimeout(() => {
-    openPrintWindow(empHtml, `نسخة الموظف - ${displayInvoiceNumber}`, {
-      paperWidth: '80mm',
-      autoPrint: shouldAutoPrint,
-      showPrintButton: !shouldAutoPrint
-    });
-  }, 1800);
 }
 
 export async function printCustomerPickupReceipt(data: TaxInvoiceData & { deliveryType?: string; deliveryTypeAr?: string }): Promise<void> {
