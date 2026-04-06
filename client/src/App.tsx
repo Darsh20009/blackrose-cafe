@@ -30,7 +30,6 @@ const DeliveryMapPage = lazy(() => import("@/pages/delivery-map"));
 const CheckoutPage = lazy(() => import("@/pages/checkout"));
 const OrderTrackingPage = lazy(() => import("@/pages/tracking"));
 const PublicOrderTrackPage = lazy(() => import("@/pages/public-order-track"));
-const EmployeeSplash = lazy(() => import("@/pages/employee-splash"));
 const EmployeeGateway = lazy(() => import("@/pages/employee-gateway"));
 const EmployeeLogin = lazy(() => import("@/pages/employee-login"));
 const EmployeeDashboard = lazy(() => import("@/pages/employee-dashboard"));
@@ -190,7 +189,7 @@ function AppRouter() {
       <Route path="/welcome"><WelcomePage /></Route>
       <Route path="/pricing"><PricingPage /></Route>
       <Route path="/" component={WelcomePage} />
-      <Route path="/0"><EmployeeSplash /></Route>
+      <Route path="/0">{() => { window.location.replace('/employee/login'); return null; }}</Route>
       <Route path="/tenant/signup"><TenantSignup /></Route>
       <Route path="/customer-login">
         <CustomerLogin />
@@ -261,7 +260,7 @@ function AppRouter() {
       <Route path="/profile"><AuthGuard userType="customer"><CustomerProfile /></AuthGuard></Route>
 
       {/* Employee auth routes (public) */}
-      <Route path="/employee"><EmployeeSplash /></Route>
+      <Route path="/employee">{() => { window.location.replace('/employee/login'); return null; }}</Route>
       <Route path="/employee/home">{() => <AuthGuard userType="employee"><EmployeeHome /></AuthGuard>}</Route>
       <Route path="/employee/gateway"><EmployeeGateway /></Route>
       <Route path="/employee/login"><EmployeeLogin /></Route>
