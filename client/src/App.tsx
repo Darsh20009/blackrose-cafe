@@ -145,14 +145,25 @@ const PageLoader = () => {
                      window.location.pathname === '/0';
   
   return (
-    <div className="w-full h-screen flex items-center justify-center bg-[#F7F8F8] dark:bg-[#1a1410]">
-      <div className="flex flex-col items-center gap-4">
-        {isEmployee ? (
-          <img src={blackroseLogoStaff} alt="BLACK ROSE SYSTEMS" className="w-16 h-16 object-contain rounded-xl animate-pulse" />
-        ) : (
-          <img src={blackroseLogo} alt="BLACK ROSE CAFE" className="w-16 h-16 object-contain rounded-xl animate-pulse" />
-        )}
-        <p className="text-[#9FB2B3] font-medium animate-pulse font-ibm-arabic">جاري التحميل...</p>
+    <div className="w-full h-screen flex items-center justify-center bg-black">
+      <div className="flex flex-col items-center gap-5">
+        <div className="w-24 h-24 rounded-3xl bg-white/10 border border-white/20 flex items-center justify-center p-3 shadow-2xl">
+          <img
+            src={isEmployee ? blackroseLogoStaff : blackroseLogo}
+            alt={isEmployee ? "BLACK ROSE SYSTEMS" : "BLACK ROSE CAFE"}
+            className="w-full h-full object-contain"
+          />
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-white font-black tracking-[0.2em] text-sm uppercase">
+            {isEmployee ? "BLACK ROSE SYSTEMS" : "BLACK ROSE CAFE"}
+          </p>
+          <div className="flex items-center justify-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#BE1845] animate-bounce" style={{ animationDelay: '0ms' }} />
+            <div className="w-1.5 h-1.5 rounded-full bg-[#BE1845] animate-bounce" style={{ animationDelay: '150ms' }} />
+            <div className="w-1.5 h-1.5 rounded-full bg-[#BE1845] animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+        </div>
       </div>
     </div>
   );

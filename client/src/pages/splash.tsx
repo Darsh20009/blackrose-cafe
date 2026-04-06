@@ -2,6 +2,7 @@ import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import splashBg from "@assets/blackrose-banner-1.png";
+import blackroseLogo from "@assets/blackrose-logo.png";
 
 export default function SplashScreen() {
   const [, setLocation] = useLocation();
@@ -21,24 +22,24 @@ export default function SplashScreen() {
 
     const timer = setTimeout(() => {
       setLoading(false);
-      setTimeout(() => setLocation("/menu"), 400);
+      setTimeout(() => setLocation("/menu"), 500);
     }, 4000);
     return () => clearTimeout(timer);
   }, [setLocation]);
 
-  if (shouldShow === false) return null;
+  if (shouldShow === null || shouldShow === false) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden" dir="rtl">
-      {/* Full-screen background image */}
+
+      {/* Background image */}
       <div className="absolute inset-0">
         <img
           src={splashBg}
           alt="BLACK ROSE CAFE"
           className="w-full h-full object-cover"
         />
-        {/* Dark gradient overlay — top and bottom */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/20 to-black/90" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/50 to-black/95" />
       </div>
 
       <AnimatePresence>
@@ -46,22 +47,58 @@ export default function SplashScreen() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0, filter: "blur(8px)" }}
-            transition={{ duration: 0.7 }}
-            className="relative z-10 flex flex-col justify-between h-full px-6 py-12"
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.6 }}
+            className="relative z-10 flex flex-col h-full"
           >
-            {/* Top — empty space to let the image breathe */}
-            <div />
+            {/* ── CENTER: Logo + Brand ── */}
+            <div className="flex-1 flex flex-col items-center justify-center px-6">
 
-            {/* Bottom panel — business info */}
+              {/* Logo */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.7, y: -20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.9, delay: 0.3, type: "spring", stiffness: 120 }}
+                className="mb-6"
+              >
+                <div className="w-28 h-28 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 shadow-2xl flex items-center justify-center p-3">
+                  <img
+                    src={blackroseLogo}
+                    alt="Black Rose Cafe"
+                    className="w-full h-full object-contain"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </div>
+              </motion.div>
+
+              {/* Brand name */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.6 }}
+                className="text-center"
+              >
+                <h1 className="text-3xl font-black tracking-[0.25em] text-white uppercase mb-1">
+                  BLACK ROSE
+                </h1>
+                <p className="text-[#BE1845] text-sm font-bold tracking-[0.4em] uppercase">
+                  CAFE
+                </p>
+                <p className="text-white/50 text-xs mt-3 font-medium tracking-wide">
+                  "قهوة تُقال وورد يُهدى"
+                </p>
+              </motion.div>
+            </div>
+
+            {/* ── BOTTOM: Business info + loading bar ── */}
             <motion.div
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.9, delay: 0.5 }}
-              className="space-y-4"
+              transition={{ duration: 0.9, delay: 0.8 }}
+              className="px-6 pb-12 space-y-4"
             >
               {/* Divider */}
-              <div className="w-full h-px bg-gradient-to-r from-transparent via-[#BE1845] to-transparent mb-4" />
+              <div className="w-full h-px bg-gradient-to-r from-transparent via-[#BE1845] to-transparent" />
 
               {/* Saudi Business Certification */}
               <div className="bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl px-5 py-4">
