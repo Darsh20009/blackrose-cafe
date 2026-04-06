@@ -387,7 +387,14 @@ function renderItemName(nameAr: string, nameEn?: string): string {
 export async function printUnifiedReceipt(data: TaxInvoiceData): Promise<void> {
   const totalAmount = parseNumber(data.total);
   const { date: formattedDate, time: formattedTime } = formatDate(data.date);
-  const orderTypeLabel = data.orderTypeName || (data.orderType === 'dine_in' ? 'محلي' : data.orderType === 'takeaway' ? 'سفري' : data.orderType === 'delivery' ? 'توصيل' : '');
+  const orderTypeLabel = data.orderTypeName || (
+    data.orderType === 'dine_in' || data.orderType === 'dine-in' ? 'طاولة' :
+    data.orderType === 'takeaway' || data.orderType === 'pickup' ? 'سفري' :
+    data.orderType === 'delivery' ? 'توصيل' :
+    data.orderType === 'car_pickup' || data.orderType === 'car-pickup' ? 'سيارة' :
+    data.orderType === 'online' ? 'أونلاين' :
+    data.orderType === 'drive_thru' ? 'درايف ثرو' : ''
+  );
 
   const subtotalBeforeTax = totalAmount / (1 + VAT_RATE);
   const vatAmount = totalAmount - subtotalBeforeTax;
@@ -607,7 +614,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
   const totalDiscounts = codeDiscountAmount + invDiscountAmount + itemDiscountsTotal;
   const subtotalBeforeAllDiscounts = subtotalBeforeTax + (totalDiscounts / (1 + VAT_RATE));
   
-  const displayInvoiceNumber = data.invoiceNumber || `INV-${data.orderNumber}`;
+  const displayInvoiceNumber = fmtOrderNum(data.orderNumber);
   const { date: formattedDate, time: formattedTime } = formatDate(data.date);
   const displayBranchName = data.branchName || DEFAULT_BRANCH;
   const displayBranchAddress = data.branchAddress || DEFAULT_ADDRESS;
@@ -669,7 +676,14 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     `;
   }).join('');
 
-  const orderTypeLabel = data.orderTypeName || (data.orderType === 'dine_in' ? 'محلي' : data.orderType === 'takeaway' ? 'سفري' : data.orderType === 'delivery' ? 'توصيل' : '');
+  const orderTypeLabel = data.orderTypeName || (
+    data.orderType === 'dine_in' || data.orderType === 'dine-in' ? 'طاولة' :
+    data.orderType === 'takeaway' || data.orderType === 'pickup' ? 'سفري' :
+    data.orderType === 'delivery' ? 'توصيل' :
+    data.orderType === 'car_pickup' || data.orderType === 'car-pickup' ? 'سيارة' :
+    data.orderType === 'online' ? 'أونلاين' :
+    data.orderType === 'drive_thru' ? 'درايف ثرو' : ''
+  );
 
   const invoiceHtml = `
 <!DOCTYPE html>

@@ -120,7 +120,10 @@ export default function PosSystem() {
   const [showPOSSettings, setShowPOSSettings] = useState(false);
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
   const [printerMode] = useState(() => loadPrinterSettings().mode);
-  const [autoPrint, setAutoPrint] = useState(() => localStorage.getItem("pos-auto-print") === "true");
+  const [autoPrint, setAutoPrint] = useState(() => {
+    const stored = localStorage.getItem("pos-auto-print");
+    return stored === null ? true : stored === "true"; // default ON
+  });
   const [showVatLabel, setShowVatLabel] = useState(() => localStorage.getItem("pos-show-vat-label") === "true");
   const [posCustomizationItem, setPosCustomizationItem] = useState<{ item: CoffeeItem; group: CoffeeItem[] } | null>(null);
   const [showOrderReview, setShowOrderReview] = useState(false);
@@ -150,6 +153,44 @@ export default function PosSystem() {
           title: t('pos.new_order_toast'),
           description: t('pos.new_order_toast_desc', { number: order?.orderNumber ? fmtOrderNum(order.orderNumber) : '', amount: order?.totalAmount || 0 }),
         });
+        // Auto-print online order receipt
+        const printerSettings = loadPrinterSettings();
+        if (printerSettings.autoPrint && order?.items?.length > 0) {
+          const onlineOrderType = order.orderType || 'online';
+          const onlineOrderTypeName =
+            onlineOrderType === 'dine_in' || onlineOrderType === 'dine-in' ? 'طاولة' :
+            onlineOrderType === 'takeaway' || onlineOrderType === 'pickup' ? 'سفري' :
+            onlineOrderType === 'delivery' ? 'توصيل' :
+            onlineOrderType === 'car_pickup' || onlineOrderType === 'car-pickup' ? 'سيارة' :
+            'أونلاين';
+          const printData = {
+            orderNumber: String(order.orderNumber || order.dailyNumber || order._id?.slice(-4) || '0'),
+            customerName: order.customerName || 'عميل أونلاين',
+            customerPhone: order.customerPhone || '',
+            items: (order.items || []).map((item: any) => ({
+              coffeeItem: {
+                nameAr: item.coffeeItem?.nameAr || item.nameAr || '',
+                nameEn: item.coffeeItem?.nameEn || item.nameEn || '',
+                price: String(item.coffeeItem?.price || item.price || 0),
+              },
+              quantity: item.quantity || 1,
+              customization: item.customization,
+            })),
+            subtotal: String(order.subtotal || (Number(order.totalAmount) / 1.15).toFixed(2)),
+            total: String(order.totalAmount || 0),
+            paymentMethod: order.paymentMethod || 'أونلاين',
+            employeeName: '',
+            tableNumber: order.tableNumber,
+            orderType: onlineOrderType as any,
+            orderTypeName: onlineOrderTypeName,
+            date: order.createdAt || new Date().toISOString(),
+          };
+          setTimeout(() => {
+            try { printTaxInvoice(printData, { autoPrint: false }); } catch (e) {
+              console.warn('[POS] Online order auto-print failed silently:', e);
+            }
+          }, 500);
+        }
       } else if (!isPosOrder && soundEnabled) {
         playNotificationSound('newOrder', 0.6);
       }
@@ -618,7 +659,13 @@ export default function PosSystem() {
         setOfflineQueueCount(newCount);
 
         // Build offline receipt with a temporary order number
-        const offlineOrderNum = `OFF-${Date.now().toString().slice(-4)}`;
+        // Skip 100 from last known online order to avoid conflicts when reconnecting
+        const lastOnlineNum = parseInt(localStorage.getItem("pos-last-online-order-num") || "0", 10);
+        const offlineBase = lastOnlineNum + 100;
+        const offlineLocalCounter = parseInt(localStorage.getItem("pos-offline-counter") || "0", 10) + 1;
+        localStorage.setItem("pos-offline-counter", String(offlineLocalCounter));
+        const offlineOrderNumRaw = offlineBase + offlineLocalCounter;
+        const offlineOrderNum = String(offlineOrderNumRaw).padStart(4, '0');
         const offlineReceipt = {
           orderNumber: offlineOrderNum,
           date: new Date().toISOString(),
@@ -702,6 +749,15 @@ export default function PosSystem() {
         throw new Error(result?.error || tc('فشل إنشاء الطلب','Failed to create order'));
       }
 
+      // Save last online order number to localStorage for offline counter base
+      const onlineNum = parseInt(String(result.orderNumber || result.dailyNumber || '0').replace(/\D/g, ''), 10);
+      if (onlineNum > 0) {
+        const stored = parseInt(localStorage.getItem("pos-last-online-order-num") || "0", 10);
+        if (onlineNum > stored) localStorage.setItem("pos-last-online-order-num", String(onlineNum));
+        // Reset offline counter when back online (new session)
+        localStorage.setItem("pos-offline-counter", "0");
+      }
+
       setLastOrder({
         orderNumber: result.orderNumber || result.dailyNumber || result._id?.slice(-4) || '—',
         date: new Date().toISOString(),
@@ -752,6 +808,14 @@ export default function PosSystem() {
           employeeName: employee?.fullName || t('pos.employee_fallback'),
           tableNumber: orderType === "dine_in" ? tableNumber : undefined,
           orderType: orderType as any,
+          orderTypeName: (
+            orderType === 'dine_in' || orderType === 'dine-in' ? 'طاولة' :
+            orderType === 'takeaway' || orderType === 'pickup' ? 'سفري' :
+            orderType === 'delivery' ? 'توصيل' :
+            orderType === 'car_pickup' || orderType === 'car-pickup' ? 'سيارة' :
+            orderType === 'online' ? 'أونلاين' :
+            orderType === 'drive_thru' ? 'درايف ثرو' : ''
+          ),
           date: new Date().toISOString(),
           crNumber: businessConfig?.commercialRegistration,
           vatNumber: businessConfig?.vatNumber,
