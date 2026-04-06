@@ -161,6 +161,33 @@ function _drainPrintQueue() {
   _printViaIframe(html, paperWidth, isFullDoc);
 }
 
+/**
+ * Write a full HTML document into an already-open popup window and auto-print it.
+ * If the popup is null (blocked), falls back to the iframe queue.
+ */
+function _printInPopup(win: Window | null, html: string, delayMs: number): void {
+  if (!win || win.closed) {
+    // Popup was blocked — fall back to iframe queue
+    _printQueue.push({ html, paperWidth: '80mm', isFullDoc: true });
+    _drainPrintQueue();
+    return;
+  }
+  try {
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  } catch {
+    // cross-origin or other write error — silently ignore
+  }
+  setTimeout(() => {
+    try { win.focus(); win.print(); } catch {}
+    // Close the popup after printing (or after 8 s if afterprint never fires)
+    const close = () => { try { if (!win.closed) win.close(); } catch {} };
+    win.addEventListener('afterprint', close, { once: true });
+    setTimeout(close, 8000);
+  }, delayMs);
+}
+
 function openPrintWindow(html: string, _title: string, config: PrintConfig = {}): Window | null {
   const { paperWidth = '80mm', autoPrint = true, showPrintButton = true } = config;
 
@@ -454,6 +481,20 @@ function formatDate(dateStr: string): { date: string; time: string } {
 }
 
 export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig = {}): Promise<void> {
+  const shouldAutoPrint = config.autoPrint !== undefined ? config.autoPrint : true;
+
+  // ══════════════════════════════════════════════════════════════
+  //  فتح نوافذ الطباعة قبل أي عمل غير متزامن (await)
+  //  يضمن موافقة المتصفح — لا حاجب Popup يُمكنه الإيقاف
+  // ══════════════════════════════════════════════════════════════
+  const _popupOpts = 'width=1,height=1,left=-9999,top=-9999,toolbar=no,menubar=no,scrollbars=yes,resizable=yes';
+  let _customerWin: Window | null = null;
+  let _empWin: Window | null = null;
+  if (shouldAutoPrint) {
+    _customerWin = window.open('about:blank', '_blank', _popupOpts);
+    _empWin      = window.open('about:blank', '_blank', _popupOpts);
+  }
+
   const totalAmount = parseNumber(data.total);
 
   const codeDiscountAmount = data.discount ? parseNumber(data.discount.amount) : 0;
@@ -754,18 +795,14 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 </body>
 </html>`;
 
-  const shouldAutoPrint = config.autoPrint !== undefined ? config.autoPrint : true;
-
   // ══════════════════════════════════════════════════════════════
-  //  طلبا طباعة منفصلان — لا دمج في صفحة واحدة أبداً
-  //  Job 1 → فاتورة العميل الكاملة
-  //  Job 2 → نسخة الموظف الكاملة  (يُطبع بعد انتهاء الأول)
+  //  طلبا طباعة منفصلان عبر نوافذ منبثقة
+  //  Job 1 → فاتورة العميل  (300 ms)
+  //  Job 2 → نسخة الموظف   (1800 ms)
   // ══════════════════════════════════════════════════════════════
   if (shouldAutoPrint) {
-    // push إلى قائمة الطباعة — تُعالج بشكل تسلسلي عبر afterprint
-    _printQueue.push({ html: customerHtml, paperWidth: '80mm', isFullDoc: true });
-    _printQueue.push({ html: empHtml,      paperWidth: '80mm', isFullDoc: true });
-    _drainPrintQueue();
+    _printInPopup(_customerWin, customerHtml, 300);
+    _printInPopup(_empWin,      empHtml,      1800);
   } else {
     // وضع المعاينة اليدوية: نافذة منبثقة واحدة تحتوي على زرّي طباعة منفصلَين
     const previewHtml = `<!DOCTYPE html>
@@ -1082,55 +1119,39 @@ export async function printAllReceipts(data: TaxInvoiceData & { deliveryType?: s
         feedLines: printerSettings.feedLines,
       });
 
-      // Build fallback HTML
-      const fallbackHtml = `<div style="text-align:center;font-family:Cairo,Arial,sans-serif;padding:20px;max-width:80mm;margin:auto">
-        <b style="font-size:18px">BLACK ROSE CAFE</b><br/>
-        <small>${data.branchName || ''}</small><br/><hr/>
-        <div style="font-size:22px;font-weight:700;padding:8px;background:#eee;border-radius:4px">${fmtOrderNum(data.orderNumber)}</div>
-        <small>${dateStr}</small><br/>
-        <small>الكاشير: ${data.employeeName}</small>
-        <hr style="border-style:dashed"/>
-        ${data.items.map(item => `<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">
-          <span>${item.coffeeItem.nameAr} x${item.quantity}</span>
-          <span>${(parseNumber(item.coffeeItem.price) * item.quantity).toFixed(2)}</span>
-        </div>`).join('')}
-        <hr style="border-style:dashed"/>
-        <div style="display:flex;justify-content:space-between;font-size:12px"><span>ضريبة 15%:</span><span>${vatAmount.toFixed(2)} ر.س</span></div>
-        <div style="font-size:18px;font-weight:700;margin-top:6px">${totalAmount.toFixed(2)} ر.س</div>
-        <small>${data.paymentMethod}</small>
-        <hr style="border-style:dashed"/>
-        <small>شكراً لزيارتكم</small>
-      </div>`;
-
-      const result = await thermalPrint(escData, fallbackHtml, printerSettings.paperWidth);
+      // pass empty fallbackHtml so browser fallback does nothing here —
+      // we handle browser printing separately with the new format below
+      const result = await thermalPrint(escData, '', printerSettings.paperWidth);
       console.log('[PrintAllReceipts] Result:', result.mode, result.success);
 
-      // If WebUSB successful, also print kitchen copy
-      if (result.mode === 'webusb' && printerSettings.autoKitchenCopy) {
-        await new Promise(r => setTimeout(r, 1200));
-        const kitchenEsc = buildEscPosKitchenTicket({
-          orderNumber: data.orderNumber,
-          tableNumber: data.tableNumber,
-          orderType: orderTypeLabel || undefined,
-          cashierName: data.employeeName,
-          items: data.items.map(item => ({
-            name: item.coffeeItem.nameAr,
-            qty: item.quantity,
-            addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
-          })),
-          paperWidth: printerSettings.paperWidth,
-        });
-        const { thermalPrint: tp2 } = await import('./thermal-printer');
-        await tp2(kitchenEsc, '', printerSettings.paperWidth);
+      if (result.mode === 'webusb' || result.mode === 'network') {
+        // Hardware print succeeded — handle kitchen copy if needed
+        if (result.mode === 'webusb' && printerSettings.autoKitchenCopy) {
+          await new Promise(r => setTimeout(r, 1200));
+          const kitchenEsc = buildEscPosKitchenTicket({
+            orderNumber: data.orderNumber,
+            tableNumber: data.tableNumber,
+            orderType: orderTypeLabel || undefined,
+            cashierName: data.employeeName,
+            items: data.items.map(item => ({
+              name: item.coffeeItem.nameAr,
+              qty: item.quantity,
+              addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
+            })),
+            paperWidth: printerSettings.paperWidth,
+          });
+          const { thermalPrint: tp2 } = await import('./thermal-printer');
+          await tp2(kitchenEsc, '', printerSettings.paperWidth);
+        }
+        return; // Hardware handled it — done
       }
-
-      return; // Done — thermal printer handled it
+      // mode === 'browser' or 'error': fall through to new-format HTML printing below
     }
   } catch (e) {
     console.error('[PrintAllReceipts] Thermal printer error, falling back:', e);
   }
 
-  // Fallback: browser iframe print (existing logic)
+  // Browser fallback — use the new ZATCA-compliant tax invoice format
   await printUnifiedReceipt(data as any);
 }
 
