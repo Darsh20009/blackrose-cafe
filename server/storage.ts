@@ -1105,7 +1105,19 @@ export class DBStorage implements IStorage {
   }
 
   async getOrderByNumber(orderNumber: string): Promise<Order | undefined> {
-    const order = await OrderModel.findOne({ orderNumber }).lean();
+    // Try exact orderNumber match first
+    let order = await OrderModel.findOne({ orderNumber }).lean();
+    if (!order) {
+      // Try matching dailyNumber as a number
+      const num = parseInt(orderNumber, 10);
+      if (!isNaN(num)) {
+        order = await OrderModel.findOne({ dailyNumber: num }).lean();
+      }
+    }
+    if (!order) {
+      // Try matching by custom id field
+      order = await OrderModel.findOne({ id: orderNumber }).lean();
+    }
     return order ? serializeDoc(order) : undefined;
   }
 
