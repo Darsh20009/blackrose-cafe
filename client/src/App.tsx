@@ -29,6 +29,7 @@ const DeliverySelectionPage = lazy(() => import("@/pages/delivery-selection"));
 const DeliveryMapPage = lazy(() => import("@/pages/delivery-map"));
 const CheckoutPage = lazy(() => import("@/pages/checkout"));
 const OrderTrackingPage = lazy(() => import("@/pages/tracking"));
+const PublicOrderTrackPage = lazy(() => import("@/pages/public-order-track"));
 const EmployeeSplash = lazy(() => import("@/pages/employee-splash"));
 const EmployeeGateway = lazy(() => import("@/pages/employee-gateway"));
 const EmployeeLogin = lazy(() => import("@/pages/employee-login"));
@@ -225,6 +226,9 @@ function AppRouter() {
       </Route>
       <Route path="/order-status">
         <OrderStatusDisplay />
+      </Route>
+      <Route path="/track/:orderNumber">
+        <PublicOrderTrackPage />
       </Route>
       <Route path="/customer-display">
         <CustomerDisplay />

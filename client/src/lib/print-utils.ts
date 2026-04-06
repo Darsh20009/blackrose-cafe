@@ -321,7 +321,8 @@ export async function printKitchenOrder(data: KitchenOrderData): Promise<void> {
 const VAT_NUMBER = "312718675800003";
 const COMPANY_NAME = "BLACK ROSE CAFE";
 const COMPANY_NAME_EN = "BLACK ROSE CAFE";
-const COMPANY_CR = "1163184110";
+const COMPANY_CR = "7025559423";
+const COMPANY_WEBSITE = "blackrose.com.sa";
 const DEFAULT_BRANCH = "الفرع الرئيسي - ينبع";
 const DEFAULT_ADDRESS = "ينبع، المملكة العربية السعودية";
 
@@ -385,156 +386,8 @@ function renderItemName(nameAr: string, nameEn?: string): string {
 }
 
 export async function printUnifiedReceipt(data: TaxInvoiceData): Promise<void> {
-  const totalAmount = parseNumber(data.total);
-  const { date: formattedDate, time: formattedTime } = formatDate(data.date);
-  const orderTypeLabel = data.orderTypeName || (
-    data.orderType === 'dine_in' || data.orderType === 'dine-in' ? 'طاولة' :
-    data.orderType === 'takeaway' || data.orderType === 'pickup' ? 'سفري' :
-    data.orderType === 'delivery' ? 'توصيل' :
-    data.orderType === 'car_pickup' || data.orderType === 'car-pickup' ? 'سيارة' :
-    data.orderType === 'online' ? 'أونلاين' :
-    data.orderType === 'drive_thru' ? 'درايف ثرو' : ''
-  );
-
-  const subtotalBeforeTax = totalAmount / (1 + VAT_RATE);
-  const vatAmount = totalAmount - subtotalBeforeTax;
-
-  const invoiceTimestamp = data.date ? new Date(data.date).toISOString() : new Date().toISOString();
-  const zatcaData = generateZATCAQRCode({
-    sellerName: COMPANY_NAME,
-    vatNumber: data.vatNumber || VAT_NUMBER,
-    timestamp: invoiceTimestamp,
-    totalWithVat: totalAmount.toFixed(2),
-    vatAmount: vatAmount.toFixed(2)
-  });
-
-  let qrCodeUrl = "";
-  try {
-    qrCodeUrl = await QRCode.toDataURL(zatcaData, {
-      width: 150,
-      margin: 1,
-      color: { dark: '#000000', light: '#FFFFFF' },
-      errorCorrectionLevel: 'M'
-    });
-  } catch (error) {
-    console.error("Error generating QR code:", error);
-  }
-
-  const customerItemsHtml = data.items.map(item => {
-    const lineTotal = parseNumber(item.coffeeItem.price) * item.quantity;
-    const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
-    return `
-    <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #eee;align-items:flex-start;font-size:12px;">
-      <div style="flex:1;padding-left:4px;">
-        ${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}
-        ${addons ? `<div style="font-size:10px;color:#666;margin-top:1px;">+ ${addons}</div>` : ''}
-      </div>
-      <div style="width:32px;text-align:center;flex-shrink:0;">x${item.quantity}</div>
-      <div style="width:60px;text-align:left;flex-shrink:0;">${lineTotal.toFixed(2)}</div>
-    </div>`;
-  }).join('');
-
-  const kitchenItemsHtml = data.items.map(item => {
-    const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
-    return `
-    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #ddd;align-items:flex-start;">
-      <div style="flex:1;">
-        <div style="font-weight:700;font-size:13px;">${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}</div>
-        ${addons ? `<div style="font-size:10px;color:#555;margin-top:2px;">+ ${addons}</div>` : ''}
-      </div>
-      <span style="font-size:18px;font-weight:700;background:#000;color:#fff;padding:2px 12px;border-radius:4px;min-width:44px;text-align:center;flex-shrink:0;margin-right:4px;">x${item.quantity}</span>
-    </div>`;
-  }).join('');
-
-  // ملف HTML واحد — نسختان مفصولتان بـ page-break-after
-  const unifiedHtml = `
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <title>فاتورة - ${data.orderNumber}</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Cairo', sans-serif; direction: rtl; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .page { max-width: 80mm; margin: 0 auto; padding: 8px; }
-    /* ↓ هذا هو السر: قطع الورق بعد نسخة العميل */
-    .customer-copy { page-break-after: always; break-after: page; }
-    .hdr { text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 8px; }
-    .company { font-size: 18px; font-weight: 700; }
-    .vat-num { font-size: 10px; font-family: monospace; direction: ltr; color: #333; }
-    .info { font-size: 11px; margin-bottom: 6px; padding-bottom: 5px; border-bottom: 1px dashed #ccc; }
-    .info-row { display: flex; justify-content: space-between; padding: 2px 0; }
-    .totals { border-top: 1.5px solid #000; padding-top: 5px; margin-top: 6px; font-size: 11px; }
-    .t-row { display: flex; justify-content: space-between; padding: 2px 0; }
-    .t-row.grand { font-size: 14px; font-weight: 700; background: #f0f0f0; padding: 5px 8px; border-radius: 4px; margin-top: 4px; }
-    .payment { display:flex;justify-content:space-between;font-size:11px;background:#f5f5f5;padding:4px 8px;border-radius:4px;margin:5px 0; }
-    .qr { text-align: center; margin: 6px 0; }
-    .qr img { width: 110px; height: 110px; }
-    .footer { text-align: center; font-size: 10px; color: #666; border-top: 1px dashed #ccc; padding-top: 5px; margin-top: 5px; }
-    /* نسخة الموظف */
-    .k-header { text-align: center; font-size: 13px; font-weight: 700; background: #000; color: #fff; padding: 4px; border-radius: 4px; margin-bottom: 8px; }
-    .k-order { font-size: 28px; font-weight: 700; text-align: center; margin: 6px 0; letter-spacing: 2px; }
-    .k-table { text-align: center; }
-    .k-table span { font-size: 18px; font-weight: 700; border: 2px solid #b45309; color: #b45309; padding: 3px 12px; border-radius: 6px; display: inline-block; margin: 3px 0; }
-    .k-type { text-align: center; font-size: 12px; font-weight: 600; background: #f0f0f0; padding: 3px; border-radius: 4px; margin-bottom: 6px; }
-    .k-info { font-size: 10px; color: #666; text-align: center; margin-top: 8px; border-top: 1px dashed #ccc; padding-top: 6px; }
-    @media print { body { margin: 0; } .no-print { display: none !important; } }
-  </style>
-</head>
-<body>
-  <!-- ════ صفحة 1: نسخة العميل (فاتورة ضريبية) ════ -->
-  <div class="customer-copy page">
-    <div class="hdr">
-      <div class="company">${COMPANY_NAME}</div>
-      <div style="font-size:10px;color:#555;">فاتورة ضريبية مبسطة</div>
-      <div class="vat-num">VAT: ${data.vatNumber || VAT_NUMBER}</div>
-      ${(data.crNumber || COMPANY_CR) ? `<div class="vat-num">CR: ${data.crNumber || COMPANY_CR}</div>` : ''}
-    </div>
-
-    <div style="text-align:center;margin:6px 0;padding:6px;background:#f0f0f0;border-radius:6px;border:1.5px solid #ccc;">
-      <div style="font-size:9px;color:#666;">رقم الطلب</div>
-      <div style="font-size:20px;font-weight:700;font-family:monospace;direction:ltr;">${fmtOrderNum(data.orderNumber)}</div>
-    </div>
-
-    <div class="info">
-      <div class="info-row"><span style="color:#666;">التاريخ:</span><span style="font-weight:600;">${formattedDate} ${formattedTime}</span></div>
-      ${data.customerName && data.customerName !== 'عميل نقدي' ? `<div class="info-row"><span style="color:#666;">العميل:</span><span style="font-weight:600;">${data.customerName}</span></div>` : ''}
-      ${data.tableNumber ? `<div class="info-row"><span style="color:#666;">طاولة:</span><span style="font-weight:600;">${data.tableNumber}</span></div>` : ''}
-      ${orderTypeLabel ? `<div class="info-row"><span style="color:#666;">نوع الطلب:</span><span style="font-weight:600;">${orderTypeLabel}</span></div>` : ''}
-    </div>
-
-    <div>${customerItemsHtml}</div>
-
-    <div class="totals">
-      <div class="t-row"><span>قبل الضريبة:</span><span>${subtotalBeforeTax.toFixed(2)} ر.س</span></div>
-      <div class="t-row"><span>ضريبة القيمة المضافة 15%:</span><span>${vatAmount.toFixed(2)} ر.س</span></div>
-      <div class="t-row grand"><span>الإجمالي:</span><span>${totalAmount.toFixed(2)} ر.س</span></div>
-    </div>
-
-    <div class="payment"><span>الدفع:</span><span style="font-weight:700;">${data.paymentMethod}</span></div>
-
-    ${qrCodeUrl ? `<div class="qr"><img src="${qrCodeUrl}" alt="ZATCA QR" /><div style="font-size:9px;color:#888;margin-top:2px;">رمز التحقق - ZATCA</div></div>` : ''}
-
-    <div class="footer">
-      <div><b>شكراً لزيارتكم</b></div>
-      <div>الأسعار شاملة ضريبة القيمة المضافة 15%</div>
-    </div>
-  </div>
-
-  <!-- ════ صفحة 2: نسخة الموظف (بدون أسعار) ════ -->
-  <div class="page">
-    <div class="k-header">نسخة الموظف - ملخص الطلب</div>
-    <div class="k-order">${fmtOrderNum(data.orderNumber)}</div>
-    ${data.tableNumber ? `<div class="k-table"><span>طاولة ${data.tableNumber}</span></div>` : ''}
-    ${orderTypeLabel ? `<div class="k-type">${orderTypeLabel}</div>` : ''}
-    <div>${kitchenItemsHtml}</div>
-    <div class="k-info">الكاشير: ${data.employeeName} | ${formattedTime}</div>
-  </div>
-</body>
-</html>`;
-
-  openPrintWindow(unifiedHtml, `فاتورة - ${data.orderNumber}`, { paperWidth: '80mm', autoPrint: true });
+  // Delegate to the fully featured printTaxInvoice which handles two separate print jobs
+  await printTaxInvoice(data, { autoPrint: true });
 }
 
 export async function printBulkEmployeeInvoices(orders: any[]): Promise<void> {
@@ -603,21 +456,19 @@ function formatDate(dateStr: string): { date: string; time: string } {
 
 export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig = {}): Promise<void> {
   const totalAmount = parseNumber(data.total);
-  
+
   const codeDiscountAmount = data.discount ? parseNumber(data.discount.amount) : 0;
   const invDiscountAmount = parseNumber(data.invoiceDiscount);
   const itemDiscountsTotal = data.items.reduce((sum, item) => sum + parseNumber(item.itemDiscount), 0);
-  
+
   const subtotalBeforeTax = totalAmount / (1 + VAT_RATE);
   const vatAmount = totalAmount - subtotalBeforeTax;
-  
+
   const totalDiscounts = codeDiscountAmount + invDiscountAmount + itemDiscountsTotal;
-  const subtotalBeforeAllDiscounts = subtotalBeforeTax + (totalDiscounts / (1 + VAT_RATE));
-  
+
   const displayInvoiceNumber = fmtOrderNum(data.orderNumber);
   const { date: formattedDate, time: formattedTime } = formatDate(data.date);
   const displayBranchName = data.branchName || DEFAULT_BRANCH;
-  const displayBranchAddress = data.branchAddress || DEFAULT_ADDRESS;
 
   const invoiceTimestamp = data.date ? new Date(data.date).toISOString() : new Date().toISOString();
   const zatcaData = generateZATCAQRCode({
@@ -628,27 +479,24 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     vatAmount: vatAmount.toFixed(2)
   });
 
-  let qrCodeUrl = "";
+  let zatcaQrUrl = "";
   try {
-    qrCodeUrl = await QRCode.toDataURL(zatcaData, {
-      width: 180,
+    zatcaQrUrl = await QRCode.toDataURL(zatcaData, {
+      width: 160,
       margin: 1,
-      color: {
-        dark: '#000000',
-        light: '#FFFFFF'
-      },
+      color: { dark: '#000000', light: '#FFFFFF' },
       errorCorrectionLevel: 'M'
     });
   } catch (error) {
-    console.error("Error generating QR code:", error);
+    console.error("Error generating ZATCA QR:", error);
   }
 
-  // Generate tracking QR code
-  const trackingUrl = `${window.location.origin}/tracking/${data.orderNumber}`;
+  // Tracking QR — links to public order tracking page
+  const trackingUrl = `${window.location.origin}/track/${data.orderNumber}`;
   let trackingQrUrl = "";
   try {
     trackingQrUrl = await QRCode.toDataURL(trackingUrl, {
-      width: 120,
+      width: 140,
       margin: 1,
       color: { dark: '#000000', light: '#FFFFFF' },
       errorCorrectionLevel: 'M'
@@ -657,21 +505,23 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     console.error("Error generating tracking QR:", error);
   }
 
+  const logoUrl = `${window.location.origin}/black-rose-logo.png`;
+
   const itemsHtml = data.items.map(item => {
     const unitPrice = parseNumber(item.coffeeItem.price);
-    const lineTotal = unitPrice * item.quantity;
     const itemDiscount = parseNumber(item.itemDiscount);
-    const lineAfterDiscount = lineTotal - itemDiscount;
+    const lineAfterDiscount = unitPrice * item.quantity - itemDiscount;
     const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
     return `
       <tr>
-        <td style="padding:3px 2px;">
-          ${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}${itemDiscount > 0 ? ` <span style="color:#16a34a;font-size:9px;">(-${itemDiscount.toFixed(2)})</span>` : ''}
+        <td style="padding:3px 2px;font-size:12px;">
+          <span style="font-weight:600;">${item.coffeeItem.nameAr}</span>
+          ${itemDiscount > 0 ? ` <span style="color:#16a34a;font-size:9px;">(-${itemDiscount.toFixed(2)})</span>` : ''}
           ${addons ? `<div style="font-size:9px;color:#666;margin-top:1px;">+ ${addons}</div>` : ''}
         </td>
-        <td style="text-align:center;">${item.quantity}</td>
-        <td style="text-align:center;">${unitPrice.toFixed(2)}</td>
-        <td style="text-align:left;">${lineAfterDiscount.toFixed(2)}</td>
+        <td style="text-align:center;font-size:12px;">${item.quantity}</td>
+        <td style="text-align:center;font-size:12px;">${unitPrice.toFixed(2)}</td>
+        <td style="text-align:left;font-size:12px;">${lineAfterDiscount.toFixed(2)}</td>
       </tr>
     `;
   }).join('');
@@ -685,154 +535,243 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     data.orderType === 'drive_thru' ? 'درايف ثرو' : ''
   );
 
-  const invoiceHtml = `
-<!DOCTYPE html>
+  // ══════════════════════════════════════════════
+  //  فاتورة العميل  (Job 1)
+  // ══════════════════════════════════════════════
+  const customerHtml = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>فاتورة ضريبية - ${displayInvoiceNumber}</title>
+  <title>فاتورة العميل - ${displayInvoiceNumber}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+    @page { size: 80mm auto; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Cairo', sans-serif; background: #fff; color: #000; direction: rtl; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .receipt { max-width: 80mm; margin: 0 auto; padding: 8px; }
-    .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 8px; }
-    .company { font-size: 20px; font-weight: 700; }
-    .subtitle { font-size: 11px; color: #555; }
-    .vat-num { font-size: 10px; font-family: monospace; direction: ltr; color: #333; }
-    .invoice-num-block { text-align: center; margin: 8px 0; padding: 8px; background: #f0f0f0; border-radius: 6px; border: 1.5px solid #ccc; }
-    .invoice-num-label { font-size: 10px; color: #666; margin-bottom: 2px; }
-    .invoice-num-value { font-size: 22px; font-weight: 700; letter-spacing: 1px; color: #000; font-family: monospace; direction: ltr; }
-    .info { font-size: 11px; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px dashed #ccc; }
-    .info-row { display: flex; justify-content: space-between; padding: 2px 0; }
-    .info-label { color: #666; }
-    .info-val { font-weight: 600; }
-    table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 6px; }
+    body { font-family: 'Cairo', Arial, sans-serif; background: #fff; color: #000; direction: rtl;
+           -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 13px; }
+    .wrap { width: 76mm; margin: 0 auto; padding: 5px 4px 8px; }
+
+    /* ── Header ── */
+    .hdr { text-align: center; padding-bottom: 7px; border-bottom: 2px solid #000; margin-bottom: 7px; }
+    .logo-img { width: 60mm; height: auto; display: block; margin: 0 auto 4px; object-fit: contain; }
+    .company { font-size: 16px; font-weight: 800; letter-spacing: 1px; }
+    .subtitle { font-size: 11px; color: #444; margin-top: 2px; }
+    .vat-line { font-size: 10px; font-family: monospace; direction: ltr; color: #333; margin-top: 2px; }
+    .branch { font-size: 10px; color: #555; margin-top: 2px; }
+
+    /* ── Invoice number ── */
+    .inv-block { text-align: center; margin: 6px 0; padding: 5px 8px; background: #f0f0f0;
+                 border-radius: 4px; border: 1.5px solid #ccc; }
+    .inv-lbl { font-size: 10px; color: #666; }
+    .inv-num { font-size: 22px; font-weight: 700; letter-spacing: 2px; font-family: monospace; direction: ltr; }
+
+    /* ── Info rows ── */
+    .info { font-size: 12px; margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px dashed #bbb; }
+    .irow { display: flex; justify-content: space-between; padding: 2px 0; }
+    .ilbl { color: #555; }
+    .ival { font-weight: 600; }
+
+    /* ── Items table ── */
+    table { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
     thead tr { border-bottom: 1.5px solid #000; }
-    th { padding: 4px 2px; font-weight: 700; font-size: 10px; }
+    th { padding: 3px 2px; font-size: 11px; font-weight: 700; }
     th:first-child { text-align: right; }
-    th:nth-child(2) { text-align: center; width: 30px; }
-    th:nth-child(3) { text-align: center; width: 45px; }
-    th:last-child { text-align: left; width: 55px; }
+    th:nth-child(2), th:nth-child(3) { text-align: center; width: 28px; }
+    th:last-child { text-align: left; width: 50px; }
     td { padding: 3px 2px; }
-    td:first-child { text-align: right; font-weight: 500; }
-    td:nth-child(2) { text-align: center; }
-    td:nth-child(3) { text-align: center; }
-    td:last-child { text-align: left; font-weight: 500; }
+    td:first-child { text-align: right; }
+    td:nth-child(2), td:nth-child(3) { text-align: center; }
+    td:last-child { text-align: left; }
     tr { border-bottom: 1px solid #eee; }
-    .totals { border-top: 1.5px solid #000; padding-top: 6px; font-size: 11px; }
-    .t-row { display: flex; justify-content: space-between; padding: 2px 0; }
-    .t-row.grand { font-size: 14px; font-weight: 700; background: #f0f0f0; padding: 6px 8px; border-radius: 4px; margin-top: 4px; }
-    .t-row.discount { color: #16a34a; }
-    .payment { display: flex; justify-content: space-between; font-size: 11px; background: #f5f5f5; padding: 4px 8px; border-radius: 4px; margin: 6px 0; }
-    .payment .val { font-weight: 700; }
-    .qr { text-align: center; margin: 8px 0; }
-    .qr img { width: 110px; height: 110px; }
-    .qr-note { font-size: 9px; color: #888; margin-top: 2px; }
-    .footer { text-align: center; font-size: 10px; color: #666; border-top: 1px dashed #ccc; padding-top: 6px; margin-top: 6px; }
-    .footer b { color: #000; }
-    .emp-section { padding: 8px; }
-    .emp-header { text-align: center; font-size: 13px; font-weight: 700; background: #000; color: #fff; padding: 4px; border-radius: 4px; margin-bottom: 8px; }
-    .emp-order { font-size: 28px; font-weight: 700; text-align: center; margin: 6px 0; letter-spacing: 2px; }
-    .emp-table { text-align: center; font-size: 18px; font-weight: 700; border: 2px solid #b45309; color: #b45309; padding: 4px 12px; border-radius: 6px; display: inline-block; margin: 4px auto; }
-    .emp-type { text-align: center; font-size: 12px; font-weight: 600; background: #f0f0f0; padding: 3px; border-radius: 4px; margin-bottom: 6px; }
-    .emp-items { font-size: 12px; }
-    .emp-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #ddd; align-items: flex-start; }
-    .emp-item-name { font-weight: 600; flex: 1; font-size: 13px; }
-    .emp-item-addons { font-size: 10px; color: #555; margin-top: 2px; }
-    .emp-item-qty { font-size: 18px; font-weight: 700; background: #000; color: #fff; padding: 2px 12px; border-radius: 4px; min-width: 44px; text-align: center; flex-shrink: 0; margin-right: 4px; }
-    .emp-total { display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; margin-top: 6px; padding-top: 6px; border-top: 1.5px solid #000; }
-    .emp-info { font-size: 10px; color: #666; text-align: center; margin-top: 8px; }
-    .customer-copy { page-break-after: always; break-after: page; }
-    @media print { body { margin: 0; } .no-print { display: none !important; } .receipt { padding: 4px; } }
+
+    /* ── Totals ── */
+    .totals { border-top: 1.5px solid #000; padding-top: 5px; font-size: 12px; }
+    .trow { display: flex; justify-content: space-between; padding: 2px 0; }
+    .trow.grand { font-size: 15px; font-weight: 700; background: #000; color: #fff;
+                  padding: 5px 8px; border-radius: 4px; margin-top: 4px; }
+    .trow.disc { color: #16a34a; }
+
+    /* ── Payment ── */
+    .pay { display: flex; justify-content: space-between; font-size: 12px;
+           background: #f5f5f5; padding: 4px 8px; border-radius: 4px; margin: 5px 0; }
+    .pay-val { font-weight: 700; }
+
+    /* ── Tracking QR ── */
+    .track-box { text-align: center; margin: 8px 0; border: 1.5px dashed #999;
+                 border-radius: 5px; padding: 6px 4px; }
+    .track-title { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+    .track-img { width: 100px; height: 100px; display: block; margin: 0 auto; }
+    .track-site { font-size: 10px; color: #444; margin-top: 3px; direction: ltr; }
+
+    /* ── Quote ── */
+    .quote { text-align: center; margin: 6px 0; padding: 6px 4px;
+             border-top: 1px dashed #bbb; border-bottom: 1px dashed #bbb; }
+    .quote-text { font-size: 13px; font-weight: 600; color: #1a1a1a; font-style: italic; }
+    .quote-brand { font-size: 12px; font-weight: 700; color: #000; margin-top: 2px; letter-spacing: 1px; }
+
+    /* ── ZATCA QR ── */
+    .zatca { text-align: center; margin-top: 6px; }
+    .zatca img { width: 110px; height: 110px; display: block; margin: 0 auto; }
+    .zatca-lbl { font-size: 9px; color: #777; margin-top: 2px; }
+    .vat-note { font-size: 10px; color: #555; margin-top: 2px; }
+
+    @media print { body { margin: 0; } .no-print { display: none !important; } }
   </style>
 </head>
 <body>
-  <div class="receipt">
-    <!-- صفحة 1: نسخة العميل — الطابعة تقطع بعدها تلقائياً -->
-    <div class="customer-copy">
-    <div class="header">
-      <div class="company">${COMPANY_NAME}</div>
-      <div class="subtitle">فاتورة ضريبية مبسطة</div>
-      <div class="vat-num">VAT: ${data.vatNumber || VAT_NUMBER}</div>
-      ${(data.crNumber || COMPANY_CR) ? `<div class="vat-num">CR: ${data.crNumber || COMPANY_CR}</div>` : ''}
-    </div>
+<div class="wrap">
 
-    <div class="invoice-num-block">
-      <div class="invoice-num-label">رقم الفاتورة</div>
-      <div class="invoice-num-value">${displayInvoiceNumber}</div>
-    </div>
-
-    <div class="info">
-      <div class="info-row"><span class="info-label">التاريخ:</span><span class="info-val">${formattedDate} ${formattedTime}</span></div>
-      ${data.customerName && data.customerName !== 'عميل نقدي' ? `<div class="info-row"><span class="info-label">العميل:</span><span class="info-val">${data.customerName}</span></div>` : ''}
-      ${data.tableNumber ? `<div class="info-row"><span class="info-label">طاولة:</span><span class="info-val">${data.tableNumber}</span></div>` : ''}
-      ${orderTypeLabel ? `<div class="info-row"><span class="info-label">نوع الطلب:</span><span class="info-val">${orderTypeLabel}</span></div>` : ''}
-    </div>
-
-    <table>
-      <thead><tr><th>الصنف</th><th>ك</th><th>السعر</th><th>المجموع</th></tr></thead>
-      <tbody>${itemsHtml}</tbody>
-    </table>
-
-    <div class="totals">
-      ${totalDiscounts > 0 ? `<div class="t-row discount"><span>الخصومات:</span><span>-${(totalDiscounts / (1 + VAT_RATE)).toFixed(2)} ر.س</span></div>` : ''}
-      <div class="t-row"><span>قبل الضريبة:</span><span>${subtotalBeforeTax.toFixed(2)} ر.س</span></div>
-      <div class="t-row"><span>ضريبة القيمة المضافة 15%:</span><span>${vatAmount.toFixed(2)} ر.س</span></div>
-      <div class="t-row grand"><span>الإجمالي:</span><span>${totalAmount.toFixed(2)} ر.س</span></div>
-    </div>
-
-    <div class="payment"><span>الدفع:</span><span class="val">${data.paymentMethod}</span></div>
-
-    ${qrCodeUrl ? `
-    <div class="qr">
-      <img src="${qrCodeUrl}" alt="ZATCA QR" />
-      <div class="qr-note">رمز التحقق - ZATCA</div>
-    </div>
-    ` : ''}
-
-    <div class="footer">
-      <div><b>شكراً لزيارتكم</b></div>
-      <div>الأسعار شاملة ضريبة القيمة المضافة 15%</div>
-      <div>فاتورة إلكترونية</div>
-    </div>
-    </div><!-- end customer-copy — الطابعة تقطع هنا ✂️ -->
-
-    <!-- صفحة 2: نسخة الموظف/المطبخ — بدون أسعار -->
-    <div class="emp-section">
-      <div class="emp-header">نسخة الموظف - ملخص الطلب</div>
-      <div class="emp-order">${fmtOrderNum(data.orderNumber)}</div>
-      ${data.tableNumber ? `<div style="text-align:center;"><span class="emp-table">طاولة ${data.tableNumber}</span></div>` : ''}
-      ${orderTypeLabel ? `<div class="emp-type">${orderTypeLabel}</div>` : ''}
-      
-      <div class="emp-items">
-        ${data.items.map(item => {
-          const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
-          return `
-          <div class="emp-item">
-            <div style="flex:1;">
-              <div class="emp-item-name">${renderItemName(item.coffeeItem.nameAr, item.coffeeItem.nameEn)}</div>
-              ${addons ? `<div class="emp-item-addons">+ ${addons}</div>` : ''}
-            </div>
-            <span class="emp-item-qty">x${item.quantity}</span>
-          </div>`;
-        }).join('')}
-      </div>
-      
-      <div class="emp-info">
-        <div>الكاشير: ${data.employeeName} | ${formattedTime}</div>
-      </div>
-    </div>
+  <!-- ── HEADER ── -->
+  <div class="hdr">
+    <img class="logo-img" src="${logoUrl}" alt="Black Rose Cafe" onerror="this.style.display='none'" />
+    <div class="company">BLACK ROSE CAFE</div>
+    <div class="subtitle">فاتورة ضريبية مبسطة</div>
+    <div class="vat-line">VAT: ${data.vatNumber || VAT_NUMBER}</div>
+    <div class="branch">${displayBranchName}</div>
   </div>
-</body>
-</html>
-  `;
 
-  openPrintWindow(invoiceHtml, `فاتورة ضريبية - ${displayInvoiceNumber}`, { 
-    paperWidth: '80mm', 
-    autoPrint: config.autoPrint !== undefined ? config.autoPrint : true,
-    showPrintButton: true 
+  <!-- ── INVOICE NUMBER ── -->
+  <div class="inv-block">
+    <div class="inv-lbl">رقم الفاتورة</div>
+    <div class="inv-num">${displayInvoiceNumber}</div>
+  </div>
+
+  <!-- ── INFO ── -->
+  <div class="info">
+    <div class="irow"><span class="ilbl">التاريخ:</span><span class="ival">${formattedDate} ${formattedTime}</span></div>
+    ${data.customerName && data.customerName !== 'عميل نقدي' ? `<div class="irow"><span class="ilbl">العميل:</span><span class="ival">${data.customerName}</span></div>` : ''}
+    ${data.tableNumber ? `<div class="irow"><span class="ilbl">الطاولة:</span><span class="ival">${data.tableNumber}</span></div>` : ''}
+    ${orderTypeLabel ? `<div class="irow"><span class="ilbl">نوع الطلب:</span><span class="ival">${orderTypeLabel}</span></div>` : ''}
+  </div>
+
+  <!-- ── ITEMS ── -->
+  <table>
+    <thead><tr><th>الصنف</th><th>ك</th><th>سعر</th><th>المجموع</th></tr></thead>
+    <tbody>${itemsHtml}</tbody>
+  </table>
+
+  <!-- ── TOTALS ── -->
+  <div class="totals">
+    ${totalDiscounts > 0 ? `<div class="trow disc"><span>الخصومات:</span><span>-${(totalDiscounts / (1 + VAT_RATE)).toFixed(2)} ر.س</span></div>` : ''}
+    <div class="trow"><span>قبل الضريبة:</span><span>${subtotalBeforeTax.toFixed(2)} ر.س</span></div>
+    <div class="trow"><span>ضريبة 15%:</span><span>${vatAmount.toFixed(2)} ر.س</span></div>
+    <div class="trow grand"><span>الإجمالي:</span><span>${totalAmount.toFixed(2)} ر.س</span></div>
+  </div>
+
+  <!-- ── PAYMENT ── -->
+  <div class="pay"><span>طريقة الدفع:</span><span class="pay-val">${data.paymentMethod}</span></div>
+
+  <!-- ── TRACKING QR ── -->
+  ${trackingQrUrl ? `
+  <div class="track-box">
+    <div class="track-title">باركود تتبع الطلب 📦</div>
+    <img class="track-img" src="${trackingQrUrl}" alt="tracking QR" />
+    <div class="track-site">${COMPANY_WEBSITE}</div>
+  </div>` : ''}
+
+  <!-- ── QUOTE ── -->
+  <div class="quote">
+    <div class="quote-text">"قهوة تُقال وورد يُهدى"</div>
+    <div class="quote-brand">BLACK ROSE</div>
+  </div>
+
+  <!-- ── ZATCA QR (الباركود الضريبي) ── -->
+  ${zatcaQrUrl ? `
+  <div class="zatca">
+    <img src="${zatcaQrUrl}" alt="ZATCA QR" />
+    <div class="zatca-lbl">رمز الضريبة · ZATCA Verified</div>
+    <div class="vat-note">الأسعار شاملة ضريبة القيمة المضافة 15%</div>
+  </div>` : ''}
+
+</div>
+</body>
+</html>`;
+
+  // ══════════════════════════════════════════════
+  //  فاتورة الموظف / المطبخ  (Job 2)
+  // ══════════════════════════════════════════════
+  const empHtml = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>نسخة الموظف - ${displayInvoiceNumber}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+    @page { size: 80mm auto; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Cairo', Arial, sans-serif; background: #fff; color: #000; direction: rtl; }
+    .wrap { width: 76mm; margin: 0 auto; padding: 6px 4px; }
+    .ehdr { text-align: center; font-size: 13px; font-weight: 700; background: #000; color: #fff;
+            padding: 5px 4px; border-radius: 4px; margin-bottom: 8px; }
+    .eorder { font-size: 34px; font-weight: 700; text-align: center; margin: 4px 0;
+              letter-spacing: 3px; font-family: monospace; border: 2px solid #000;
+              border-radius: 6px; padding: 4px 0; }
+    .etable { text-align: center; }
+    .etag { display: inline-block; font-size: 20px; font-weight: 700; border: 2px solid #b45309;
+            color: #b45309; padding: 3px 14px; border-radius: 5px; margin: 4px auto; }
+    .etype { text-align: center; font-size: 14px; font-weight: 700; background: #f0f0f0;
+             padding: 4px; border-radius: 4px; margin: 4px 0 8px; }
+    .eitems { border-top: 2px dashed #000; margin-top: 4px; padding-top: 4px; }
+    .eitem { display: flex; justify-content: space-between; padding: 7px 0;
+             border-bottom: 1px dashed #ccc; align-items: flex-start; }
+    .ename { font-size: 15px; font-weight: 600; flex: 1; }
+    .eaddons { font-size: 10px; color: #555; margin-top: 2px; }
+    .eqty { font-size: 22px; font-weight: 700; background: #000; color: #fff;
+            padding: 2px 14px; border-radius: 4px; flex-shrink: 0; margin-right: 6px;
+            min-width: 48px; text-align: center; }
+    .etotal { display: flex; justify-content: space-between; font-weight: 700; font-size: 15px;
+              margin-top: 8px; padding-top: 6px; border-top: 1.5px solid #000; }
+    .einfo { font-size: 10px; color: #666; text-align: center; margin-top: 8px; }
+    @media print { body { margin: 0; } }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="ehdr">نسخة الموظف · ملخص الطلب</div>
+  <div class="eorder">${displayInvoiceNumber}</div>
+  ${data.tableNumber ? `<div class="etable"><span class="etag">طاولة ${data.tableNumber}</span></div>` : ''}
+  ${orderTypeLabel ? `<div class="etype">${orderTypeLabel}</div>` : ''}
+
+  <div class="eitems">
+    ${data.items.map(item => {
+      const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
+      return `
+      <div class="eitem">
+        <div style="flex:1;">
+          <div class="ename">${item.coffeeItem.nameAr}</div>
+          ${addons ? `<div class="eaddons">+ ${addons}</div>` : ''}
+        </div>
+        <span class="eqty">x${item.quantity}</span>
+      </div>`;
+    }).join('')}
+  </div>
+
+  <div class="etotal">
+    <span>الإجمالي:</span>
+    <span>${totalAmount.toFixed(2)} ر.س</span>
+  </div>
+  <div class="einfo">الكاشير: ${data.employeeName || '—'} | ${formattedDate} ${formattedTime}</div>
+</div>
+</body>
+</html>`;
+
+  const shouldAutoPrint = config.autoPrint !== undefined ? config.autoPrint : true;
+
+  // Job 1: Customer receipt
+  openPrintWindow(customerHtml, `فاتورة العميل - ${displayInvoiceNumber}`, {
+    paperWidth: '80mm',
+    autoPrint: shouldAutoPrint,
+    showPrintButton: !shouldAutoPrint
   });
+
+  // Job 2: Employee copy — queued after short delay so printer cuts between them
+  setTimeout(() => {
+    openPrintWindow(empHtml, `نسخة الموظف - ${displayInvoiceNumber}`, {
+      paperWidth: '80mm',
+      autoPrint: shouldAutoPrint,
+      showPrintButton: !shouldAutoPrint
+    });
+  }, 1800);
 }
 
 export async function printCustomerPickupReceipt(data: TaxInvoiceData & { deliveryType?: string; deliveryTypeAr?: string }): Promise<void> {
