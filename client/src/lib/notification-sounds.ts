@@ -5,12 +5,12 @@
  * - Only staff pages (dashboard, POS, kitchen, cashier) call playNotificationSound
  * - websocket.ts NEVER plays sounds
  * - Deduplication via localStorage prevents multi-tab double-plays (3s window)
- * - onlineOrderVoice: plays the real MP4 alert sound twice
- * - newOrder: double ascending 3-note beep
+ * - newOrder: TING TING bell sound (loud, media channel)
  * - cashierOrder: short double-beep
  * - statusChange: single pulse
  * - success: short 2-note rise
  * - alert: descending 2-note
+ * - onlineOrderVoice: plays the real MP4 alert sound + ting ting
  */
 
 export type NotificationSoundType =
@@ -118,34 +118,109 @@ function markPlayed(type: NotificationSoundType): void {
   } catch {}
 }
 
-// ─── Play the real alert file at maximum volume ───────────────────────────────
-// Uses HTML Audio (media channel) so it respects device MEDIA volume,
-// not notification volume — exactly what the user wants.
+// ─── TING TING Bell Sound via Web Audio API ────────────────────────────────
+// Classic metallic bell: high fundamental + stretched overtones + long decay
 
-const ALERT_FILES = ['/online-order-alert.mp4', '/notification-sound.mp3'];
+function playTingWebAudio(volume: number): boolean {
+  try {
+    const ctx = getCtx();
+    if (!ctx || ctx.state !== 'running') return false;
 
-async function playFileSound(): Promise<void> {
-  for (const src of ALERT_FILES) {
-    const played = await new Promise<boolean>((resolve) => {
-      try {
-        const audio = new Audio(src);
-        audio.volume = 1.0; // maximum
-        const timer = setTimeout(() => resolve(false), 10000);
-        audio.onended = () => { clearTimeout(timer); resolve(true); };
-        audio.onerror = () => { clearTimeout(timer); resolve(false); };
-        const p = audio.play();
-        if (p && typeof p.catch === 'function') {
-          p.catch(() => { clearTimeout(timer); resolve(false); });
-        }
-      } catch {
-        resolve(false);
-      }
+    // Bell overtone series (slightly stretched for metallic quality)
+    const partials = [
+      { freq: 1760, amp: 1.0 },     // A6 — fundamental
+      { freq: 3136, amp: 0.55 },    // G7 — 2nd partial
+      { freq: 4400, amp: 0.30 },    // ~A7+
+      { freq: 6000, amp: 0.15 },    // high shimmer
+    ];
+
+    const master = ctx.createGain();
+    master.gain.value = Math.min(1.0, volume * 1.4); // loud!
+    master.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    const decayTime = 0.55; // seconds — bell ring length
+
+    partials.forEach(({ freq, amp }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+
+      // Sharp attack (2ms), then exponential decay
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(amp, now + 0.002);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + decayTime);
+
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(now);
+      osc.stop(now + decayTime);
     });
-    if (played) return; // success — stop trying fallbacks
+
+    audioUnlocked = true;
+    return true;
+  } catch {
+    return false;
   }
 }
 
-// ─── WAV Beep Generator ───────────────────────────────────────────────────────
+// ─── WAV Ting Bell Generator (fallback when AudioContext unavailable) ─────────
+
+function generateTingWav(volume = 0.9, sampleRate = 22050): string {
+  const durationMs = 550;
+  const numSamples = Math.floor((sampleRate * durationMs) / 1000);
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+  const write = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  write(0, 'RIFF');
+  view.setUint32(4, 36 + numSamples * 2, true);
+  write(8, 'WAVE');
+  write(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  write(36, 'data');
+  view.setUint32(40, numSamples * 2, true);
+
+  const partials = [
+    { freq: 1760, amp: 1.0 },
+    { freq: 3136, amp: 0.55 },
+    { freq: 4400, amp: 0.30 },
+    { freq: 6000, amp: 0.15 },
+  ];
+
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    const attack = Math.min(1, i / (sampleRate * 0.002));
+    const decay = Math.exp(-t * 6.5); // exponential bell decay
+    const env = attack * decay * volume;
+
+    let sample = 0;
+    for (const { freq, amp } of partials) {
+      sample += amp * Math.sin(2 * Math.PI * freq * t);
+    }
+    // Normalize
+    const totalAmp = partials.reduce((s, p) => s + p.amp, 0);
+    sample /= totalAmp;
+
+    view.setInt16(44 + i * 2, Math.round(sample * env * 29000), true);
+  }
+
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return 'data:audio/wav;base64,' + btoa(binary);
+}
+
+// ─── WAV Beep Generator (for other sound types) ───────────────────────────────
 
 function generateBeepWav(frequencies: number[], durationMs: number, sampleRate = 22050): string {
   const numSamples = Math.floor((sampleRate * durationMs) / 1000);
@@ -184,14 +259,16 @@ function generateBeepWav(frequencies: number[], durationMs: number, sampleRate =
   return 'data:audio/wav;base64,' + btoa(binary);
 }
 
+let tingWavUrl: string | null = null;
 const audioCache: Partial<Record<NotificationSoundType, string>> = {};
 
 function getAudioDataUrl(type: NotificationSoundType): string {
+  if (type === 'newOrder' || type === 'onlineOrderVoice') {
+    if (!tingWavUrl) tingWavUrl = generateTingWav(0.95);
+    return tingWavUrl;
+  }
   if (!audioCache[type]) {
     switch (type) {
-      case 'newOrder':
-        audioCache[type] = generateBeepWav([523, 659, 784], 350);
-        break;
       case 'cashierOrder':
         audioCache[type] = generateBeepWav([660, 880], 180);
         break;
@@ -211,7 +288,26 @@ function getAudioDataUrl(type: NotificationSoundType): string {
   return audioCache[type]!;
 }
 
-// ─── Web Audio API beep (primary for non-online orders) ──────────────────────
+// ─── Play a single TING via HTML Audio (media channel) ───────────────────────
+
+async function playTingAudio(volume: number): Promise<void> {
+  // Try Web Audio API first (best quality + volume control)
+  if (playTingWebAudio(volume)) return;
+
+  // Fallback: HTML Audio with WAV data URL
+  try {
+    const audio = new Audio(getAudioDataUrl('newOrder'));
+    audio.volume = Math.min(1, volume);
+    await audio.play();
+    await new Promise<void>((resolve) => {
+      audio.onended = () => resolve();
+      audio.onerror = () => resolve();
+      setTimeout(resolve, 700);
+    });
+  } catch {}
+}
+
+// ─── Web Audio API beep (for other sound types) ──────────────────────────────
 
 function playBeepWebAudio(type: NotificationSoundType, volume: number): boolean {
   try {
@@ -219,7 +315,6 @@ function playBeepWebAudio(type: NotificationSoundType, volume: number): boolean 
     if (!ctx || ctx.state !== 'running') return false;
 
     const freqMap: Record<string, number[]> = {
-      newOrder: [523, 659, 784],
       cashierOrder: [660, 880],
       success: [523, 659],
       statusChange: [440],
@@ -272,7 +367,13 @@ async function playBeep(type: NotificationSoundType, volume: number): Promise<vo
 export async function testSound(type: NotificationSoundType = 'success', volume = 0.8): Promise<boolean> {
   try {
     await initAudioUnlock();
-    await playBeep(type, volume);
+    if (type === 'newOrder' || type === 'onlineOrderVoice') {
+      await playTingAudio(volume);
+      await new Promise(r => setTimeout(r, 350));
+      await playTingAudio(volume);
+    } else {
+      await playBeep(type, volume);
+    }
     return true;
   } catch {
     return false;
@@ -283,22 +384,18 @@ export async function testSound(type: NotificationSoundType = 'success', volume 
 
 export async function playNotificationSound(
   type: NotificationSoundType = 'newOrder',
-  volume: number = 0.85
+  volume: number = 0.95
 ): Promise<void> {
   if (isDuplicate(type)) return;
   markPlayed(type);
 
-  if (type === 'onlineOrderVoice') {
-    // Play the real alert sound 3× at max volume for online orders
-    await playFileSound();
-    await new Promise(r => setTimeout(r, 400));
-    await playFileSound();
-    await new Promise(r => setTimeout(r, 400));
-    await playFileSound();
-  } else if (type === 'newOrder') {
-    await playBeep('newOrder', volume);
-    await new Promise(r => setTimeout(r, 400));
-    await playBeep('newOrder', volume * 0.7);
+  if (type === 'newOrder' || type === 'onlineOrderVoice') {
+    // TING ... TING — loud bell sound, plays through media channel
+    await playTingAudio(volume);
+    await new Promise(r => setTimeout(r, 320));
+    await playTingAudio(volume);
+    await new Promise(r => setTimeout(r, 320));
+    await playTingAudio(volume * 0.85);
   } else if (type === 'cashierOrder') {
     await playBeep('cashierOrder', volume);
     await new Promise(r => setTimeout(r, 200));
