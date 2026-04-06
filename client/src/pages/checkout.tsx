@@ -550,6 +550,10 @@ export default function CheckoutPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/loyalty/cards/phone"] });
       refetchLoyaltyCard();
       const displayNum = data.orderNumber;
+      // Save active order number so the menu can show a tracking banner
+      if (displayNum) {
+        localStorage.setItem("br-active-order", String(displayNum));
+      }
       toast({ title: t("checkout.order_success"), description: `${t("tracking.order_number")}: ${displayNum}` });
     },
     onError: (error) => toast({ variant: "destructive", title: t("checkout.order_error"), description: error.message }),

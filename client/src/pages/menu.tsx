@@ -26,7 +26,11 @@ import {
   Sparkles,
   Tag,
   Gift,
-  Languages
+  Languages,
+  Package,
+  X,
+  ArrowLeft,
+  CheckCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import banner1 from "@assets/blackrose-banner-1.png";
@@ -187,6 +191,46 @@ export default function MenuPage() {
   const { data: businessConfig } = useQuery<any>({
     queryKey: ["/api/business-config"],
   });
+
+  // ── Active Order Banner ─────────────────────────────────────────────
+  const [activeOrderNum, setActiveOrderNum] = useState<string | null>(() =>
+    localStorage.getItem("br-active-order")
+  );
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  const { data: activeOrder, isLoading: activeOrderLoading } = useQuery<any>({
+    queryKey: ["/api/orders/number", activeOrderNum],
+    queryFn: async () => {
+      if (!activeOrderNum) return null;
+      const res = await fetch(`/api/orders/number/${encodeURIComponent(activeOrderNum)}`);
+      if (!res.ok) { localStorage.removeItem("br-active-order"); return null; }
+      return res.json();
+    },
+    enabled: !!activeOrderNum && !bannerDismissed,
+    refetchInterval: 20000,
+    retry: false,
+  });
+
+  // Clear banner once order is completed or cancelled
+  useEffect(() => {
+    if (activeOrder?.status === 'completed' || activeOrder?.status === 'cancelled') {
+      localStorage.removeItem("br-active-order");
+      setActiveOrderNum(null);
+    }
+  }, [activeOrder?.status]);
+
+  const showActiveBanner = !bannerDismissed && !!activeOrder && 
+    !['completed','cancelled'].includes(activeOrder.status);
+
+  const getActiveOrderStatusLabel = (status: string) => {
+    const labels: Record<string,string> = {
+      pending: 'في الانتظار', awaiting_payment: 'بانتظار الدفع',
+      payment_confirmed: 'تم الدفع', in_progress: 'قيد التحضير',
+      ready: 'جاهز للاستلام ✅', out_for_delivery: 'في الطريق إليك 🚗',
+    };
+    return labels[status] || status;
+  };
+  // ────────────────────────────────────────────────────────────────────
 
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -565,6 +609,7 @@ export default function MenuPage() {
       </header>
 
       <main className="space-y-6 pb-24 relative z-0" style={{paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 64px), 76px)'}}>
+
         <div ref={bannerRef} className="w-full" style={{marginTop: 'calc(-1 * max(calc(env(safe-area-inset-top, 0px) + 64px), 76px))'}}>
 
           <div className="relative h-[320px] sm:h-[400px] overflow-hidden shadow-lg border-b border-border/50">
@@ -659,6 +704,98 @@ export default function MenuPage() {
         </div>
 
         <div className="px-4 space-y-6">
+
+          {/* ── Active Order Banner ── */}
+          <AnimatePresence>
+            {showActiveBanner && (
+              <motion.div
+                initial={{ opacity: 0, y: -12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.35 }}
+              >
+                <div className={`relative rounded-2xl overflow-hidden shadow-lg border-2 ${
+                  activeOrder.status === 'ready'
+                    ? 'bg-green-50 dark:bg-green-950 border-green-400'
+                    : activeOrder.status === 'in_progress'
+                    ? 'bg-blue-50 dark:bg-blue-950 border-blue-400'
+                    : 'bg-amber-50 dark:bg-amber-950 border-amber-400'
+                }`}>
+                  {/* Close (dismiss) button */}
+                  <button
+                    onClick={() => setBannerDismissed(true)}
+                    className="absolute top-2 ltr:right-2 rtl:left-2 rounded-full bg-black/10 hover:bg-black/20 p-1 z-10"
+                    aria-label="إغلاق"
+                    data-testid="button-dismiss-active-order"
+                  >
+                    <X size={14} />
+                  </button>
+
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    {/* Status icon */}
+                    <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                      activeOrder.status === 'ready' ? 'bg-green-500' :
+                      activeOrder.status === 'in_progress' ? 'bg-blue-500' : 'bg-amber-500'
+                    }`}>
+                      {activeOrder.status === 'ready'
+                        ? <CheckCircle size={18} className="text-white" />
+                        : <Package size={18} className="text-white" />
+                      }
+                    </div>
+
+                    {/* Text block */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-sm text-gray-900 dark:text-gray-100">لديك طلب قائم</span>
+                        <span className="font-mono font-bold text-sm bg-black text-white dark:bg-white dark:text-black px-2 py-0.5 rounded-lg">
+                          #{String(activeOrderNum).padStart(4, '0')}
+                        </span>
+                      </div>
+                      <div className={`text-xs font-bold mt-0.5 ${
+                        activeOrder.status === 'ready' ? 'text-green-700 dark:text-green-400' :
+                        activeOrder.status === 'in_progress' ? 'text-blue-700 dark:text-blue-400' : 'text-amber-700 dark:text-amber-400'
+                      }`}>
+                        {getActiveOrderStatusLabel(activeOrder.status)}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex flex-col gap-1.5 flex-shrink-0 items-center ml-6">
+                      <button
+                        onClick={() => setLocation(`/track/${activeOrderNum}`)}
+                        className={`text-xs font-bold px-3 py-1.5 rounded-xl text-white flex items-center gap-1 whitespace-nowrap ${
+                          activeOrder.status === 'ready' ? 'bg-green-600 hover:bg-green-700' :
+                          activeOrder.status === 'in_progress' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-600 hover:bg-amber-700'
+                        }`}
+                        data-testid="button-track-active-order"
+                      >
+                        تتبع طلبك
+                        <ArrowLeft size={12} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          localStorage.removeItem("br-active-order");
+                          setActiveOrderNum(null);
+                          setBannerDismissed(true);
+                        }}
+                        className="text-[11px] text-gray-500 hover:text-gray-700 text-center underline whitespace-nowrap"
+                        data-testid="button-new-order"
+                      >
+                        طلب جديد
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Pulse bar for ready status */}
+                  {activeOrder.status === 'ready' && (
+                    <div className="bg-green-500 text-white text-xs font-bold text-center py-1.5 animate-pulse">
+                      🎉 طلبك جاهز! تفضل للاستلام
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="flex items-center gap-4 bg-secondary/50 rounded-xl p-3">
             <div className="flex items-center gap-2 text-muted-foreground">
