@@ -22,7 +22,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { useTranslate, tc } from "@/lib/useTranslate";
 import { User, Gift, CheckCircle, Sparkles, Loader2, Ticket, Tag, Wrench, Coffee, Award, CreditCard, Star, Coins, X, ChevronLeft, Upload, Camera, Truck, Printer, Navigation, MapPin, PackageCheck, Bell, ClipboardList } from "lucide-react";
 import BlackRoseCard from "@/components/BlackRoseCard";
-import { printSimpleReceipt } from "@/lib/print-utils";
+import { printTaxInvoice } from "@/lib/print-utils";
 import { useTranslation } from "react-i18next";
 import type { PaymentMethodInfo, PaymentMethod } from "@shared/schema";
 import SarIcon from "@/components/sar-icon";
@@ -941,18 +941,18 @@ export default function CheckoutPage() {
           quantity: i.quantity,
           customization: i.customization,
         }));
-        await printSimpleReceipt({
+        await printTaxInvoice({
           orderNumber: orderNum,
           items: mappedItems,
           subtotal: orderTotal.toFixed(2),
           total: orderTotal.toFixed(2),
           customerName: customerName || orderDetails?.customerName || "عميل",
           customerPhone: customerPhone || orderDetails?.customerPhone || "",
-          paymentMethod: selectedPaymentMethod || orderDetails?.paymentMethod || "cash",
-          employeeName: "نظام الطلب الإلكتروني",
-          date: dateStr,
+          paymentMethod: selectedPaymentMethod || orderDetails?.paymentMethod || "نقدي",
+          employeeName: "طلب إلكتروني",
+          date: orderDetails?.createdAt || new Date().toISOString(),
           orderType: (orderDetails?.orderType === 'dine-in' ? 'dine_in' : orderDetails?.orderType === 'delivery' ? 'delivery' : 'takeaway') as any,
-        });
+        }, { autoPrint: true });
       } catch (e) { console.error("Print error:", e); }
     };
 

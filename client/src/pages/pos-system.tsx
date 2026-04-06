@@ -31,7 +31,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { queueOfflineOrder, syncOfflineOrders, countPendingOrders } from "@/lib/offline-queue";
 import type { CoffeeItem, Order, Table, Employee } from "@shared/schema";
 import { 
-  printSimpleReceipt, 
   printTaxInvoice, 
   printKitchenOrder,
   fmtOrderNum
@@ -186,7 +185,7 @@ export default function PosSystem() {
             date: order.createdAt || new Date().toISOString(),
           };
           setTimeout(() => {
-            try { printTaxInvoice(printData, { autoPrint: false }); } catch (e) {
+            try { printTaxInvoice(printData, { autoPrint: true }); } catch (e) {
               console.warn('[POS] Online order auto-print failed silently:', e);
             }
           }, 500);
@@ -724,7 +723,7 @@ export default function PosSystem() {
             vatNumber: businessConfig?.vatNumber,
           };
           setTimeout(() => {
-            try { printTaxInvoice(printSnapshot, { autoPrint: false }); } catch (e) {
+            try { printTaxInvoice(printSnapshot, { autoPrint: true }); } catch (e) {
               console.warn('[POS] Offline auto-print failed silently:', e);
             }
           }, 200);
@@ -822,7 +821,7 @@ export default function PosSystem() {
         };
         // Delay print by 200ms so UI updates (clear cart, show receipt) render first
         setTimeout(() => {
-          try { printTaxInvoice(printSnapshot, { autoPrint: false }); } catch (e) {
+          try { printTaxInvoice(printSnapshot, { autoPrint: true }); } catch (e) {
             console.warn('[POS] Auto-print failed silently:', e);
           }
         }, 200);
@@ -880,7 +879,7 @@ export default function PosSystem() {
       date: lastOrder.date,
       crNumber: businessConfig?.commercialRegistration,
       vatNumber: businessConfig?.vatNumber,
-    }, { autoPrint: false });
+    }, { autoPrint: true });
   };
 
   const handlePrintLiveOrder = (order: any) => {
@@ -892,17 +891,21 @@ export default function PosSystem() {
       },
       quantity: item.quantity || 1,
     }));
-    printSimpleReceipt({
+    printTaxInvoice({
       orderNumber: order.dailyNumber || order.orderNumber || '',
       customerName: order.customerName || order.customerInfo?.customerName || t('pos.customer_cash'),
       customerPhone: order.customerPhone || order.customerInfo?.customerPhone || '',
       items,
-      subtotal: String(Number(order.totalAmount || 0) / 1.15),
+      subtotal: (Number(order.totalAmount || 0) / 1.15).toFixed(2),
       total: String(order.totalAmount || 0),
       paymentMethod: PAYMENT_METHOD_LABELS[order.paymentMethod] || order.paymentMethod || t('pos.payment_cash'),
       employeeName: employee?.fullName || t('pos.employee_fallback'),
+      tableNumber: order.tableNumber,
+      orderType: order.orderType,
       date: order.createdAt || new Date().toISOString(),
-    });
+      crNumber: businessConfig?.commercialRegistration,
+      vatNumber: businessConfig?.vatNumber,
+    }, { autoPrint: true });
   };
 
   if (!employee) return <LoadingState />;

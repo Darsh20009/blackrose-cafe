@@ -22,7 +22,7 @@ import QRScanner from "@/components/qr-scanner";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { TableOccupancyAlerts } from "@/components/table-occupancy-alerts";
 import { ClassicCashierLayout, POSCashierLayout, SplitCashierLayout } from "@/components/cashier-layouts";
-import { printTaxInvoice, printSimpleReceipt, printCustomerPickupReceipt, printCashierReceipt, printAllReceipts, fmtOrderNum } from "@/lib/print-utils";
+import { printTaxInvoice, printCustomerPickupReceipt, printCashierReceipt, printAllReceipts, fmtOrderNum } from "@/lib/print-utils";
 import type { Employee, CoffeeItem, PaymentMethod, LoyaltyCard } from "@shared/schema";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import PrinterSettingsPanel from "@/components/printer-settings-panel";
@@ -641,7 +641,7 @@ export default function EmployeeCashier() {
    }
    
    try {
-     await printSimpleReceipt({
+     await printTaxInvoice({
        orderNumber: lastOrder.orderNumber,
        customerName: lastOrder.customerName,
        customerPhone: lastOrder.customerPhone,
@@ -653,7 +653,7 @@ export default function EmployeeCashier() {
        employeeName: lastOrder.employeeName,
        tableNumber: lastOrder.tableNumber,
        date: lastOrder.date,
-     });
+     }, { autoPrint: true });
      toast({
        title: tc("تم فتح نافذة الطباعة", "Print window opened"),
        description: tc("يمكنك الآن طباعة الإيصال", "You can now print the receipt"),
