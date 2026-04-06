@@ -131,28 +131,27 @@ function _printViaIframe(html: string, paperWidth: string, isFullDoc: boolean): 
   const cleanup = () => {
     if (cleanupDone) return;
     cleanupDone = true;
-    // Small delay so thermal printer finishes before iframe is removed
     setTimeout(() => {
-      iframe.remove();
+      try { iframe.remove(); } catch {}
       _isPrinting = false;
-      // Allow 1.5 s before next job so printer can cut
-      setTimeout(_drainPrintQueue, 1500);
-    }, 300);
+      // 800 ms between jobs — enough for thermal cutter
+      setTimeout(_drainPrintQueue, 800);
+    }, 150);
   };
 
   iframeWin.addEventListener('afterprint', cleanup, { once: true });
 
-  // Give the iframe time to render fonts + images before printing
+  // 250 ms — short enough to feel instant, long enough for fonts
   setTimeout(() => {
     try {
       iframeWin.focus();
       iframeWin.print();
     } catch {
-      // ignore — some browsers block print() without user gesture in iframes
+      // silent — some browsers block print() in iframes without user gesture
     }
-    // Fallback: if afterprint never fires (mobile Safari etc.), clean up after 8 s
-    setTimeout(cleanup, 8000);
-  }, 500);
+    // Fallback: if afterprint never fires, clean up after 4 s
+    setTimeout(cleanup, 4000);
+  }, 250);
 }
 
 function _drainPrintQueue() {
