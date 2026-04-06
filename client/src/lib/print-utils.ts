@@ -757,70 +757,81 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 
   const shouldAutoPrint = config.autoPrint !== undefined ? config.autoPrint : true;
 
-  // ── Extract body content from each receipt ──
-  // customerHtml and empHtml are full <!DOCTYPE html> documents.
-  // We strip them down to their <body> content and merge into ONE document
-  // with a page-break between them. A single print() call reliably prints
-  // both copies on any thermal printer without needing a second user gesture.
-
-  const extractBody = (fullHtml: string): string => {
-    const match = fullHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    return match ? match[1].trim() : fullHtml;
-  };
-
-  const extractStyles = (fullHtml: string): string => {
-    const matches = fullHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
-    return matches ? matches.join('\n') : '';
-  };
-
-  const customerStyles = extractStyles(customerHtml);
-  const customerBody = extractBody(customerHtml);
-  const empBody = extractBody(empHtml);
-
-  const combinedHtml = `<!DOCTYPE html>
+  // ══════════════════════════════════════════════════════════════
+  //  طلبا طباعة منفصلان — لا دمج في صفحة واحدة أبداً
+  //  Job 1 → فاتورة العميل الكاملة
+  //  Job 2 → نسخة الموظف الكاملة  (يُطبع بعد انتهاء الأول)
+  // ══════════════════════════════════════════════════════════════
+  if (shouldAutoPrint) {
+    // push إلى قائمة الطباعة — تُعالج بشكل تسلسلي عبر afterprint
+    _printQueue.push({ html: customerHtml, paperWidth: '80mm', isFullDoc: true });
+    _printQueue.push({ html: empHtml,      paperWidth: '80mm', isFullDoc: true });
+    _drainPrintQueue();
+  } else {
+    // وضع المعاينة اليدوية: نافذة منبثقة واحدة تحتوي على زرّي طباعة منفصلَين
+    const previewHtml = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>فاتورة - ${displayInvoiceNumber}</title>
-  ${customerStyles}
+  <title>فواتير الطلب - ${displayInvoiceNumber}</title>
   <style>
-    /* Employee copy styles (prefixed to avoid conflicts) */
-    .emp-section .ehdr{text-align:center;font-size:13px;font-weight:700;background:#000;color:#fff;padding:5px 4px;border-radius:4px;margin-bottom:8px;}
-    .emp-section .eorder{font-size:34px;font-weight:700;text-align:center;margin:4px 0;letter-spacing:3px;font-family:monospace;border:2px solid #000;border-radius:6px;padding:4px 0;}
-    .emp-section .etable{text-align:center;}
-    .emp-section .etag{display:inline-block;font-size:20px;font-weight:700;border:2px solid #b45309;color:#b45309;padding:3px 14px;border-radius:5px;margin:4px auto;}
-    .emp-section .etype{text-align:center;font-size:14px;font-weight:700;background:#f0f0f0;padding:4px;border-radius:4px;margin:4px 0 8px;}
-    .emp-section .eitems{border-top:2px dashed #000;margin-top:4px;padding-top:4px;}
-    .emp-section .eitem{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed #ccc;align-items:flex-start;}
-    .emp-section .ename{font-size:15px;font-weight:600;flex:1;}
-    .emp-section .eaddons{font-size:10px;color:#555;margin-top:2px;}
-    .emp-section .eqty{font-size:22px;font-weight:700;background:#000;color:#fff;padding:2px 14px;border-radius:4px;flex-shrink:0;margin-right:6px;min-width:48px;text-align:center;}
-    .emp-section .etotal{display:flex;justify-content:space-between;font-weight:700;font-size:15px;margin-top:8px;padding-top:6px;border-top:1.5px solid #000;}
-    .emp-section .einfo{font-size:10px;color:#666;text-align:center;margin-top:8px;}
-    .emp-section .wrap{width:76mm;margin:0 auto;padding:6px 4px;}
-    /* Page break between customer and employee copies */
-    .page-break { page-break-before: always; break-before: page; }
-    @media print { body { margin: 0; } .no-print { display: none !important; } }
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Cairo', sans-serif; background: #f0f0f0; padding: 16px; direction: rtl; }
+    .toolbar { display: flex; gap: 10px; margin-bottom: 16px; justify-content: center; flex-wrap: wrap; }
+    .btn { padding: 10px 20px; font-size: 14px; font-family: 'Cairo', sans-serif; border: none;
+           border-radius: 8px; cursor: pointer; font-weight: 700; transition: opacity .2s; }
+    .btn:hover { opacity: 0.85; }
+    .btn-customer { background: #1a1a1a; color: #fff; }
+    .btn-employee { background: #b45309; color: #fff; }
+    .btn-close { background: #6b7280; color: #fff; }
+    .frames { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+    iframe { border: 1px solid #ccc; background: #fff; border-radius: 4px; box-shadow: 0 2px 8px #0002; }
+    h3 { text-align: center; font-size: 11px; color: #555; margin-bottom: 6px; }
+    .col { display: flex; flex-direction: column; align-items: center; }
+    @media print { body { display: none; } }
   </style>
 </head>
 <body>
-  <!-- ── نسخة العميل ── -->
-  <div class="customer-section">
-    ${customerBody}
+  <div class="toolbar">
+    <button class="btn btn-customer" onclick="printFrame('f-customer')">🖨 طباعة فاتورة العميل</button>
+    <button class="btn btn-employee" onclick="printFrame('f-employee')">🖨 طباعة نسخة الموظف</button>
+    <button class="btn btn-close" onclick="window.close()">✕ إغلاق</button>
   </div>
-
-  <!-- ── فاصل صفحة ── -->
-  <div class="page-break emp-section">
-    ${empBody}
+  <div class="frames">
+    <div class="col">
+      <h3>فاتورة العميل</h3>
+      <iframe id="f-customer" width="320" height="600" srcdoc=""></iframe>
+    </div>
+    <div class="col">
+      <h3>نسخة الموظف</h3>
+      <iframe id="f-employee" width="320" height="420" srcdoc=""></iframe>
+    </div>
   </div>
+  <script>
+    function printFrame(id) {
+      var f = document.getElementById(id);
+      if (!f || !f.contentWindow) return;
+      f.contentWindow.focus();
+      f.contentWindow.print();
+    }
+    // inject HTML into iframes after page loads
+    window.addEventListener('load', function() {
+      var fc = document.getElementById('f-customer');
+      var fe = document.getElementById('f-employee');
+      if (fc) { fc.contentDocument.open(); fc.contentDocument.write(${JSON.stringify(customerHtml)}); fc.contentDocument.close(); }
+      if (fe) { fe.contentDocument.open(); fe.contentDocument.write(${JSON.stringify(empHtml)}); fe.contentDocument.close(); }
+    });
+  </script>
 </body>
 </html>`;
-
-  openPrintWindow(combinedHtml, `فاتورة - ${displayInvoiceNumber}`, {
-    paperWidth: '80mm',
-    autoPrint: shouldAutoPrint,
-    showPrintButton: !shouldAutoPrint
-  });
+    const win = window.open('', '_blank', 'width=780,height=720,scrollbars=yes,resizable=yes');
+    if (win) {
+      win.document.write(previewHtml);
+      win.document.close();
+      win.document.title = `فواتير الطلب - ${displayInvoiceNumber}`;
+    }
+  }
 }
 
 export async function printCustomerPickupReceipt(data: TaxInvoiceData & { deliveryType?: string; deliveryTypeAr?: string }): Promise<void> {
