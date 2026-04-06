@@ -7,8 +7,17 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Coffee, LogOut, MapPin, Camera, Clock, CheckCircle2, XCircle, 
-  Loader2, ArrowRight, Calendar, AlertCircle, RefreshCw, FileText, Briefcase 
+  Loader2, ArrowRight, Calendar, AlertCircle, RefreshCw, FileText, Briefcase,
+  Shield, Eye, Navigation, WifiOff
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import LocationDistanceMap from "@/components/location-distance-map";
 import type { Employee } from "@shared/schema";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
@@ -53,6 +62,85 @@ export default function EmployeeAttendance() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Live tracking state
+  const [showTrackingConsent, setShowTrackingConsent] = useState(false);
+  const [isTracking, setIsTracking] = useState(false);
+  const [pendingAttendanceId, setPendingAttendanceId] = useState<string | null>(null);
+  const [activeAttendanceId, setActiveAttendanceId] = useState<string | null>(null);
+  const trackingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const trackingWsRef = useRef<WebSocket | null>(null);
+
+  const stopLiveTracking = useCallback(() => {
+    if (trackingIntervalRef.current) {
+      clearInterval(trackingIntervalRef.current);
+      trackingIntervalRef.current = null;
+    }
+    if (trackingWsRef.current) {
+      try { trackingWsRef.current.close(); } catch (_) {}
+      trackingWsRef.current = null;
+    }
+    setIsTracking(false);
+    setActiveAttendanceId(null);
+  }, []);
+
+  const startLiveTracking = useCallback((attendanceId: string, emp: Employee) => {
+    // Connect WebSocket
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const wsUrl = `${protocol}://${window.location.host}/ws/orders`;
+    const ws = new WebSocket(wsUrl);
+    trackingWsRef.current = ws;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        type: "subscribe",
+        clientType: "employee-tracking",
+        employeeId: String((emp as any)._id || (emp as any).id),
+        attendanceId,
+        branchId: emp.branchId,
+      }));
+    };
+
+    ws.onerror = () => {
+      // Continue silently — REST fallback will still send location
+    };
+
+    const sendLocation = () => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const accuracy = pos.coords.accuracy;
+
+          // Send via WebSocket if open
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: "employee_location_update",
+              location: { lat, lng },
+              employeeName: emp.fullName,
+              employeePhoto: emp.imageUrl,
+            }));
+          }
+
+          // Also persist via REST API
+          fetch("/api/attendance/location-update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ lat, lng, accuracy, attendanceId }),
+          }).catch(() => {});
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      );
+    };
+
+    // Send immediately then every 30 seconds
+    sendLocation();
+    trackingIntervalRef.current = setInterval(sendLocation, 30000);
+    setIsTracking(true);
+    setActiveAttendanceId(attendanceId);
+  }, []);
+
   useEffect(() => {
     const storedEmployee = localStorage.getItem("currentEmployee");
     if (storedEmployee) {
@@ -66,8 +154,9 @@ export default function EmployeeAttendance() {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      stopLiveTracking();
     };
-  }, [setLocation]);
+  }, [setLocation, stopLiveTracking]);
 
   const fetchAttendanceStatus = async () => {
     try {
@@ -255,6 +344,13 @@ export default function EmployeeAttendance() {
       fetchAttendanceStatus();
       setCapturedPhoto(null);
       setPhotoUrl(null);
+
+      // Show tracking consent dialog
+      if (data.attendance?.id || data.attendance?._id) {
+        const attId = String(data.attendance.id || data.attendance._id);
+        setPendingAttendanceId(attId);
+        setShowTrackingConsent(true);
+      }
     } catch (error: any) {
       toast({
         title: tc("خطأ", "Error"),
@@ -321,6 +417,9 @@ export default function EmployeeAttendance() {
         title: tc("تم الانصراف", "Checked out"),
         description: data.message
       });
+
+      // Stop live tracking
+      stopLiveTracking();
 
       fetchAttendanceStatus();
       setCapturedPhoto(null);
@@ -644,6 +743,20 @@ export default function EmployeeAttendance() {
           </div>
         )}
 
+        {/* Live tracking indicator */}
+        {isTracking && (
+          <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-600" />
+            </span>
+            <Navigation className="w-3.5 h-3.5 text-green-600" />
+            <span className="text-xs text-green-700 dark:text-green-400">
+              {tc("جارٍ تتبع موقعك خلال فترة الدوام", "Live location tracking active during shift")}
+            </span>
+          </div>
+        )}
+
         <div className="mt-6">
           <Button
             variant="ghost"
@@ -655,6 +768,82 @@ export default function EmployeeAttendance() {
           </Button>
         </div>
       </div>
+
+      {/* Tracking Consent Dialog */}
+      <Dialog open={showTrackingConsent} onOpenChange={() => {}}>
+        <DialogContent className="max-w-sm mx-auto" onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-right">
+              <Shield className="w-5 h-5 text-blue-600" />
+              {tc("إشعار مراقبة الموقع", "Location Monitoring Notice")}
+            </DialogTitle>
+            <DialogDescription className="text-right space-y-3 pt-2">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-start gap-2 text-sm text-foreground">
+                  <Eye className="w-4 h-4 mt-0.5 text-amber-500 shrink-0" />
+                  <span>
+                    {tc(
+                      "سيتم تتبع موقعك الجغرافي تلقائياً طوال فترة دوامك من الآن وحتى تسجيل الانصراف.",
+                      "Your location will be tracked automatically throughout your shift until check-out."
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-start gap-2 text-sm text-foreground">
+                  <MapPin className="w-4 h-4 mt-0.5 text-red-500 shrink-0" />
+                  <span>
+                    {tc(
+                      "سيتلقى المدير إشعاراً فورياً إذا خرجت عن نطاق الفرع خلال ساعات العمل.",
+                      "The manager will receive an immediate alert if you leave the branch area during work hours."
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <WifiOff className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>
+                    {tc(
+                      "سيتوقف التتبع تلقائياً عند تسجيل انصرافك.",
+                      "Tracking will stop automatically when you check out."
+                    )}
+                  </span>
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 pt-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              data-testid="button-decline-tracking"
+              onClick={() => {
+                setShowTrackingConsent(false);
+                setPendingAttendanceId(null);
+                toast({
+                  title: tc("تم الرفض", "Declined"),
+                  description: tc("لن يتم تتبع موقعك", "Your location will not be tracked"),
+                  variant: "destructive"
+                });
+              }}
+            >
+              {tc("رفض", "Decline")}
+            </Button>
+            <Button
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+              data-testid="button-accept-tracking"
+              onClick={() => {
+                setShowTrackingConsent(false);
+                if (pendingAttendanceId && employee) {
+                  startLiveTracking(pendingAttendanceId, employee);
+                }
+                setPendingAttendanceId(null);
+              }}
+            >
+              <Shield className="w-4 h-4 ml-1" />
+              {tc("موافق", "Accept")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <MobileBottomNav employeeRole={employee?.role} />
     </div>
   );

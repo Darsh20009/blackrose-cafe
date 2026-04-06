@@ -12153,6 +12153,141 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── Live Location Tracking ───────────────────────────────────────────────
+
+  // POST /api/attendance/location-update — employee sends periodic location
+  app.post("/api/attendance/location-update", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { LocationTrackModel, AttendanceModel, BranchModel } = await import("@shared/schema");
+      const employee = req.employee!;
+      const { lat, lng, accuracy, attendanceId } = req.body;
+
+      if (!lat || !lng || !attendanceId) {
+        return res.status(400).json({ error: "بيانات الموقع ناقصة" });
+      }
+
+      // Verify this attendance belongs to this employee and is still checked in
+      const attendance = await AttendanceModel.findOne({
+        _id: attendanceId,
+        employeeId: String(employee._id),
+        status: 'checked_in',
+      });
+      if (!attendance) {
+        return res.status(404).json({ error: "لا يوجد حضور نشط" });
+      }
+
+      // Check if inside branch
+      let isInsideBranch = true;
+      let distanceFromBranch = 0;
+
+      const branch = await BranchModel.findById(attendance.branchId);
+      if (branch && branch.location?.lat && branch.location?.lng) {
+        const R = 6371000;
+        const dLat = (lat - branch.location.lat) * Math.PI / 180;
+        const dLng = (lng - branch.location.lng) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 +
+          Math.cos(branch.location.lat * Math.PI / 180) *
+          Math.cos(lat * Math.PI / 180) *
+          Math.sin(dLng / 2) ** 2;
+        distanceFromBranch = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+        const radius = branch.location.radius || 200;
+        isInsideBranch = distanceFromBranch <= radius;
+      }
+
+      // Save track point
+      const track = new LocationTrackModel({
+        attendanceId: String(attendance._id),
+        employeeId: String(employee._id),
+        branchId: attendance.branchId,
+        lat,
+        lng,
+        accuracy,
+        isInsideBranch,
+        distanceFromBranch,
+        timestamp: new Date(),
+      });
+      await track.save();
+
+      // Broadcast via WebSocket to managers
+      const { wsManager } = await import("./websocket");
+      wsManager.broadcastEmployeeLocation({
+        employeeId: String(employee._id),
+        attendanceId: String(attendance._id),
+        branchId: attendance.branchId,
+        location: { lat, lng },
+        isInsideBranch,
+        distanceFromBranch,
+        employeeName: employee.fullName,
+        employeePhoto: employee.imageUrl,
+      });
+
+      res.json({ success: true, isInsideBranch, distanceFromBranch });
+    } catch (error) {
+      console.error("[Location Track] Error:", error);
+      res.status(500).json({ error: "فشل حفظ الموقع" });
+    }
+  });
+
+  // GET /api/attendance/location-history/:attendanceId — get movement trail
+  app.get("/api/attendance/location-history/:attendanceId", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { LocationTrackModel } = await import("@shared/schema");
+      const { attendanceId } = req.params;
+
+      const tracks = await LocationTrackModel.find({ attendanceId })
+        .sort({ timestamp: 1 })
+        .lean();
+
+      res.json(tracks);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب تاريخ التتبع" });
+    }
+  });
+
+  // GET /api/attendance/live-employees — managers see all active employees with last known location
+  app.get("/api/attendance/live-employees", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { LocationTrackModel, AttendanceModel, EmployeeModel, BranchModel } = await import("@shared/schema");
+      const employee = req.employee!;
+
+      const query: any = { status: 'checked_in' };
+      if (employee.role === 'manager' && employee.branchId) {
+        query.branchId = employee.branchId;
+      }
+
+      const activeAttendances = await AttendanceModel.find(query).lean();
+      const result = [];
+
+      for (const att of activeAttendances) {
+        const emp = await EmployeeModel.findById(att.employeeId).lean();
+        if (!emp) continue;
+
+        const lastTrack = await LocationTrackModel.findOne({ attendanceId: String(att._id) })
+          .sort({ timestamp: -1 })
+          .lean();
+
+        result.push({
+          attendanceId: String(att._id),
+          employeeId: String(emp._id),
+          employeeName: emp.fullName,
+          employeePhoto: emp.imageUrl,
+          jobTitle: emp.jobTitle,
+          branchId: att.branchId,
+          checkInTime: att.checkInTime,
+          checkInLocation: att.checkInLocation,
+          lastLocation: lastTrack ? { lat: lastTrack.lat, lng: lastTrack.lng } : att.checkInLocation,
+          isInsideBranch: lastTrack ? lastTrack.isInsideBranch : true,
+          distanceFromBranch: lastTrack ? lastTrack.distanceFromBranch : 0,
+          lastSeen: lastTrack ? lastTrack.timestamp : att.checkInTime,
+        });
+      }
+
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب الموظفين النشطين" });
+    }
+  });
+
   // Get attendance records (for managers and admins)
   app.get("/api/attendance", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {

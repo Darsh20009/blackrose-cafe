@@ -5,7 +5,7 @@ import { registerWSHooks } from "./notification-engine";
 
 interface WSClient {
   ws: WebSocket;
-  type: "kitchen" | "display" | "order-tracking" | "pos" | "inventory" | "delivery-driver" | "delivery-tracking" | "customer" | "pos-display";
+  type: "kitchen" | "display" | "order-tracking" | "pos" | "inventory" | "delivery-driver" | "delivery-tracking" | "customer" | "pos-display" | "employee-tracking" | "manager-tracking";
   orderId?: string;
   branchId?: string;
   driverId?: string;
@@ -13,6 +13,8 @@ interface WSClient {
   customerId?: string;
   posId?: string;
   userId?: string;
+  employeeId?: string;
+  attendanceId?: string;
   lastPing: number;
   isAlive: boolean;
 }
@@ -121,6 +123,8 @@ class OrderWebSocketManager {
           client.deliveryOrderId = message.deliveryOrderId;
           client.customerId = message.customerId;
           client.userId = message.userId || message.customerId;
+          client.employeeId = message.employeeId;
+          client.attendanceId = message.attendanceId;
         }
         console.log(`[WS] Client subscribed as ${message.clientType} userId=${message.userId || message.customerId || "anon"}`);
         ws.send(JSON.stringify({ type: "subscribed", clientType: message.clientType }));
@@ -133,6 +137,21 @@ class OrderWebSocketManager {
       case "driver_location_update":
         if (client && client.type === "delivery-driver" && client.driverId) {
           this.broadcastDriverLocation(client.driverId, message.location, message.deliveryOrderId);
+        }
+        break;
+
+      case "employee_location_update":
+        if (client && client.type === "employee-tracking" && client.employeeId) {
+          this.broadcastEmployeeLocation({
+            employeeId: client.employeeId,
+            attendanceId: client.attendanceId,
+            branchId: client.branchId,
+            location: message.location,
+            isInsideBranch: message.isInsideBranch,
+            distanceFromBranch: message.distanceFromBranch,
+            employeeName: message.employeeName,
+            employeePhoto: message.employeePhoto,
+          });
         }
         break;
 
@@ -368,6 +387,56 @@ class OrderWebSocketManager {
           } catch (e) {
             this.clients.delete(ws);
           }
+        }
+      }
+    });
+  }
+
+  broadcastEmployeeLocation(data: {
+    employeeId: string;
+    attendanceId?: string;
+    branchId?: string;
+    location: { lat: number; lng: number };
+    isInsideBranch: boolean;
+    distanceFromBranch: number;
+    employeeName?: string;
+    employeePhoto?: string;
+  }) {
+    if (!this.wss) return;
+    this.cleanupStaleClients();
+
+    const message = JSON.stringify({
+      type: "employee_location",
+      ...data,
+      timestamp: Date.now(),
+    });
+
+    // Alert if outside branch
+    if (!data.isInsideBranch) {
+      const alertMessage = JSON.stringify({
+        type: "employee_left_branch",
+        employeeId: data.employeeId,
+        employeeName: data.employeeName,
+        branchId: data.branchId,
+        location: data.location,
+        distanceFromBranch: data.distanceFromBranch,
+        timestamp: Date.now(),
+      });
+      this.clients.forEach((client, ws) => {
+        if (ws.readyState === WebSocket.OPEN && client.type === "manager-tracking") {
+          const branchMatch = !data.branchId || !client.branchId || client.branchId === data.branchId || client.branchId === "all";
+          if (branchMatch) {
+            try { ws.send(alertMessage); } catch (e) { this.clients.delete(ws); }
+          }
+        }
+      });
+    }
+
+    this.clients.forEach((client, ws) => {
+      if (ws.readyState === WebSocket.OPEN && client.type === "manager-tracking") {
+        const branchMatch = !data.branchId || !client.branchId || client.branchId === data.branchId || client.branchId === "all";
+        if (branchMatch) {
+          try { ws.send(message); } catch (e) { this.clients.delete(ws); }
         }
       }
     });

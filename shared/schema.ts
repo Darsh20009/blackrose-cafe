@@ -2356,6 +2356,39 @@ AttendanceSchema.index({ branchId: 1, shiftDate: 1 });
 
 export const AttendanceModel = mongoose.model<IAttendance>("Attendance", AttendanceSchema);
 
+// ───────────────────────────────────────────────────────────
+// Live Location Tracking
+// ───────────────────────────────────────────────────────────
+export interface ILocationTrack extends Document {
+  attendanceId: string;
+  employeeId: string;
+  branchId: string;
+  lat: number;
+  lng: number;
+  accuracy?: number;
+  isInsideBranch: boolean;
+  distanceFromBranch: number;
+  timestamp: Date;
+}
+
+const LocationTrackSchema = new Schema<ILocationTrack>({
+  attendanceId: { type: String, required: true },
+  employeeId: { type: String, required: true },
+  branchId: { type: String, required: true },
+  lat: { type: Number, required: true },
+  lng: { type: Number, required: true },
+  accuracy: { type: Number },
+  isInsideBranch: { type: Boolean, default: true },
+  distanceFromBranch: { type: Number, default: 0 },
+  timestamp: { type: Date, default: Date.now },
+});
+
+LocationTrackSchema.index({ attendanceId: 1, timestamp: 1 });
+LocationTrackSchema.index({ employeeId: 1, timestamp: -1 });
+LocationTrackSchema.index({ branchId: 1, timestamp: -1 });
+
+export const LocationTrackModel = mongoose.model<ILocationTrack>("LocationTrack", LocationTrackSchema);
+
 export const insertCoffeeItemSchema = z.object({
   id: z.string(),
   tenantId: z.string().optional(),

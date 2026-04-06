@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useTranslate } from "@/lib/useTranslate";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Coffee, ArrowRight, Calendar, Clock, User, MapPin, 
   Camera, CheckCircle2, XCircle, AlertTriangle, Search,
-  Download, Filter, Users, FileText, Check, X, Trophy, TrendingDown, TrendingUp, Star
+  Download, Filter, Users, FileText, Check, X, Trophy, TrendingDown, TrendingUp, Star,
+  Navigation, Radio, AlertOctagon, ExternalLink
 } from "lucide-react";
 import * as XLSX from 'xlsx';
 import type { Employee } from "@shared/schema";
@@ -86,7 +87,27 @@ export default function ManagerAttendance() {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'daily' | 'monthly'>('daily');
+  const [activeTab, setActiveTab] = useState<'daily' | 'monthly' | 'live-tracking'>('daily');
+
+  // Live tracking state
+  interface LiveEmployee {
+    attendanceId: string;
+    employeeId: string;
+    employeeName: string;
+    employeePhoto?: string;
+    jobTitle?: string;
+    branchId: string;
+    checkInTime: string;
+    lastLocation: { lat: number; lng: number };
+    isInsideBranch: boolean;
+    distanceFromBranch: number;
+    lastSeen: string;
+  }
+  const [liveEmployees, setLiveEmployees] = useState<LiveEmployee[]>([]);
+  const [liveAlerts, setLiveAlerts] = useState<{ id: string; employeeId: string; employeeName: string; distanceFromBranch: number; time: string }[]>([]);
+  const [selectedTrailEmployeeId, setSelectedTrailEmployeeId] = useState<string | null>(null);
+  const [locationTrail, setLocationTrail] = useState<{ lat: number; lng: number; isInsideBranch: boolean; timestamp: string }[]>([]);
+  const trackingWsRef = useRef<WebSocket | null>(null);
   const [monthlyReport, setMonthlyReport] = useState<any>(null);
   const [monthlyReportLoading, setMonthlyReportLoading] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
@@ -115,6 +136,111 @@ export default function ManagerAttendance() {
       fetchLeaveRequests();
     }
   }, [employee, selectedDate, selectedBranch]);
+
+  // Live tracking WebSocket + initial fetch
+  const connectTrackingWs = useCallback(() => {
+    if (trackingWsRef.current?.readyState === WebSocket.OPEN) return;
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${protocol}://${window.location.host}/ws/orders`);
+    trackingWsRef.current = ws;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        type: "subscribe",
+        clientType: "manager-tracking",
+        branchId: employee?.branchId || "all",
+        userId: (employee as any)?._id || (employee as any)?.id,
+      }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "employee_location") {
+          setLiveEmployees(prev => {
+            const idx = prev.findIndex(e => e.employeeId === msg.employeeId);
+            const updated: LiveEmployee = {
+              attendanceId: msg.attendanceId,
+              employeeId: msg.employeeId,
+              employeeName: msg.employeeName || "موظف",
+              employeePhoto: msg.employeePhoto,
+              branchId: msg.branchId,
+              checkInTime: prev[idx]?.checkInTime || new Date().toISOString(),
+              lastLocation: msg.location,
+              isInsideBranch: msg.isInsideBranch,
+              distanceFromBranch: msg.distanceFromBranch,
+              lastSeen: new Date(msg.timestamp).toISOString(),
+            };
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = updated;
+              return next;
+            }
+            return [...prev, updated];
+          });
+        } else if (msg.type === "employee_left_branch") {
+          setLiveAlerts(prev => [{
+            id: `${msg.employeeId}-${msg.timestamp}`,
+            employeeId: msg.employeeId,
+            employeeName: msg.employeeName || "موظف",
+            distanceFromBranch: msg.distanceFromBranch,
+            time: new Date(msg.timestamp).toLocaleTimeString('ar-SA'),
+          }, ...prev.slice(0, 9)]);
+        }
+      } catch (_) {}
+    };
+
+    ws.onclose = () => {
+      // Reconnect after 5 seconds
+      setTimeout(() => {
+        if (activeTab === 'live-tracking') connectTrackingWs();
+      }, 5000);
+    };
+  }, [employee, activeTab]);
+
+  const fetchLiveEmployees = useCallback(async () => {
+    try {
+      const res = await fetch('/api/attendance/live-employees', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setLiveEmployees(data);
+      }
+    } catch (_) {}
+  }, []);
+
+  const fetchLocationTrail = async (attendanceId: string) => {
+    try {
+      const res = await fetch(`/api/attendance/location-history/${attendanceId}`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setLocationTrail(data.map((d: any) => ({
+          lat: d.lat,
+          lng: d.lng,
+          isInsideBranch: d.isInsideBranch,
+          timestamp: d.timestamp,
+        })));
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    if (activeTab === 'live-tracking' && employee) {
+      fetchLiveEmployees();
+      connectTrackingWs();
+    } else {
+      if (trackingWsRef.current) {
+        try { trackingWsRef.current.close(); } catch (_) {}
+        trackingWsRef.current = null;
+      }
+    }
+  }, [activeTab, employee]);
+
+  // Refresh live employees every 60 seconds
+  useEffect(() => {
+    if (activeTab !== 'live-tracking') return;
+    const interval = setInterval(fetchLiveEmployees, 60000);
+    return () => clearInterval(interval);
+  }, [activeTab, fetchLiveEmployees]);
 
   const fetchLeaveRequests = async () => {
     try {
@@ -363,7 +489,7 @@ export default function ManagerAttendance() {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2 mb-4 flex-wrap">
           <Button
             size="sm"
             variant={activeTab === 'daily' ? 'default' : 'outline'}
@@ -383,6 +509,21 @@ export default function ManagerAttendance() {
           >
             <Trophy className="w-4 h-4 ml-2" />
             التقرير الشهري
+          </Button>
+          <Button
+            size="sm"
+            variant={activeTab === 'live-tracking' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('live-tracking')}
+            className={activeTab === 'live-tracking' ? 'bg-red-600 text-white' : 'border-red-500/30 text-red-400'}
+            data-testid="button-live-tracking-tab"
+          >
+            <Radio className="w-4 h-4 ml-2" />
+            التتبع المباشر
+            {liveAlerts.length > 0 && (
+              <span className="mr-1 bg-white text-red-600 text-xs rounded-full px-1.5 font-bold">
+                {liveAlerts.length}
+              </span>
+            )}
           </Button>
         </div>
 
@@ -542,6 +683,180 @@ export default function ManagerAttendance() {
               <div className="text-center py-12 text-gray-400">
                 <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
                 <p>اختر الشهر واضغط "عرض التقرير"</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─── Live Tracking Section ─── */}
+        {activeTab === 'live-tracking' && (
+          <div className="space-y-4">
+            {/* Alerts banner */}
+            {liveAlerts.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-red-500 font-semibold text-sm">
+                  <AlertOctagon className="w-4 h-4" />
+                  تنبيهات الخروج عن النطاق ({liveAlerts.length})
+                </div>
+                {liveAlerts.map(alert => (
+                  <div key={alert.id} className="flex items-start gap-3 bg-red-950/40 border border-red-700/40 rounded-lg px-3 py-2">
+                    <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                    <div className="flex-1 text-sm">
+                      <span className="text-red-300 font-medium">{alert.employeeName}</span>
+                      <span className="text-red-400/80"> — خرج عن نطاق الفرع بمسافة </span>
+                      <span className="text-red-300 font-bold">{alert.distanceFromBranch}م</span>
+                      <span className="text-red-400/60 text-xs mr-2">{alert.time}</span>
+                    </div>
+                    <button
+                      className="text-red-500 hover:text-red-300 text-xs"
+                      onClick={() => setLiveAlerts(prev => prev.filter(a => a.id !== alert.id))}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Live employees count header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-600" />
+                </span>
+                <span className="text-sm font-semibold">
+                  {liveEmployees.length === 0 ? 'لا يوجد موظفون نشطون' : `${liveEmployees.length} موظف نشط حالياً`}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs border-primary/30"
+                onClick={fetchLiveEmployees}
+                data-testid="button-refresh-live"
+              >
+                تحديث
+              </Button>
+            </div>
+
+            {/* Employee location cards */}
+            {liveEmployees.length === 0 ? (
+              <Card className="bg-[#1a1410] border-primary/20">
+                <CardContent className="p-8 text-center text-gray-400">
+                  <Navigation className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <p>لا يوجد موظفون قاموا بتسجيل الحضور حالياً</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {liveEmployees.map(emp => (
+                  <Card
+                    key={emp.employeeId}
+                    className={`border transition-all ${emp.isInsideBranch ? 'bg-[#1a1410] border-green-800/40' : 'bg-red-950/30 border-red-700/50'}`}
+                    data-testid={`card-live-employee-${emp.employeeId}`}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        {/* Avatar */}
+                        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
+                          {emp.employeePhoto ? (
+                            <img src={emp.employeePhoto} alt={emp.employeeName} className="w-full h-full object-cover" />
+                          ) : (
+                            <User className="w-5 h-5 text-primary" />
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm">{emp.employeeName}</span>
+                            {emp.isInsideBranch ? (
+                              <Badge className="bg-green-800/60 text-green-300 text-xs">داخل الفرع</Badge>
+                            ) : (
+                              <Badge className="bg-red-800/60 text-red-300 text-xs">خارج الفرع</Badge>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-gray-400">
+                            <div className="flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />
+                              <span>
+                                {emp.isInsideBranch
+                                  ? `على بُعد ${emp.distanceFromBranch}م من الفرع`
+                                  : `خارج النطاق بـ ${emp.distanceFromBranch}م`}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              <span>آخر تحديث: {new Date(emp.lastSeen).toLocaleTimeString('ar-SA')}</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 mt-2 flex-wrap">
+                            <a
+                              href={`https://www.google.com/maps?q=${emp.lastLocation.lat},${emp.lastLocation.lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
+                              data-testid={`link-map-${emp.employeeId}`}
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              فتح في الخريطة
+                            </a>
+                            <button
+                              className="flex items-center gap-1 text-xs text-accent hover:text-accent/80"
+                              data-testid={`button-trail-${emp.employeeId}`}
+                              onClick={() => {
+                                if (selectedTrailEmployeeId === emp.employeeId) {
+                                  setSelectedTrailEmployeeId(null);
+                                  setLocationTrail([]);
+                                } else {
+                                  setSelectedTrailEmployeeId(emp.employeeId);
+                                  fetchLocationTrail(emp.attendanceId);
+                                }
+                              }}
+                            >
+                              <Navigation className="w-3 h-3" />
+                              {selectedTrailEmployeeId === emp.employeeId ? 'إخفاء التحركات' : 'عرض التحركات'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Movement trail */}
+                      {selectedTrailEmployeeId === emp.employeeId && (
+                        <div className="mt-3 pt-3 border-t border-primary/20">
+                          {locationTrail.length === 0 ? (
+                            <p className="text-xs text-gray-500 text-center">لا توجد تحركات مسجلة بعد</p>
+                          ) : (
+                            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                              <p className="text-xs text-gray-400 font-medium mb-2">
+                                سجل التحركات ({locationTrail.length} نقطة)
+                              </p>
+                              {locationTrail.map((point, idx) => (
+                                <div key={idx} className="flex items-center gap-2 text-xs">
+                                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${point.isInsideBranch ? 'bg-green-500' : 'bg-red-500'}`} />
+                                  <span className="text-gray-400">
+                                    {new Date(point.timestamp).toLocaleTimeString('ar-SA')}
+                                  </span>
+                                  <span className={point.isInsideBranch ? 'text-green-400' : 'text-red-400'}>
+                                    {point.isInsideBranch ? 'داخل الفرع' : 'خارج الفرع'}
+                                  </span>
+                                  <a
+                                    href={`https://www.google.com/maps?q=${point.lat},${point.lng}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-400 hover:underline mr-auto"
+                                  >
+                                    📍
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             )}
           </div>
