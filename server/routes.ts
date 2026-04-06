@@ -11925,6 +11925,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "الموقع مطلوب للتحضير" });
       }
 
+      if (!photoUrl) {
+        return res.status(400).json({ error: "صورة التحضير مطلوبة" });
+      }
+
       // Get employee details
       const employee = await EmployeeModel.findOne({ 
         $or: [{ id: employeeId }, { _id: employeeId }]
@@ -12067,6 +12071,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!location || !location.lat || !location.lng) {
         return res.status(400).json({ error: "الموقع مطلوب للانصراف" });
+      }
+
+      if (!photoUrl) {
+        return res.status(400).json({ error: "صورة الانصراف مطلوبة" });
       }
 
       // Get employee details

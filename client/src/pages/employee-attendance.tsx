@@ -207,12 +207,21 @@ export default function EmployeeAttendance() {
       return;
     }
 
+    if (!photoUrl) {
+      toast({
+        title: tc("خطأ", "Error"),
+        description: tc("يرجى التقاط صورة أولاً", "Please take a photo first"),
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
       const response = await fetch('/api/attendance/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ location, photoUrl: photoUrl || null }),
+        body: JSON.stringify({ location, photoUrl }),
         credentials: 'include'
       });
 
@@ -268,12 +277,21 @@ export default function EmployeeAttendance() {
       return;
     }
 
+    if (!photoUrl) {
+      toast({
+        title: tc("خطأ", "Error"),
+        description: tc("يرجى التقاط صورة أولاً", "Please take a photo first"),
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
       const response = await fetch('/api/attendance/check-out', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ location, photoUrl: photoUrl || null }),
+        body: JSON.stringify({ location, photoUrl }),
         credentials: 'include'
       });
 
@@ -597,7 +615,7 @@ export default function EmployeeAttendance() {
             {!attendanceStatus?.hasCheckedIn ? (
               <Button
                 onClick={handleCheckIn}
-                disabled={isLoading || !location}
+                disabled={isLoading || !location || !photoUrl}
                 className="w-full h-14 bg-green-600 hover:bg-green-700 text-lg"
                 data-testid="button-check-in"
               >
@@ -611,7 +629,7 @@ export default function EmployeeAttendance() {
             ) : (
               <Button
                 onClick={handleCheckOut}
-                disabled={isLoading || !location}
+                disabled={isLoading || !location || !photoUrl}
                 className="w-full h-14 bg-accent hover:bg-accent text-lg"
                 data-testid="button-check-out"
               >
