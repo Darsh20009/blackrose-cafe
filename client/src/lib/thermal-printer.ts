@@ -450,18 +450,99 @@ export interface PrintResult {
   error?: string;
 }
 
+// ─── QZ Tray Integration ─────────────────────────────────────────────────────
+// QZ Tray is a free desktop app that creates a local WebSocket bridge (wss://localhost:8181).
+// The browser sends ESC/POS commands to QZ Tray, and QZ Tray forwards them directly
+// to the LAN printer via raw TCP — this bypasses the cloud server entirely.
+//
+// Download & install: https://qz.io/download/
+// Works with any ESC/POS thermal printer (Xprinter, Epson TM, Star, etc.)
+
+let _qzLoadPromise: Promise<any> | null = null;
+let _qzConnected = false;
+
+async function _loadQZScript(): Promise<any> {
+  if ((window as any).qz) return (window as any).qz;
+  if (_qzLoadPromise) return _qzLoadPromise;
+
+  _qzLoadPromise = new Promise<any>((resolve, reject) => {
+    if (document.querySelector('script[data-qz-tray]')) {
+      const poll = setInterval(() => {
+        if ((window as any).qz) { clearInterval(poll); resolve((window as any).qz); }
+      }, 100);
+      setTimeout(() => { clearInterval(poll); reject(new Error('QZ timeout')); }, 10000);
+      return;
+    }
+    const s = document.createElement('script');
+    s.setAttribute('data-qz-tray', '1');
+    s.src = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
+    s.async = true;
+    s.onload = () => (window as any).qz ? resolve((window as any).qz) : reject(new Error('qz not found'));
+    s.onerror = () => reject(new Error('QZ script load failed'));
+    document.head.appendChild(s);
+  });
+  return _qzLoadPromise;
+}
+
+async function _connectQZ(timeoutMs = 4000): Promise<any> {
+  const qz = await _loadQZScript();
+  if (_qzConnected && qz.websocket.isActive()) return qz;
+  qz.security.setCertificatePromise((res: (v: any) => void) => res(''));
+  qz.security.setSignaturePromise((_: string, res: (v: any) => void) => res(''));
+  await Promise.race([
+    qz.websocket.connect({ retries: 1, delay: 1 }),
+    new Promise<never>((_, r) => setTimeout(() => r(new Error('timeout')), timeoutMs)),
+  ]);
+  _qzConnected = true;
+  return qz;
+}
+
+/** Check if QZ Tray desktop app is running on this machine */
+export async function isQZTrayAvailable(): Promise<boolean> {
+  try {
+    const qz = await Promise.race([
+      _loadQZScript(),
+      new Promise<never>((_, r) => setTimeout(() => r(new Error('timeout')), 4000)),
+    ]);
+    if (qz.websocket.isActive()) return true;
+    await _connectQZ(3000);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Print raw ESC/POS data directly to a LAN printer via QZ Tray (no cloud server needed) */
+export async function qzTrayNetworkPrint(escData: Uint8Array, ip: string, port = 9100): Promise<PrintResult> {
+  try {
+    const qz = await _connectQZ(5000);
+    const config = qz.configs.create({ host: ip, port: { primary: port } });
+    const b64 = btoa(Array.from(escData, b => String.fromCharCode(b)).join(''));
+    await qz.print(config, [{ type: 'raw', format: 'base64', data: b64 }]);
+    return { success: true, mode: 'network' };
+  } catch (err: any) {
+    return { success: false, mode: 'error', error: `QZ Tray: ${err?.message || 'فشل'}` };
+  }
+}
+
 /**
- * Send ESC/POS data to a network printer (LAN/TCP) via server-side TCP socket.
- * Works with ProPos, Epson TM-T88 LAN, Xprinter NW series, and any ESC/POS network printer.
+ * Send ESC/POS data to a network printer (LAN/TCP).
+ * Strategy: 1) Try QZ Tray (browser-side, works from cloud hosting)
+ *            2) Try server-side TCP (only works when server is on same LAN)
  */
 export async function networkPrint(escData: Uint8Array, ip: string, port: number = 9100): Promise<PrintResult> {
+  // 1. Try QZ Tray first — browser-side, reaches local LAN directly
+  const qzResult = await qzTrayNetworkPrint(escData, ip, port);
+  if (qzResult.success) return qzResult;
+  console.warn('[NetworkPrint] QZ Tray:', qzResult.error, '— trying server-side TCP...');
+
+  // 2. Server-side TCP fallback (works if server is on same LAN as printer)
   try {
-    // Safe base64 conversion — avoids stack overflow for large ESC/POS buffers
     const base64Data = btoa(Array.from(escData, b => String.fromCharCode(b)).join(''));
     const resp = await fetch('/api/print/network', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ip, port, data: base64Data }),
+      body: JSON.stringify({ ip, port, data: base64Data, timeout: 4000 }),
     });
     const result = await resp.json();
     if (!resp.ok || !result.success) {
@@ -733,8 +814,12 @@ export async function thermalPrint(escData: Uint8Array, fallbackHtml: string, fa
   }
 
   // Fallback: browser print dialog via iframe
-  const { printHtmlInPage } = await import('./print-utils');
-  printHtmlInPage(fallbackHtml, fallbackPaper);
+  // Only trigger browser print if there is actual HTML content to show.
+  // Passing empty fallbackHtml means the caller handles its own browser fallback.
+  if (fallbackHtml && fallbackHtml.trim()) {
+    const { printHtmlInPage } = await import('./print-utils');
+    printHtmlInPage(fallbackHtml, fallbackPaper);
+  }
   return { success: true, mode: 'browser' };
 }
 

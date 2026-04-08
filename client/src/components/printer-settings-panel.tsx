@@ -30,6 +30,7 @@ import {
   forgetBluetoothPrinter,
   loadSavedBtDevice,
   getBluetoothState,
+  isQZTrayAvailable,
   type PrinterSettings,
   type PrinterStatus,
 } from "@/lib/thermal-printer";
@@ -56,6 +57,9 @@ export default function PrinterSettingsPanel() {
     const parts = saved.split('.');
     return parts.length === 4 ? parts.slice(0, 3).join('.') + '.' : '';
   });
+  // QZ Tray state
+  const [qzStatus, setQzStatus] = useState<'checking' | 'available' | 'unavailable' | null>(null);
+
   // Bluetooth state
   const [btConnecting, setBtConnecting] = useState(false);
   const [btTesting, setBtTesting] = useState(false);
@@ -66,6 +70,13 @@ export default function PrinterSettingsPanel() {
   useEffect(() => {
     refreshStatus();
   }, []);
+
+  // Check QZ Tray availability when in network mode
+  useEffect(() => {
+    if (settings.mode !== 'network') return;
+    setQzStatus('checking');
+    isQZTrayAvailable().then(ok => setQzStatus(ok ? 'available' : 'unavailable'));
+  }, [settings.mode]);
 
   async function refreshStatus() {
     setLoading(true);
@@ -672,10 +683,52 @@ export default function PrinterSettingsPanel() {
                 </div>
                 <p className="text-xs text-blue-600">
                   {tc(
-                    "💡 تأكد أن الطابعة والسيرفر على نفس الشبكة. البورت الافتراضي 9100.",
-                    "💡 Ensure the printer and server are on the same network. Default port is 9100."
+                    "💡 البورت الافتراضي 9100. الطابعة والجهاز يجب أن يكونا على نفس الشبكة.",
+                    "💡 Default port is 9100. The printer and device must be on the same network."
                   )}
                 </p>
+
+                {/* QZ Tray status */}
+                <div className={`rounded-lg border p-3 text-sm space-y-2 ${
+                  qzStatus === 'available'
+                    ? 'bg-green-50 border-green-200'
+                    : qzStatus === 'unavailable'
+                      ? 'bg-amber-50 border-amber-200'
+                      : 'bg-gray-50 border-gray-200'
+                }`}>
+                  <div className="flex items-center gap-2 font-semibold">
+                    {qzStatus === 'available' ? (
+                      <><CheckCircle2 className="w-4 h-4 text-green-600" /><span className="text-green-800">{tc("QZ Tray مثبت ويعمل ✓", "QZ Tray installed & running ✓")}</span></>
+                    ) : qzStatus === 'unavailable' ? (
+                      <><AlertCircle className="w-4 h-4 text-amber-600" /><span className="text-amber-800">{tc("QZ Tray غير مكتشف", "QZ Tray not detected")}</span></>
+                    ) : qzStatus === 'checking' ? (
+                      <><RefreshCw className="w-4 h-4 animate-spin text-gray-500" /><span className="text-gray-600">{tc("جارٍ التحقق من QZ Tray...", "Checking QZ Tray...")}</span></>
+                    ) : (
+                      <><Network className="w-4 h-4 text-blue-500" /><span className="text-blue-700">QZ Tray</span></>
+                    )}
+                  </div>
+                  {qzStatus === 'unavailable' && (
+                    <div className="text-xs text-amber-700 space-y-1">
+                      <p>{tc("لربط الطابعة الشبكية (LAN) مباشرةً من المتصفح، يجب تثبيت QZ Tray على الجهاز.", "To print to a LAN printer directly from the browser, install QZ Tray on this machine.")}</p>
+                      <a
+                        href="https://qz.io/download/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-blue-600 underline font-medium hover:text-blue-800"
+                      >
+                        {tc("تحميل QZ Tray (مجاني)", "Download QZ Tray (Free)")} ↗
+                      </a>
+                      <p className="text-amber-600 text-xs mt-1">
+                        {tc("بدون QZ Tray: الطباعة ستعمل عبر نافذة المتصفح (dialog).", "Without QZ Tray: printing will use the browser dialog instead.")}
+                      </p>
+                    </div>
+                  )}
+                  {qzStatus === 'available' && (
+                    <p className="text-xs text-green-700">
+                      {tc("الطباعة ستتم مباشرة للطابعة بدون نوافذ.", "Printing will go directly to the printer — no dialogs.")}
+                    </p>
+                  )}
+                </div>
               </div>
             </>
           )}
