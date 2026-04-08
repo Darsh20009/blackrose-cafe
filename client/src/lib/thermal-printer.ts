@@ -525,32 +525,66 @@ export async function qzTrayNetworkPrint(escData: Uint8Array, ip: string, port =
   }
 }
 
+/** Returns true for private LAN IP ranges — cloud servers can never reach these */
+function _isPrivateLanIP(ip: string): boolean {
+  const t = ip.trim();
+  return (
+    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(t) ||
+    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(t) ||
+    /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(t) ||
+    /^169\.254\.\d{1,3}\.\d{1,3}$/.test(t)
+  );
+}
+
 /**
  * Send ESC/POS data to a network printer (LAN/TCP).
- * Strategy: 1) Try QZ Tray (browser-side, works from cloud hosting)
- *            2) Try server-side TCP (only works when server is on same LAN)
+ *
+ * Priority:
+ *   1. QZ Tray — if already connected (set up via printer settings)
+ *   2. Server-side TCP — only for public IPs; skipped for private LAN IPs
+ *      (cloud servers physically cannot reach 192.168.x.x etc.)
+ *   3. Returns failure immediately so the caller can fall back to browser print
+ *
+ * QZ Tray is never auto-loaded here to keep printing fast with no side-effects.
  */
 export async function networkPrint(escData: Uint8Array, ip: string, port: number = 9100): Promise<PrintResult> {
-  // 1. Try QZ Tray first — browser-side, reaches local LAN directly
-  const qzResult = await qzTrayNetworkPrint(escData, ip, port);
-  if (qzResult.success) return qzResult;
-  console.warn('[NetworkPrint] QZ Tray:', qzResult.error, '— trying server-side TCP...');
+  // 1. Use QZ Tray if already connected (no CDN loading during print time)
+  if (_qzConnected && (window as any).qz?.websocket?.isActive()) {
+    const qzResult = await qzTrayNetworkPrint(escData, ip, port);
+    if (qzResult.success) return qzResult;
+    console.warn('[NetworkPrint] QZ Tray failed:', qzResult.error);
+  }
 
-  // 2. Server-side TCP fallback (works if server is on same LAN as printer)
+  // 2. For private LAN IPs: skip server-side TCP entirely (cloud can't reach them)
+  //    This prevents the 3-8 second timeout that freezes the UI
+  if (_isPrivateLanIP(ip)) {
+    console.info(`[NetworkPrint] ${ip} is a private LAN IP — skipping server-side TCP (install QZ Tray for silent LAN printing)`);
+    return { success: false, mode: 'error', error: `طابعة LAN (${ip}) — ثبّت QZ Tray للطباعة الصامتة` };
+  }
+
+  // 3. Server-side TCP — only for public/accessible IPs (local server deployments)
   try {
     const base64Data = btoa(Array.from(escData, b => String.fromCharCode(b)).join(''));
-    const resp = await fetch('/api/print/network', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ip, port, data: base64Data, timeout: 4000 }),
-    });
-    const result = await resp.json();
-    if (!resp.ok || !result.success) {
-      return { success: false, mode: 'error', error: result.error || 'فشلت الطباعة الشبكية' };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    try {
+      const resp = await fetch('/api/print/network', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip, port, data: base64Data, timeout: 3500 }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      const result = await resp.json();
+      if (!resp.ok || !result.success) {
+        return { success: false, mode: 'error', error: result.error || 'فشلت الطباعة الشبكية' };
+      }
+      return { success: true, mode: 'network' as any };
+    } finally {
+      clearTimeout(timer);
     }
-    return { success: true, mode: 'network' as any };
   } catch (err: any) {
-    return { success: false, mode: 'error', error: err.message || 'خطأ في الاتصال بالطابعة' };
+    return { success: false, mode: 'error', error: err.name === 'AbortError' ? 'انتهت مهلة الاتصال' : (err.message || 'خطأ في الاتصال') };
   }
 }
 

@@ -141,17 +141,18 @@ function _printViaIframe(html: string, paperWidth: string, isFullDoc: boolean): 
 
   iframeWin.addEventListener('afterprint', cleanup, { once: true });
 
-  // 250 ms — short enough to feel instant, long enough for fonts
+  // 500 ms — gives enough time for CSS, images, and QR codes to render
+  // Note: do NOT call iframeWin.focus() — it steals focus from the main window
+  //       and can cause the page to appear blank/white while the dialog opens.
   setTimeout(() => {
     try {
-      iframeWin.focus();
       iframeWin.print();
     } catch {
-      // silent — some browsers block print() in iframes without user gesture
+      // Silently ignored — some sandboxed environments block print()
     }
-    // Fallback: if afterprint never fires, clean up after 4 s
-    setTimeout(cleanup, 4000);
-  }, 250);
+    // Fallback: if afterprint never fires, clean up after 6 s
+    setTimeout(cleanup, 6000);
+  }, 500);
 }
 
 function _drainPrintQueue() {
