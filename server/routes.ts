@@ -9388,12 +9388,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return raw;
       };
 
-      const wwdrRaw      = process.env.APPLE_WWDR_PEM;
-      const certRaw      = process.env.APPLE_SIGNER_CERT_PEM;
-      const keyRaw       = process.env.APPLE_SIGNER_KEY_PEM;
-      const passTypeId   = process.env.APPLE_PASS_TYPE_ID;
-      const teamId       = process.env.APPLE_TEAM_ID;
-      const keyPhrase    = process.env.APPLE_KEY_PASSPHRASE;
+      const walletDir = path.join(process.cwd(), "apple-wallet");
+      const readPemFile = (filename: string): string => {
+        try { return fs.readFileSync(path.join(walletDir, filename), "utf8"); } catch { return ""; }
+      };
+
+      const wwdrRaw    = process.env.APPLE_WWDR_PEM      || readPemFile("wwdr.pem");
+      const certRaw    = process.env.APPLE_SIGNER_CERT_PEM || readPemFile("signer_cert.pem");
+      const keyRaw     = process.env.APPLE_SIGNER_KEY_PEM  || readPemFile("signer_key.pem");
+      const passTypeId = process.env.APPLE_PASS_TYPE_ID  || "pass.blackrose.com.sa";
+      const teamId     = process.env.APPLE_TEAM_ID       || "V4K6RM59LS";
+      const keyPhrase  = process.env.APPLE_KEY_PASSPHRASE;
 
       if (!wwdrRaw || !certRaw || !keyRaw || !passTypeId || !teamId) {
         return res.status(503).json({
