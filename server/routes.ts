@@ -12110,9 +12110,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "الموقع مطلوب للتحضير" });
       }
 
-      if (!photoUrl) {
-        return res.status(400).json({ error: "صورة التحضير مطلوبة" });
-      }
+      // photoUrl is optional — check-in is allowed without a photo
 
       // Get employee details
       const employee = await EmployeeModel.findOne({ 
@@ -12258,9 +12256,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "الموقع مطلوب للانصراف" });
       }
 
-      if (!photoUrl) {
-        return res.status(400).json({ error: "صورة الانصراف مطلوبة" });
-      }
+      // photoUrl is optional — check-out is allowed without a photo
 
       // Get employee details
       const employee = await EmployeeModel.findOne({ 
@@ -12645,6 +12641,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const usedLeaves = approvedLeaves.reduce((sum, leave) => sum + (leave.numberOfDays || 0), 0);
       const leaveBalance = Math.max(0, annualLeaves - usedLeaves);
 
+      // Fetch employee shift times for display
+      const { EmployeeModel } = await import("@shared/schema");
+      const empDoc = await EmployeeModel.findOne({ $or: [{ id: employeeId }, { _id: employeeId }] }).lean() as any;
+      const shiftStartTime = empDoc?.shiftStartTime || (empDoc?.shiftTime ? empDoc.shiftTime.split('-')[0] + ':00' : '08:00');
+      const shiftEndTime   = empDoc?.shiftEndTime   || (empDoc?.shiftTime ? empDoc.shiftTime.split('-')[1] + ':00' : '17:00');
+
       res.json({
         hasCheckedIn: !!todayAttendance,
         hasCheckedOut: todayAttendance?.status === 'checked_out',
@@ -12652,7 +12654,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         todayCheckIn: todayAttendance?.checkInTime || null,
         todayCheckOut: todayAttendance?.checkOutTime || null,
         leaveBalance: leaveBalance,
-        totalLeaves: annualLeaves
+        totalLeaves: annualLeaves,
+        shiftStartTime,
+        shiftEndTime,
       });
     } catch (error) {
       res.status(500).json({ error: "فشل جلب حالة الحضور" });
