@@ -50,6 +50,12 @@ export default function PrinterSettingsPanel() {
   const [discovering, setDiscovering] = useState(false);
   const [discoveredPrinters, setDiscoveredPrinters] = useState<{ ip: string; port: number }[]>([]);
   const [discoverProgress, setDiscoverProgress] = useState<string | null>(null);
+  const [subnetHint, setSubnetHint] = useState<string>(() => {
+    // Pre-fill from saved IP if possible: "192.168.8.77" → "192.168.8."
+    const saved = loadPrinterSettings().networkIp || '';
+    const parts = saved.split('.');
+    return parts.length === 4 ? parts.slice(0, 3).join('.') + '.' : '';
+  });
   // Bluetooth state
   const [btConnecting, setBtConnecting] = useState(false);
   const [btTesting, setBtTesting] = useState(false);
@@ -109,8 +115,10 @@ export default function PrinterSettingsPanel() {
     setDiscoveredPrinters([]);
     try {
       const port = settings.networkPort || 9100;
-      setDiscoverProgress(tc(`فحص المنفذ ${port} على الشبكة المحلية — قد يستغرق دقيقة...`, `Scanning port ${port} on local network — may take a minute...`));
-      const found = await discoverNetworkPrinters(port, 300);
+      const hint = subnetHint.trim() || undefined;
+      const scanLabel = hint ? hint + '1-254' : tc("شبكة السيرفر", "server network");
+      setDiscoverProgress(tc(`فحص ${scanLabel} على المنفذ ${port}...`, `Scanning ${scanLabel} on port ${port}...`));
+      const found = await discoverNetworkPrinters(port, 300, hint);
       setDiscoveredPrinters(found);
       if (found.length > 0) {
         toast({
@@ -124,7 +132,13 @@ export default function PrinterSettingsPanel() {
           toast({ title: tc("✅ تم اختيار الطابعة تلقائياً", "✅ Printer auto-selected"), description: found[0].ip });
         }
       } else {
-        toast({ title: tc("لم يُعثر على طابعات", "No Printers Found"), description: tc(`لا توجد أجهزة على المنفذ ${port}. تأكد أن الطابعة متصلة بنفس الشبكة.`, `No devices found on port ${port}. Ensure the printer is on the same network.`), variant: "destructive" });
+        toast({
+          title: tc("لم يُعثر على طابعات", "No Printers Found"),
+          description: hint
+            ? tc(`لا توجد أجهزة على ${hint}1-254:${port}. تحقق من IP الطابعة والمنفذ.`, `No devices found on ${hint}1-254:${port}. Verify the printer IP and port.`)
+            : tc(`لم يُعثر على شيء. جرّب كتابة نطاق الشبكة يدوياً (مثل 192.168.8.) ثم ابحث مجدداً.`, `Nothing found. Try entering the network subnet manually (e.g. 192.168.8.) then search again.`),
+          variant: "destructive",
+        });
       }
     } catch (e: any) {
       toast({ title: tc("خطأ في الاكتشاف", "Discovery Error"), description: e?.message, variant: "destructive" });
@@ -547,6 +561,28 @@ export default function PrinterSettingsPanel() {
                     <Network className="w-4 h-4" />
                     {tc("إعدادات الطابعة الشبكية (ProPos / LAN)", "Network Printer Settings (ProPos / LAN)")}
                   </div>
+                </div>
+
+                {/* Subnet hint input for discovery */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-blue-700">{tc("نطاق الشبكة للبحث (اختياري)", "Network subnet to scan (optional)")}</Label>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      placeholder="192.168.8."
+                      value={subnetHint}
+                      onChange={(e) => setSubnetHint(e.target.value)}
+                      className="font-mono text-sm flex-1"
+                      data-testid="input-subnet-hint"
+                      dir="ltr"
+                    />
+                    <span className="text-xs text-blue-500 whitespace-nowrap">{tc("مثال: 192.168.8.", "e.g. 192.168.8.")}</span>
+                  </div>
+                  <p className="text-xs text-blue-500">
+                    {tc(
+                      "إذا لم يجد البحث شيئاً، أدخل النطاق يدوياً (الأرقام الثلاثة الأولى من IP الطابعة + نقطة)",
+                      "If auto-discover finds nothing, enter the subnet manually (first 3 numbers of printer IP + dot)"
+                    )}
+                  </p>
                 </div>
 
                 {/* Auto-discover button */}

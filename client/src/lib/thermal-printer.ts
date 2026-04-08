@@ -456,7 +456,8 @@ export interface PrintResult {
  */
 export async function networkPrint(escData: Uint8Array, ip: string, port: number = 9100): Promise<PrintResult> {
   try {
-    const base64Data = btoa(String.fromCharCode(...escData));
+    // Safe base64 conversion — avoids stack overflow for large ESC/POS buffers
+    const base64Data = btoa(Array.from(escData, b => String.fromCharCode(b)).join(''));
     const resp = await fetch('/api/print/network', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -475,15 +476,19 @@ export async function networkPrint(escData: Uint8Array, ip: string, port: number
 /**
  * Scan the local network for printers on a given port.
  * Calls the server-side discovery endpoint which probes the full /24 subnet.
+ * @param subnetHint  Optional subnet prefix to scan, e.g. "192.168.8." — overrides
+ *                    the server's auto-detected interface subnets. Useful when the
+ *                    server is on a different subnet than the printer.
  */
 export async function discoverNetworkPrinters(
   port: number = 9100,
   timeoutMs: number = 300,
+  subnetHint?: string,
 ): Promise<{ ip: string; port: number }[]> {
   const resp = await fetch('/api/print/discover', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ port, timeout: timeoutMs }),
+    body: JSON.stringify({ port, timeout: timeoutMs, subnet: subnetHint }),
   });
   if (!resp.ok) throw new Error('فشل طلب الاكتشاف');
   const data = await resp.json();

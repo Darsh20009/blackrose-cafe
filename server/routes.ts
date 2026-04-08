@@ -3910,6 +3910,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await new Promise<void>((resolve, reject) => {
         const socket = new net.Socket();
         let resolved = false;
+        let writeStarted = false;
 
         const cleanup = (err?: Error) => {
           if (resolved) return;
@@ -3919,18 +3920,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           else resolve();
         };
 
-        socket.setTimeout(timeout);
+        socket.setTimeout(Number(timeout));
         socket.on('error', (err) => cleanup(err));
         socket.on('timeout', () => cleanup(new Error(`انتهت مهلة الاتصال بـ ${ip}:${port}`)));
-        socket.on('close', () => cleanup());
+        // Only auto-resolve on close if we haven't started writing yet;
+        // during a write the write-callback (or error) handles resolution.
+        socket.on('close', () => { if (!writeStarted) cleanup(); });
 
         socket.connect(Number(port), ip, () => {
+          writeStarted = true;
           socket.write(printBuffer, (err) => {
             if (err) {
               cleanup(err);
             } else {
-              // Give printer 500ms to process before closing
-              setTimeout(() => cleanup(), 500);
+              // Give printer 800ms to process all data before closing
+              setTimeout(() => cleanup(), 800);
             }
           });
         });
@@ -3982,17 +3986,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const port       = Number(req.body?.port) || 9100;
     const timeoutMs  = Number(req.body?.timeout) || 300; // ms per probe
     const batchSize  = 50; // parallel probes at once
+    const subnetHint: string | undefined = req.body?.subnet; // e.g. "192.168.8."
 
-    // Collect all local IPv4 subnets
+    // Collect subnets to scan:
+    // 1. If caller provided a subnet hint (e.g. "192.168.8."), use that exclusively.
+    // 2. Otherwise fall back to the server's own network interfaces.
     const subnets: string[] = [];
-    const ifaces = os.networkInterfaces();
-    for (const iface of Object.values(ifaces)) {
-      if (!iface) continue;
-      for (const addr of iface) {
-        if (addr.family !== 'IPv4' || addr.internal) continue;
-        // Build subnet prefix, e.g. "192.168.1."
-        const parts = addr.address.split('.');
-        if (parts.length === 4) subnets.push(parts.slice(0, 3).join('.') + '.');
+
+    if (subnetHint && /^\d+\.\d+\.\d+\.$/.test(subnetHint.trim())) {
+      // Caller gave us the subnet — trust it
+      subnets.push(subnetHint.trim());
+    } else {
+      // Detect server's own IPv4 interfaces (excludes loopback)
+      const ifaces = os.networkInterfaces();
+      for (const iface of Object.values(ifaces)) {
+        if (!iface) continue;
+        for (const addr of iface) {
+          if (addr.family !== 'IPv4' || addr.internal) continue;
+          const parts = addr.address.split('.');
+          if (parts.length === 4) subnets.push(parts.slice(0, 3).join('.') + '.');
+        }
       }
     }
 
