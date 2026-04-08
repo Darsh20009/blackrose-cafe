@@ -1,41 +1,19 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Coffee, Gift, QrCode, ChevronRight, TrendingUp,
-  ArrowDownRight, ArrowUpRight, Clock, Star, Crown, Award, Medal,
-  Wallet, Sparkles, CheckCircle2, ChevronDown, ChevronUp, Send, AlertCircle
-} from "lucide-react";
+import { ChevronRight, Coffee, Wallet } from "lucide-react";
 import BlackRoseCard from "@/components/BlackRoseCard";
 import { useCustomer } from "@/contexts/CustomerContext";
 import { useLocation } from "wouter";
 import { CustomerLayout } from "@/components/layouts/CustomerLayout";
-import SarIcon from "@/components/sar-icon";
 import QRCodeLib from "qrcode";
 import { useTranslate } from "@/lib/useTranslate";
 import { useTranslation } from "react-i18next";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-
-function getTierConfig(tier: string, tc: (ar: string, en: string) => string) {
-  const configs = {
-    bronze:   { label: tc("برونزي","Bronze"),   color: "from-amber-600 to-amber-800",  badge: "bg-amber-600",  icon: Medal,  min: 0,    max: 499  },
-    silver:   { label: tc("فضي","Silver"),      color: "from-slate-400 to-slate-600",  badge: "bg-slate-500",  icon: Star,   min: 500,  max: 1999 },
-    gold:     { label: tc("ذهبي","Gold"),       color: "from-yellow-400 to-amber-600", badge: "bg-yellow-500", icon: Crown,  min: 2000, max: 4999 },
-    platinum: { label: tc("بلاتيني","Platinum"), color: "from-gray-300 to-gray-500",   badge: "bg-gray-400",   icon: Award,  min: 5000, max: Infinity },
-  };
-  return configs[tier as keyof typeof configs] || configs.bronze;
-}
-
-function getNextTier(tier: string): string | null {
-  const order = ["bronze", "silver", "gold", "platinum"];
-  const idx = order.indexOf(tier);
-  return idx < order.length - 1 ? order[idx + 1] : null;
-}
+import blackroseLogo from "@assets/blackrose-logo.png";
 
 export default function MyCardPage() {
   const { customer } = useCustomer();
@@ -43,24 +21,17 @@ export default function MyCardPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
-  const [showQr, setShowQr] = useState(false);
   const [addingToWallet, setAddingToWallet] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferPhone, setTransferPhone] = useState("");
   const [transferPoints, setTransferPoints] = useState("");
   const [transferPin, setTransferPin] = useState("");
   const tc = useTranslate();
   const { i18n } = useTranslation();
-  const dir = i18n.language === 'en' ? 'ltr' : 'rtl';
+  const dir = i18n.language === "en" ? "ltr" : "rtl";
 
   const { data: loyaltyCards = [], isLoading: loadingCards } = useQuery<any[]>({
     queryKey: ["/api/customer/loyalty-cards"],
-    enabled: !!customer,
-  });
-
-  const { data: transactions = [], isLoading: loadingTx } = useQuery<any[]>({
-    queryKey: ["/api/customer/loyalty-transactions"],
     enabled: !!customer,
   });
 
@@ -70,42 +41,42 @@ export default function MyCardPage() {
 
   const card = loyaltyCards[0];
   const points = card?.points ?? 0;
-  const tier = card?.tier ?? "bronze";
-  const tierCfg = getTierConfig(tier, tc);
-  const TierIcon = tierCfg.icon;
-  const nextTier = getNextTier(tier);
-  const nextTierCfg = nextTier ? getTierConfig(nextTier, tc) : null;
-
   const pointsValueInSar = settings?.pointsValueInSar ?? 0.02;
-  const sarValue = (points * pointsValueInSar).toFixed(2);
-  const sarValueNum = parseFloat(sarValue);
-  const pointsPerSar = Math.round(1 / pointsValueInSar);
-
-  const progressToNext = nextTierCfg
-    ? Math.min(100, Math.round(((points - tierCfg.min) / (nextTierCfg.min - tierCfg.min)) * 100))
-    : 100;
+  const sarValueNum = parseFloat((points * pointsValueInSar).toFixed(2));
 
   useEffect(() => {
     const qrData = card?.qrToken || card?.cardNumber;
     if (!qrData) return;
     QRCodeLib.toDataURL(qrData, {
-      width: 240, margin: 2,
-      color: { dark: "#1a1a1a", light: "#ffffff" }
-    }).then(setQrCodeUrl).catch(console.error);
+      width: 280,
+      margin: 2,
+      color: { dark: "#111111", light: "#ffffff" },
+    })
+      .then(setQrCodeUrl)
+      .catch(console.error);
   }, [card?.qrToken, card?.cardNumber]);
 
   const transferMutation = useMutation({
     mutationFn: async (data: { recipientPhone: string; points: number; pin?: string }) =>
       apiRequest("POST", "/api/customer/transfer-points", data),
     onSuccess: () => {
-      toast({ title: tc("✅ تم التحويل بنجاح", "✅ Transfer successful"), description: tc(`تم تحويل ${transferPoints} نقطة للمستلم`, `Transferred ${transferPoints} points`) });
+      toast({
+        title: tc("✅ تم التحويل بنجاح", "✅ Transfer successful"),
+        description: tc(
+          `تم تحويل ${transferPoints} نقطة للمستلم`,
+          `Transferred ${transferPoints} points`
+        ),
+      });
       qc.invalidateQueries({ queryKey: ["/api/customer/loyalty-cards"] });
       qc.invalidateQueries({ queryKey: ["/api/customer/loyalty-transactions"] });
-      setTransferPhone(""); setTransferPoints(""); setTransferPin("");
+      setTransferPhone("");
+      setTransferPoints("");
+      setTransferPin("");
       setShowTransfer(false);
     },
     onError: (err: any) => {
-      const msg = err?.message || tc("فشل التحويل، تحقق من البيانات", "Transfer failed, check inputs");
+      const msg =
+        err?.message || tc("فشل التحويل، تحقق من البيانات", "Transfer failed, check inputs");
       toast({ title: tc("خطأ", "Error"), description: msg, variant: "destructive" });
     },
   });
@@ -113,73 +84,76 @@ export default function MyCardPage() {
   const handleTransfer = () => {
     const pts = parseInt(transferPoints);
     if (!transferPhone || !pts || pts <= 0) {
-      toast({ title: tc("خطأ", "Error"), description: tc("أدخل رقم الجوال والنقاط", "Enter phone and points"), variant: "destructive" });
+      toast({
+        title: tc("خطأ", "Error"),
+        description: tc("أدخل رقم الجوال والنقاط", "Enter phone and points"),
+        variant: "destructive",
+      });
       return;
     }
     if (pts > points) {
-      toast({ title: tc("خطأ", "Error"), description: tc("النقاط غير كافية", "Insufficient points"), variant: "destructive" });
+      toast({
+        title: tc("خطأ", "Error"),
+        description: tc("النقاط غير كافية", "Insufficient points"),
+        variant: "destructive",
+      });
       return;
     }
-    transferMutation.mutate({ recipientPhone: transferPhone, points: pts, pin: transferPin || undefined });
+    transferMutation.mutate({
+      recipientPhone: transferPhone,
+      points: pts,
+      pin: transferPin || undefined,
+    });
   };
 
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isIOS =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
   const handleAddToAppleWallet = async () => {
     setAddingToWallet(true);
     try {
       if (isIOS) {
-        // iOS: Navigate directly — Safari intercepts pkpass MIME type and opens Wallet
-        // Session cookie is sent automatically by the browser with this navigation.
-        // We show a toast immediately; if the pass fails, Safari shows its own error.
         toast({
           title: tc("⏳ جارٍ التحضير...", "⏳ Preparing pass..."),
           description: tc("سيفتح Apple Wallet خلال ثوانٍ", "Apple Wallet will open in a few seconds"),
         });
-        // Small delay so toast shows before navigation
-        await new Promise(r => setTimeout(r, 400));
-        window.location.href = '/api/wallet/apple-pass';
+        await new Promise((r) => setTimeout(r, 400));
+        window.location.href = "/api/wallet/apple-pass";
         return;
       }
-
-      // Desktop: Fetch the pkpass, then trigger a download
-      const resp = await fetch('/api/wallet/apple-pass', {
-        method: 'GET',
-        credentials: 'include',
+      const resp = await fetch("/api/wallet/apple-pass", {
+        method: "GET",
+        credentials: "include",
       });
-
-      const contentType = resp.headers.get('content-type') || '';
-      if (!resp.ok || !contentType.includes('pkpass')) {
+      const contentType = resp.headers.get("content-type") || "";
+      if (!resp.ok || !contentType.includes("pkpass")) {
         let errMsg = tc("فشل إنشاء البطاقة", "Failed to generate pass");
-        try { const err = await resp.json(); errMsg = err?.error || errMsg; } catch (_) {}
-
-        if (resp.status === 401) {
-          toast({ title: tc("يرجى تسجيل الدخول", "Please log in"), description: tc("انتهت جلستك، أعد تسجيل الدخول", "Session expired, please log in again"), variant: "destructive" });
-        } else if (resp.status === 503) {
-          toast({ title: tc("Apple Wallet غير مهيأ", "Apple Wallet Not Configured"), description: tc("يجب إعداد شهادات Apple Developer أولاً", "Apple Developer certificates must be configured first"), variant: "destructive" });
-        } else if (resp.status === 404) {
-          toast({ title: tc("بطاقة غير موجودة", "Card Not Found"), description: tc("لم يتم العثور على بطاقة ولاء لحسابك", "No loyalty card found for your account"), variant: "destructive" });
-        } else {
-          toast({ title: tc("خطأ", "Error"), description: errMsg, variant: "destructive" });
-        }
+        try {
+          const err = await resp.json();
+          errMsg = err?.error || errMsg;
+        } catch (_) {}
+        toast({ title: tc("خطأ", "Error"), description: errMsg, variant: "destructive" });
         return;
       }
-
       const blob = await resp.blob();
-      const blobUrl = URL.createObjectURL(new Blob([blob], { type: 'application/vnd.apple.pkpass' }));
-      const a = document.createElement('a');
+      const blobUrl = URL.createObjectURL(
+        new Blob([blob], { type: "application/vnd.apple.pkpass" })
+      );
+      const a = document.createElement("a");
       a.href = blobUrl;
-      a.download = 'blackrose-loyalty.pkpass';
-      a.style.display = 'none';
+      a.download = "blackrose-loyalty.pkpass";
+      a.style.display = "none";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(blobUrl), 8000);
-
       toast({
         title: tc("✅ تم تحميل البطاقة", "✅ Pass Downloaded"),
-        description: tc("افتح ملف .pkpass لإضافته إلى Apple Wallet", "Open the .pkpass file to add it to Apple Wallet"),
+        description: tc(
+          "افتح ملف .pkpass لإضافته إلى Apple Wallet",
+          "Open the .pkpass file to add it to Apple Wallet"
+        ),
       });
     } catch (e: any) {
       toast({
@@ -192,402 +166,313 @@ export default function MyCardPage() {
     }
   };
 
+  /* ── Not logged in ───────────────────────────────────────────── */
   if (!customer) {
     return (
       <CustomerLayout>
-        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 p-8" dir={dir}>
-          <Coffee className="w-16 h-16 text-primary opacity-40" />
-          <p className="text-lg font-bold text-center">{tc("يجب تسجيل الدخول لعرض بطاقة الولاء","Please log in to view your loyalty card")}</p>
-          <Button onClick={() => setLocation("/auth")} data-testid="button-login">{tc("تسجيل الدخول","Log In")}</Button>
+        <div
+          className="flex flex-col items-center justify-center min-h-screen gap-4 p-8"
+          style={{ background: "#0d0d0d" }}
+          dir={dir}
+        >
+          <Coffee className="w-16 h-16 opacity-30" style={{ color: "#C8A53A" }} />
+          <p className="text-lg font-bold text-center text-white/70">
+            {tc("يجب تسجيل الدخول لعرض بطاقة الولاء", "Please log in to view your loyalty card")}
+          </p>
+          <Button
+            onClick={() => setLocation("/auth")}
+            data-testid="button-login"
+            style={{ background: "#C8A53A", color: "#111" }}
+          >
+            {tc("تسجيل الدخول", "Log In")}
+          </Button>
         </div>
       </CustomerLayout>
     );
   }
 
+  /* ── Loading ─────────────────────────────────────────────────── */
   if (loadingCards) {
     return (
       <CustomerLayout>
-        <div className="flex items-center justify-center min-h-[60vh]" dir={dir}>
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm text-muted-foreground">{tc("جاري تحميل بطاقتك...","Loading your card...")}</p>
-          </div>
+        <div
+          className="flex items-center justify-center min-h-screen"
+          style={{ background: "#0d0d0d" }}
+        >
+          <div
+            className="w-10 h-10 border-4 border-t-transparent rounded-full animate-spin"
+            style={{ borderColor: "#C8A53A", borderTopColor: "transparent" }}
+          />
         </div>
       </CustomerLayout>
     );
   }
 
+  /* ── Main card view ──────────────────────────────────────────── */
   return (
     <CustomerLayout>
-      <div className="container max-w-lg mx-auto px-4 py-5 pb-28 space-y-4" dir={dir}>
-
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setLocation("/")} data-testid="button-back">
+      <div
+        className="min-h-screen flex flex-col items-center pb-28"
+        style={{ background: "#0d0d0d" }}
+        dir={dir}
+      >
+        {/* Back button */}
+        <div className="w-full max-w-md px-4 pt-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setLocation("/")}
+            data-testid="button-back"
+            className="text-white/50 hover:text-white hover:bg-white/10"
+          >
             <ChevronRight className="w-5 h-5" />
           </Button>
-          <h1 className="text-xl font-black text-primary">{tc("بطاقة مكافآتي","My Rewards Card")}</h1>
         </div>
 
-        {/* ── Main Loyalty Card — Black Rose Design ─────────────── */}
-        <BlackRoseCard
-          phone={customer?.phone}
-          points={points}
-          sarValue={sarValueNum}
-          customerName={customer?.name || card?.customerName}
-        />
-
-        {/* QR + Apple Wallet buttons */}
-        <div className="flex gap-2">
-          {qrCodeUrl && (
-            <Button
-              variant="outline"
-              className="flex-1 gap-2 border-primary/40"
-              onClick={() => setShowQr(true)}
-              data-testid="button-show-qr"
+        {/* ── Header: name (left) + logo (right) ───────────────── */}
+        <div className="w-full max-w-md px-5 mt-2 mb-5 flex items-center justify-between">
+          {/* Left: label + customer name */}
+          <div dir="rtl">
+            <p
+              style={{
+                color: "#C8A53A",
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: "0.12em",
+                margin: 0,
+                opacity: 0.75,
+              }}
             >
-              <QrCode className="w-4 h-4" />
-              {tc("عرض رمز QR","Show QR Code")}
-            </Button>
-          )}
+              {tc("وفلاء", "LOYAL")}
+            </p>
+            <p
+              style={{
+                color: "#ffffff",
+                fontSize: 20,
+                fontWeight: 800,
+                margin: 0,
+                lineHeight: 1.2,
+              }}
+              data-testid="text-customer-name"
+            >
+              {customer?.name || tc("عزيزي العميل", "Valued Customer")}
+            </p>
+          </div>
 
-          {/* Add to Apple Wallet — Official Badge Style */}
+          {/* Right: Black Rose logo */}
+          <img
+            src={blackroseLogo}
+            alt="Black Rose Cafe"
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 14,
+              objectFit: "cover",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.6)",
+            }}
+          />
+        </div>
+
+        {/* ── The Card (unchanged) ──────────────────────────────── */}
+        <div className="w-full max-w-md px-4">
+          <BlackRoseCard
+            phone={customer?.phone}
+            points={points}
+            sarValue={sarValueNum}
+            customerName={customer?.name || card?.customerName}
+          />
+        </div>
+
+        {/* ── Barcode only ──────────────────────────────────────── */}
+        {qrCodeUrl ? (
+          <div className="mt-8 flex flex-col items-center gap-2" data-testid="barcode-section">
+            <div
+              style={{
+                background: "#ffffff",
+                borderRadius: 20,
+                padding: 14,
+                boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
+              }}
+            >
+              <img
+                src={qrCodeUrl}
+                alt="QR Code"
+                style={{ width: 200, height: 200, display: "block" }}
+                data-testid="img-qr-code"
+              />
+            </div>
+          </div>
+        ) : card ? (
+          /* QR generating spinner */
+          <div className="mt-10 flex items-center gap-3 opacity-40">
+            <div
+              className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin"
+              style={{ borderColor: "#C8A53A", borderTopColor: "transparent" }}
+            />
+          </div>
+        ) : null}
+
+        {/* ── Apple Wallet button (subtle, below barcode) ───────── */}
+        <div className="mt-6 px-4 w-full max-w-md flex flex-col gap-3">
           <button
             onClick={handleAddToAppleWallet}
             disabled={addingToWallet}
             data-testid="button-add-apple-wallet"
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              flex: qrCodeUrl ? '0 0 auto' : '1 1 0',
-              height: 44,
-              paddingLeft: 14,
-              paddingRight: 18,
-              borderRadius: 10,
-              background: addingToWallet ? '#222' : '#000',
-              color: '#fff',
-              border: 'none',
-              cursor: addingToWallet ? 'wait' : 'pointer',
-              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif',
-              whiteSpace: 'nowrap',
-              transition: 'opacity 0.15s',
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              width: "100%",
+              height: 48,
+              borderRadius: 12,
+              background: addingToWallet ? "#222" : "#1a1a1a",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.12)",
+              cursor: addingToWallet ? "wait" : "pointer",
+              fontFamily:
+                '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif',
+              transition: "opacity 0.15s",
               opacity: addingToWallet ? 0.6 : 1,
             }}
           >
             {addingToWallet ? (
-              /* Spinner while loading */
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0, animation: 'spin 1s linear infinite' }}>
-                <circle cx="9" cy="9" r="7" stroke="white" strokeWidth="2" strokeOpacity="0.3"/>
-                <path d="M9 2a7 7 0 0 1 7 7" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 18 18"
+                fill="none"
+                style={{ animation: "spin 1s linear infinite", flexShrink: 0 }}
+              >
+                <circle cx="9" cy="9" r="7" stroke="white" strokeWidth="2" strokeOpacity="0.3" />
+                <path d="M9 2a7 7 0 0 1 7 7" stroke="white" strokeWidth="2" strokeLinecap="round" />
               </svg>
             ) : (
-              /* Apple logo — standard path */
-              <svg width="17" height="20" viewBox="0 0 814 1000" fill="white" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-                <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-37.6-155.5-127.4C46 790.7 0 663 0 541.8c0-207.5 135.4-317.3 268.5-317.3 71 0 130.3 46.4 174.1 46.4 42.8 0 109.7-49.2 192.7-49.2 31 0 108.2 2.6 168.1 80.6zM552.5 80.3c34.3-41.7 57.8-97.3 57.8-152.9 0-5.8-.7-11.7-1.3-17.5-55.2 2-120.2 37-158.6 83.5-33.7 39.5-63.7 94.8-63.7 151.1 0 6.4.7 12.9 1.3 14.9 3.2.7 8.4 1.3 13.6 1.3 49.8 0 109.7-33.1 150.9-80.4z"/>
+              <svg
+                width="16"
+                height="19"
+                viewBox="0 0 814 1000"
+                fill="white"
+                xmlns="http://www.w3.org/2000/svg"
+                style={{ flexShrink: 0 }}
+              >
+                <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-37.6-155.5-127.4C46 790.7 0 663 0 541.8c0-207.5 135.4-317.3 268.5-317.3 71 0 130.3 46.4 174.1 46.4 42.8 0 109.7-49.2 192.7-49.2 31 0 108.2 2.6 168.1 80.6zM552.5 80.3c34.3-41.7 57.8-97.3 57.8-152.9 0-5.8-.7-11.7-1.3-17.5-55.2 2-120.2 37-158.6 83.5-33.7 39.5-63.7 94.8-63.7 151.1 0 6.4.7 12.9 1.3 14.9 3.2.7 8.4 1.3 13.6 1.3 49.8 0 109.7-33.1 150.9-80.4z" />
               </svg>
             )}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.1 }}>
+            <div
+              style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.1 }}
+            >
               {!addingToWallet && (
-                <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>
+                <span style={{ fontSize: 9, fontWeight: 400, opacity: 0.7 }}>
                   {tc("أضف إلى", "Add to")}
                 </span>
               )}
-              <span style={{ fontSize: addingToWallet ? 13 : 17, fontWeight: 600, letterSpacing: '-0.3px' }}>
+              <span style={{ fontSize: addingToWallet ? 13 : 16, fontWeight: 600, letterSpacing: "-0.3px" }}>
                 {addingToWallet ? tc("جارٍ التحضير...", "Preparing...") : "Apple Wallet"}
               </span>
             </div>
           </button>
-        </div>
 
-        {/* ── SAR BALANCE BOX ─────────────────────────────────────── */}
-        <div className="bg-gradient-to-br from-primary/10 to-primary/5 border-2 border-primary/30 rounded-2xl p-5 space-y-3" data-testid="sar-balance-card">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 bg-primary/20 rounded-xl flex items-center justify-center">
-              <Wallet className="w-5 h-5 text-primary" />
-            </div>
+          {/* Transfer Points — compact link */}
+          {points > 0 && (
             <div>
-              <p className="font-black text-base text-foreground">{tc("رصيدك بالريال","Balance in SAR")}</p>
-              <p className="text-xs text-muted-foreground">{tc("يُخصم مباشرةً من فاتورتك","Deducted directly from your bill")}</p>
-            </div>
-          </div>
-
-          <div className="bg-background rounded-xl p-4 text-center shadow-sm">
-            <p className="text-xs text-muted-foreground mb-1">{tc("رصيدك الحالي يساوي","Your balance equals")}</p>
-            <p className="text-5xl font-black text-primary" data-testid="text-sar-value">
-              {sarValue}
-              <span className="text-2xl mr-1">{tc("ريال","SAR")}</span>
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              {points.toLocaleString()} {tc("نقطة","pts")} × {pointsValueInSar} = <strong>{sarValue} {tc("ريال","SAR")}</strong>
-            </p>
-          </div>
-
-          {sarValueNum > 0 && (
-            <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-green-700 dark:text-green-400 font-medium">
-                {tc(
-                  `يمكنك خصم حتى ${sarValue} ريال من طلبك القادم — أبلغ الكاشير أو أعرض QR`,
-                  `You can deduct up to ${sarValue} SAR from your next order — tell the cashier or show QR`
-                )}
-              </p>
-            </div>
-          )}
-
-          <div className="bg-muted/50 rounded-xl p-3 text-xs text-muted-foreground space-y-1">
-            <p className="font-semibold text-foreground text-sm">{tc("كيف أستخدم رصيدي؟","How to use my balance?")}</p>
-            <p>• {tc("عند الدفع أخبر الكاشير باسمك أو رقم جوالك","At checkout tell the cashier your name or phone number")}</p>
-            <p>• {tc("أو أعرض رمز QR ليخصم الكاشير تلقائياً","Or show QR code for automatic deduction")}</p>
-            <p>• {tc("50 نقطة = 1 ريال خصم","50 pts = 1 SAR discount")}</p>
-            <p>• {tc("الحد الأدنى للصرف 100 نقطة","Minimum 100 points to redeem")}</p>
-          </div>
-        </div>
-
-        {/* ── TRANSFER TO FRIEND ─────────────────────────────────── */}
-        <div className="bg-card border rounded-2xl p-5 space-y-3" data-testid="transfer-section">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 bg-blue-100 dark:bg-blue-900/40 rounded-xl flex items-center justify-center">
-                <Send className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="font-black text-base">{tc("تحويل نقاط لصديق","Transfer Points to Friend")}</p>
-                <p className="text-xs text-muted-foreground">{tc("أهدِ نقاطك لأي شخص","Gift your points to anyone")}</p>
-              </div>
-            </div>
-            <Badge variant="secondary" className="text-xs">{points.toLocaleString()} {tc("نقطة","pts")}</Badge>
-          </div>
-
-          {!showTransfer ? (
-            <Button
-              variant="outline"
-              className="w-full border-blue-200 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30"
-              onClick={() => setShowTransfer(true)}
-              disabled={points <= 0}
-              data-testid="button-open-transfer"
-            >
-              <Send className="w-4 h-4 ml-2" />
-              {tc("تحويل نقاط","Transfer Points")}
-            </Button>
-          ) : (
-            <div className="space-y-3 border border-blue-100 dark:border-blue-900/50 rounded-xl p-4 bg-blue-50/50 dark:bg-blue-950/20">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold">{tc("رقم جوال المستلم","Recipient's Phone Number")}</Label>
-                <Input
-                  placeholder="05xxxxxxxx"
-                  value={transferPhone}
-                  onChange={e => setTransferPhone(e.target.value)}
-                  dir="ltr"
-                  className="bg-background"
-                  data-testid="input-transfer-phone"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold">{tc("عدد النقاط للتحويل","Points to Transfer")}</Label>
-                <Input
-                  type="number"
-                  placeholder={tc("أدخل عدد النقاط","Enter number of points")}
-                  value={transferPoints}
-                  onChange={e => setTransferPoints(e.target.value)}
-                  min={1}
-                  max={points}
-                  className="bg-background"
-                  data-testid="input-transfer-points"
-                />
-                {transferPoints && parseInt(transferPoints) > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    ≈ {(parseInt(transferPoints) * pointsValueInSar).toFixed(2)} {tc("ريال","SAR")}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold">{tc("كلمة المرور (للتأكيد)","Password (for confirmation)")}</Label>
-                <Input
-                  type="password"
-                  placeholder={tc("كلمة المرور","Password")}
-                  value={transferPin}
-                  onChange={e => setTransferPin(e.target.value)}
-                  className="bg-background"
-                  data-testid="input-transfer-pin"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  className="flex-1"
-                  onClick={handleTransfer}
-                  disabled={transferMutation.isPending || !transferPhone || !transferPoints}
-                  data-testid="button-confirm-transfer"
+              {!showTransfer ? (
+                <button
+                  onClick={() => setShowTransfer(true)}
+                  data-testid="button-open-transfer"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "rgba(200,165,58,0.6)",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    width: "100%",
+                    textAlign: "center",
+                    padding: "6px 0",
+                  }}
                 >
-                  {transferMutation.isPending ? tc("جاري التحويل...","Transferring...") : tc("تأكيد التحويل","Confirm Transfer")}
-                </Button>
-                <Button variant="outline" onClick={() => setShowTransfer(false)} data-testid="button-cancel-transfer">
-                  {tc("إلغاء","Cancel")}
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── HOW TO EARN ─────────────────────────────────────────── */}
-        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Gift className="w-5 h-5 text-amber-600" />
-            <span className="font-bold text-amber-900 dark:text-amber-200">{tc("كيف أكسب نقاطاً؟","How to earn points?")}</span>
-          </div>
-          <div className="grid grid-cols-1 gap-1.5 text-sm text-amber-800 dark:text-amber-300">
-            <div className="flex items-start gap-1.5">
-              <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" />
-              <span>{tc("كل مشروب بسعر فوق ريال = 10 نقاط تُضاف لرصيدك","Every drink over 1 SAR earns 10 points")}</span>
-            </div>
-            <div className="flex items-start gap-1.5">
-              <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" />
-              <span>{tc("50 نقطة = 1 ريال خصم على طلبك","50 points = 1 SAR discount on your order")}</span>
-            </div>
-            <div className="flex items-start gap-1.5">
-              <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" />
-              <span>{tc("تحتاج 100 نقطة على الأقل لبدء صرف النقاط","Minimum 100 points required to start redeeming")}</span>
-            </div>
-            <div className="flex items-start gap-1.5">
-              <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" />
-              <span>{tc("حوّل نقاطك لأصدقائك مجاناً","Transfer your points to friends for free")}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* ── TIER PROGRESS ───────────────────────────────────────── */}
-        {nextTierCfg && (
-          <div className="bg-card rounded-2xl border p-4 space-y-3" data-testid="tier-progress">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-primary" />
-              <span className="font-bold">{tc(`التقدم نحو ${nextTierCfg.label}`,`Progress to ${nextTierCfg.label}`)}</span>
-            </div>
-            <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
-              <div
-                className={`h-full rounded-full bg-gradient-to-r ${tierCfg.color} transition-all`}
-                style={{ width: `${progressToNext}%` }}
-                data-testid="tier-progress-bar"
-              />
-            </div>
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{tierCfg.label}</span>
-              <span>{progressToNext}%</span>
-              <span>{nextTierCfg.label}</span>
-            </div>
-            <p className="text-xs text-muted-foreground text-center">
-              {tc(
-                `تحتاج ${Math.max(0, nextTierCfg.min - points).toLocaleString()} نقطة للوصول إلى ${nextTierCfg.label}`,
-                `You need ${Math.max(0, nextTierCfg.min - points).toLocaleString()} more points to reach ${nextTierCfg.label}`
-              )}
-            </p>
-          </div>
-        )}
-
-        {/* ── TRANSACTION HISTORY (collapsible) ──────────────────── */}
-        <div className="bg-card rounded-2xl border" data-testid="transactions-section">
-          <button
-            className="w-full flex items-center justify-between p-4"
-            onClick={() => setShowHistory(v => !v)}
-            data-testid="button-toggle-history"
-          >
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-muted-foreground" />
-              <span className="font-bold">{tc("سجل العمليات","Transaction History")}</span>
-            </div>
-            {showHistory ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-          </button>
-
-          {showHistory && (
-            <div className="px-4 pb-4 space-y-2">
-              {loadingTx ? (
-                <p className="text-center py-6 text-muted-foreground text-sm">{tc("جاري التحميل...","Loading...")}</p>
-              ) : transactions.length === 0 ? (
-                <div className="text-center py-6 space-y-2">
-                  <Clock className="w-10 h-10 mx-auto text-muted-foreground opacity-30" />
-                  <p className="text-sm text-muted-foreground">{tc("لا توجد عمليات سابقة","No transactions yet")}</p>
-                </div>
+                  {tc("تحويل نقاط لصديق", "Transfer points to a friend")}
+                </button>
               ) : (
-                transactions.slice(0, 20).map((tx: any, i: number) => {
-                  const isEarn = tx.type === 'earn' || tx.type === 'transfer_in' || tx.type === 'points_earned';
-                  const isTransfer = tx.type === 'transfer_out' || tx.type === 'transfer_in';
-                  const pts = Math.abs(tx.points || tx.pointsChange || 0);
-                  const sarEq = pts > 0 ? (pts * pointsValueInSar).toFixed(2) : null;
-                  return (
-                    <div
-                      key={tx.id || i}
-                      className="flex items-center justify-between bg-muted/50 rounded-xl px-3 py-2.5"
-                      data-testid={`transaction-${i}`}
+                <div
+                  style={{
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 14,
+                    padding: 16,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                >
+                  <div className="space-y-1">
+                    <Label className="text-white/70 text-sm">
+                      {tc("رقم جوال المستلم", "Recipient's Phone")}
+                    </Label>
+                    <Input
+                      placeholder="05xxxxxxxx"
+                      value={transferPhone}
+                      onChange={(e) => setTransferPhone(e.target.value)}
+                      dir="ltr"
+                      className="bg-white/10 border-white/10 text-white placeholder:text-white/30"
+                      data-testid="input-transfer-phone"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-white/70 text-sm">
+                      {tc("عدد النقاط", "Points")}
+                    </Label>
+                    <Input
+                      type="number"
+                      placeholder={tc("أدخل عدد النقاط", "Enter points")}
+                      value={transferPoints}
+                      onChange={(e) => setTransferPoints(e.target.value)}
+                      min={1}
+                      max={points}
+                      className="bg-white/10 border-white/10 text-white placeholder:text-white/30"
+                      data-testid="input-transfer-points"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-white/70 text-sm">
+                      {tc("كلمة المرور للتأكيد", "Password")}
+                    </Label>
+                    <Input
+                      type="password"
+                      placeholder={tc("كلمة المرور", "Password")}
+                      value={transferPin}
+                      onChange={(e) => setTransferPin(e.target.value)}
+                      className="bg-white/10 border-white/10 text-white placeholder:text-white/30"
+                      data-testid="input-transfer-pin"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1"
+                      style={{ background: "#C8A53A", color: "#111" }}
+                      onClick={handleTransfer}
+                      disabled={transferMutation.isPending || !transferPhone || !transferPoints}
+                      data-testid="button-confirm-transfer"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                          isEarn ? "bg-green-100 text-green-600 dark:bg-green-900/30" : "bg-red-100 text-red-600 dark:bg-red-900/30"
-                        }`}>
-                          {isTransfer
-                            ? <Send className="w-3.5 h-3.5" />
-                            : isEarn
-                              ? <ArrowDownRight className="w-4 h-4" />
-                              : <ArrowUpRight className="w-4 h-4" />
-                          }
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">
-                            {tx.descriptionAr || tx.description || (isEarn ? tc("نقاط مكتسبة","Points Earned") : tc("استرداد خصم","Discount Redeemed"))}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString(i18n.language === 'en' ? 'en-US' : "ar-SA") : ""}
-                            {sarEq && ` • ${sarEq} ${tc("ريال","SAR")}`}
-                          </p>
-                        </div>
-                      </div>
-                      {pts > 0 && (
-                        <span className={`font-bold text-sm ${isEarn ? "text-green-600" : "text-red-600"}`}>
-                          {isEarn ? "+" : "-"}{pts.toLocaleString()}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })
+                      {transferMutation.isPending
+                        ? tc("جاري التحويل...", "Transferring...")
+                        : tc("تأكيد التحويل", "Confirm")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="border-white/10 text-white/60 hover:bg-white/10"
+                      onClick={() => setShowTransfer(false)}
+                      data-testid="button-cancel-transfer"
+                    >
+                      {tc("إلغاء", "Cancel")}
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
           )}
         </div>
       </div>
-
-      {/* ── QR Code Dialog ──────────────────────────────────────── */}
-      <Dialog open={showQr} onOpenChange={setShowQr}>
-        <DialogContent className="max-w-xs text-center" dir={dir} data-testid="dialog-qr">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-center gap-2">
-              <QrCode className="w-5 h-5" />
-              {tc("رمز بطاقتي","My Card QR")}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col items-center py-4 gap-4">
-            <p className="text-sm text-muted-foreground">
-              {tc("اعرض هذا الرمز للكاشير لكسب النقاط أو خصم رصيدك","Show to cashier to earn points or deduct balance")}
-            </p>
-            {qrCodeUrl && (
-              <div className="bg-white p-3 rounded-2xl shadow-lg">
-                <img src={qrCodeUrl} alt="QR Code" className="w-52 h-52" data-testid="img-qr" />
-              </div>
-            )}
-            {sarValueNum > 0 && (
-              <div className="bg-primary/10 border border-primary/30 rounded-xl p-3 w-full">
-                <p className="font-bold text-primary text-sm text-center">
-                  {tc(`💰 رصيدك: ${points.toLocaleString()} نقطة = ${sarValue} ريال خصم`,`💰 Balance: ${points.toLocaleString()} pts = ${sarValue} SAR off`)}
-                </p>
-              </div>
-            )}
-            <p className="font-mono text-xs text-muted-foreground" data-testid="text-card-num-qr">
-              {card?.cardNumber || ""}
-            </p>
-          </div>
-          <Button variant="outline" onClick={() => setShowQr(false)} className="w-full" data-testid="button-close-qr">
-            {tc("إغلاق","Close")}
-          </Button>
-        </DialogContent>
-      </Dialog>
     </CustomerLayout>
   );
 }
