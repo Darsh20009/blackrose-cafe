@@ -415,15 +415,17 @@ export default function PrinterSettingsPanel() {
 
           {/* Network printer status */}
           {isNetworkMode && settings.networkIp && networkStatus && (
-            <div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 border ${networkStatus.connected ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-              <Network className={`w-4 h-4 ${networkStatus.connected ? 'text-green-600' : 'text-red-500'}`} />
-              <span className={`flex-1 font-medium ${networkStatus.connected ? 'text-green-800' : 'text-red-700'}`}>
-                {networkStatus.message}
-              </span>
-              {networkStatus.connected
-                ? <CheckCircle2 className="w-4 h-4 text-green-600" />
-                : <XCircle className="w-4 h-4 text-red-500" />
-              }
+            <div className={`text-sm rounded-lg px-3 py-2 border ${networkStatus.connected ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+              <div className="flex items-start gap-2">
+                <Network className={`w-4 h-4 mt-0.5 flex-shrink-0 ${networkStatus.connected ? 'text-green-600' : 'text-amber-600'}`} />
+                <span className={`flex-1 font-medium whitespace-pre-line leading-relaxed ${networkStatus.connected ? 'text-green-800' : 'text-amber-800'}`}>
+                  {networkStatus.message}
+                </span>
+                {networkStatus.connected
+                  ? <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  : <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                }
+              </div>
             </div>
           )}
 
@@ -688,45 +690,63 @@ export default function PrinterSettingsPanel() {
                   )}
                 </p>
 
-                {/* QZ Tray status */}
+                {/* QZ Tray status + setup guide */}
                 <div className={`rounded-lg border p-3 text-sm space-y-2 ${
-                  qzStatus === 'available'
-                    ? 'bg-green-50 border-green-200'
-                    : qzStatus === 'unavailable'
-                      ? 'bg-amber-50 border-amber-200'
-                      : 'bg-gray-50 border-gray-200'
+                  qzStatus === 'available' ? 'bg-green-50 border-green-300' : 'bg-orange-50 border-orange-300'
                 }`}>
-                  <div className="flex items-center gap-2 font-semibold">
-                    {qzStatus === 'available' ? (
-                      <><CheckCircle2 className="w-4 h-4 text-green-600" /><span className="text-green-800">{tc("QZ Tray مثبت ويعمل ✓", "QZ Tray installed & running ✓")}</span></>
-                    ) : qzStatus === 'unavailable' ? (
-                      <><AlertCircle className="w-4 h-4 text-amber-600" /><span className="text-amber-800">{tc("QZ Tray غير مكتشف", "QZ Tray not detected")}</span></>
-                    ) : qzStatus === 'checking' ? (
-                      <><RefreshCw className="w-4 h-4 animate-spin text-gray-500" /><span className="text-gray-600">{tc("جارٍ التحقق من QZ Tray...", "Checking QZ Tray...")}</span></>
-                    ) : (
-                      <><Network className="w-4 h-4 text-blue-500" /><span className="text-blue-700">QZ Tray</span></>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold">
+                      {qzStatus === 'available' ? (
+                        <><CheckCircle2 className="w-5 h-5 text-green-600" /><span className="text-green-800">{tc("QZ Tray جاهز ✓", "QZ Tray Ready ✓")}</span></>
+                      ) : qzStatus === 'checking' ? (
+                        <><RefreshCw className="w-4 h-4 animate-spin text-gray-500" /><span className="text-gray-600">{tc("جارٍ التحقق...", "Checking...")}</span></>
+                      ) : (
+                        <><AlertCircle className="w-5 h-5 text-orange-600" /><span className="text-orange-800">{tc("QZ Tray مطلوب للطباعة LAN", "QZ Tray Required for LAN")}</span></>
+                      )}
+                    </div>
+                    {qzStatus !== 'checking' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs border-gray-300"
+                        onClick={() => {
+                          setQzStatus('checking');
+                          isQZTrayAvailable().then(ok => setQzStatus(ok ? 'available' : 'unavailable'));
+                        }}
+                      >
+                        <RefreshCw className="w-3 h-3 ml-1" />
+                        {tc("إعادة الفحص", "Recheck")}
+                      </Button>
                     )}
                   </div>
-                  {qzStatus === 'unavailable' && (
-                    <div className="text-xs text-amber-700 space-y-1">
-                      <p>{tc("لربط الطابعة الشبكية (LAN) مباشرةً من المتصفح، يجب تثبيت QZ Tray على الجهاز.", "To print to a LAN printer directly from the browser, install QZ Tray on this machine.")}</p>
+
+                  {qzStatus === 'available' && (
+                    <p className="text-xs text-green-700 font-medium">
+                      {tc("الطابعة ستطبع مباشرةً بدون نوافذ — الطباعة الصامتة مفعّلة.", "Printer will receive jobs silently — no dialog boxes.")}
+                    </p>
+                  )}
+
+                  {(qzStatus === 'unavailable' || qzStatus === null) && (
+                    <div className="space-y-2 text-xs text-orange-800">
+                      <p className="font-semibold">{tc("⚠️ السيرفر السحابي لا يصل للطابعة المحلية. الحل:", "⚠️ Cloud server can't reach local printer. Fix:")}</p>
+                      <ol className="space-y-1 pr-3 list-decimal list-inside text-orange-700">
+                        <li>{tc("حمّل QZ Tray على جهاز الكاشير", "Download QZ Tray on the cashier machine")}</li>
+                        <li>{tc("ثبّته وشغّله (يعمل في الخلفية)", "Install & run it (runs in background)")}</li>
+                        <li>{tc("في أول تشغيل: اقبل طلب السماح في النافذة", "On first run: accept the permission dialog")}</li>
+                        <li>{tc('اضغط "إعادة الفحص" هنا', 'Click "Recheck" here')}</li>
+                      </ol>
                       <a
                         href="https://qz.io/download/"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-blue-600 underline font-medium hover:text-blue-800"
+                        className="inline-flex items-center gap-1.5 mt-1 px-3 py-1.5 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700 transition-colors"
                       >
-                        {tc("تحميل QZ Tray (مجاني)", "Download QZ Tray (Free)")} ↗
+                        {tc("⬇ تحميل QZ Tray مجاناً", "⬇ Download QZ Tray (Free)")}
                       </a>
-                      <p className="text-amber-600 text-xs mt-1">
-                        {tc("بدون QZ Tray: الطباعة ستعمل عبر نافذة المتصفح (dialog).", "Without QZ Tray: printing will use the browser dialog instead.")}
+                      <p className="text-orange-600 pt-1 border-t border-orange-200">
+                        {tc("بدون QZ Tray: الطباعة ستعمل عبر نافذة المتصفح (dialog) مؤقتاً.", "Without QZ Tray: printing falls back to browser dialog temporarily.")}
                       </p>
                     </div>
-                  )}
-                  {qzStatus === 'available' && (
-                    <p className="text-xs text-green-700">
-                      {tc("الطباعة ستتم مباشرة للطابعة بدون نوافذ.", "Printing will go directly to the printer — no dialogs.")}
-                    </p>
                   )}
                 </div>
               </div>

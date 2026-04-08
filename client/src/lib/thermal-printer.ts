@@ -577,19 +577,49 @@ export async function discoverNetworkPrinters(
 }
 
 /**
- * Test network printer connectivity (TCP ping).
+ * Test network printer connectivity.
+ * 1. Try QZ Tray first (browser-side — works for local LAN printers)
+ * 2. Fall back to server-side TCP test (only succeeds if server is on same LAN)
  */
 export async function testNetworkPrinter(ip: string, port: number = 9100): Promise<{ connected: boolean; message: string }> {
+  // 1. QZ Tray path — browser connects directly to the LAN printer
+  try {
+    const qz = await _connectQZ(4000);
+    const config = qz.configs.create({ host: ip, port: { primary: port } });
+    // ESC INIT (0x1B 0x40) — safe no-op reset, just tests TCP reachability
+    const initCmd = btoa(String.fromCharCode(0x1B, 0x40));
+    await qz.print(config, [{ type: 'raw', format: 'base64', data: initCmd }]);
+    return { connected: true, message: `✅ الطابعة ${ip}:${port} تعمل — تم الاتصال عبر QZ Tray` };
+  } catch (qzErr: any) {
+    const msg: string = qzErr?.message ?? '';
+    // If QZ Tray connected but the printer itself rejected the connection
+    if (!msg.includes('timeout') && !msg.includes('WebSocket') && !msg.includes('QZ script') && !msg.includes('qz not found') && !msg.includes('QZ Tray') && !msg.includes('load')) {
+      return { connected: false, message: `❌ QZ Tray متصل لكن الطابعة ${ip}:${port} لا تستجيب — تحقق من IP والمنفذ` };
+    }
+    // QZ Tray not installed or not running — fall through to server-side test
+  }
+
+  // 2. Server-side TCP test (fails if server is cloud-hosted)
   try {
     const resp = await fetch('/api/print/network-test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ip, port }),
+      body: JSON.stringify({ ip, port, timeout: 4000 }),
     });
     const result = await resp.json();
-    return { connected: !!result.connected, message: result.message || result.error || '' };
+    if (result.connected) {
+      return { connected: true, message: result.message || `✅ الطابعة ${ip}:${port} متاحة` };
+    }
+    // Server couldn't reach the printer — explain why
+    return {
+      connected: false,
+      message: `⚠️ السيرفر لا يصل للطابعة المحلية (${ip}:${port}).\nالحل: ثبّت برنامج QZ Tray على جهاز الكاشير ليتصل المتصفح بالطابعة مباشرةً.`,
+    };
   } catch {
-    return { connected: false, message: 'فشل الاتصال بالخادم' };
+    return {
+      connected: false,
+      message: `⚠️ لا يمكن الاتصال بـ ${ip}:${port}.\nالسيرفر السحابي لا يصل للطابعة المحلية. ثبّت QZ Tray على جهاز الكاشير.`,
+    };
   }
 }
 
