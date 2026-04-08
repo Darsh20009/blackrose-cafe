@@ -16,6 +16,7 @@ import { GlobalPrompts } from "@/components/global-prompts";
 import { PWAInstallBanner } from "@/components/pwa-install";
 import { OfflineIndicator } from "@/components/offline-indicator";
 import { CustomerNotificationListener } from "@/components/customer-notification-listener";
+import { useProximityNotify } from "@/hooks/useProximityNotify";
 
 const CartModal = lazy(() => import("@/components/cart-modal"));
 const CheckoutModal = lazy(() => import("@/components/checkout-modal"));
@@ -374,6 +375,9 @@ function AppContent() {
   const cartStore = useCartStore();
   const isCartOpen = cartStore?.isCartOpen;
   const isCheckoutOpen = cartStore?.isCheckoutOpen;
+
+  // Proximity-based push notification (fires when customer is within 100 m of a branch)
+  useProximityNotify();
 
   return (
     <>

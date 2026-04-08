@@ -10230,6 +10230,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── Proximity Notification ──────────────────────────────────────────────
+  // In-memory cooldown: prevents duplicate push per customer/device within 1 hour
+  const proximityRecentlyNotified = new Map<string, number>();
+  const PROXIMITY_COOLDOWN_MS = 60 * 60 * 1000;
+
+  app.post("/api/customer/proximity-notify", async (req, res) => {
+    try {
+      const { lat, lng, customerId, subscriptionEndpoint } = req.body;
+      if (typeof lat !== "number" || typeof lng !== "number") {
+        return res.status(400).json({ error: "Location required" });
+      }
+
+      // Rate-limit key: prefer customerId, fall back to endpoint
+      const rateLimitKey = customerId || subscriptionEndpoint || "anon";
+      const lastSent = proximityRecentlyNotified.get(rateLimitKey) || 0;
+      if (Date.now() - lastSent < PROXIMITY_COOLDOWN_MS) {
+        return res.json({ triggered: false, reason: "cooldown" });
+      }
+
+      // Haversine distance (meters)
+      const haversineM = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+        const R = 6371e3;
+        const φ1 = (lat1 * Math.PI) / 180;
+        const φ2 = (lat2 * Math.PI) / 180;
+        const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+        const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+        const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      };
+
+      // Load all branches
+      const { BranchModel } = await import("@shared/schema");
+      const branches = await BranchModel.find({}).lean();
+
+      const RADIUS_M = 100;
+      let nearestBranch: any = null;
+      let nearestDist = Infinity;
+
+      for (const branch of branches) {
+        if (!branch.location?.lat || !branch.location?.lng) continue;
+        const dist = haversineM(lat, lng, branch.location.lat, branch.location.lng);
+        if (dist <= RADIUS_M && dist < nearestDist) {
+          nearestDist = dist;
+          nearestBranch = branch;
+        }
+      }
+
+      if (!nearestBranch) {
+        return res.json({ triggered: false, reason: "no_nearby_branch" });
+      }
+
+      const branchName: string =
+        (nearestBranch as any).nameAr || (nearestBranch as any).name || "فرعنا";
+      const distRounded = Math.round(nearestDist);
+
+      const pushPayload = {
+        title: "☕ لا تفوتك قهوتنا!",
+        body: `أنت على بُعد ${distRounded} متر من ${branchName} — تعال واستمتع بأفضل القهوة 🌹`,
+        url: "/menu",
+        tag: `proximity-${String((nearestBranch as any)._id || "br")}`,
+        type: "promo" as const,
+        image: "/icons/icon-192x192.png",
+      };
+
+      const { PushSubscriptionModel, sendPushBySubscriptions } = await import("./push-service");
+
+      let subs: any[] = [];
+
+      // 1) Try by customer ID
+      if (customerId) {
+        subs = await PushSubscriptionModel.find({ userId: customerId, userType: "customer" });
+      }
+
+      // 2) Try by subscription endpoint as fallback
+      if (subs.length === 0 && subscriptionEndpoint) {
+        const sub = await PushSubscriptionModel.findOne({ endpoint: subscriptionEndpoint });
+        if (sub) subs = [sub];
+      }
+
+      let notificationSent = false;
+      if (subs.length > 0) {
+        await sendPushBySubscriptions(subs, pushPayload);
+        notificationSent = true;
+        proximityRecentlyNotified.set(rateLimitKey, Date.now());
+        console.log(`[PROXIMITY] ✅ Sent to ${subs.length} subscription(s) — ${branchName} ~${distRounded}m`);
+      } else {
+        console.log(`[PROXIMITY] No push subscriptions found for key=${rateLimitKey}`);
+      }
+
+      return res.json({
+        triggered: true,
+        branchName,
+        distance: distRounded,
+        notificationSent,
+      });
+    } catch (err) {
+      console.error("[PROXIMITY] Error:", err);
+      return res.status(500).json({ error: "Internal error" });
+    }
+  });
+
   app.post("/api/branches", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { insertBranchSchema, BranchModel } = await import("@shared/schema");
