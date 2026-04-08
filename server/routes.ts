@@ -9373,6 +9373,148 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Apple Wallet PKPass generator for loyalty card ─────────────────────────
+  app.get("/api/wallet/apple-pass", requireCustomerAuth, async (req: CustomerAuthRequest, res) => {
+    try {
+      const fs   = await import('fs');
+      const path = await import('path');
+
+      // Decode base64 env var if needed
+      const decodePem = (raw: string): string => {
+        try {
+          const decoded = Buffer.from(raw, 'base64').toString('utf8');
+          if (decoded.includes('-----BEGIN')) return decoded;
+        } catch {}
+        return raw;
+      };
+
+      const wwdrRaw      = process.env.APPLE_WWDR_PEM;
+      const certRaw      = process.env.APPLE_SIGNER_CERT_PEM;
+      const keyRaw       = process.env.APPLE_SIGNER_KEY_PEM;
+      const passTypeId   = process.env.APPLE_PASS_TYPE_ID;
+      const teamId       = process.env.APPLE_TEAM_ID;
+      const keyPhrase    = process.env.APPLE_KEY_PASSPHRASE;
+
+      if (!wwdrRaw || !certRaw || !keyRaw || !passTypeId || !teamId) {
+        return res.status(503).json({
+          error: "Apple Wallet غير مهيأ",
+          message: "يجب إعداد شهادات Apple Developer أولاً في إعدادات المتغيرات البيئية",
+          setup: {
+            required: ["APPLE_WWDR_PEM", "APPLE_SIGNER_CERT_PEM", "APPLE_SIGNER_KEY_PEM", "APPLE_PASS_TYPE_ID", "APPLE_TEAM_ID"],
+            optional: ["APPLE_KEY_PASSPHRASE"],
+            docs: "https://developer.apple.com/documentation/walletpasses",
+          }
+        });
+      }
+
+      const customerPhone = req.customer?.phone;
+      if (!customerPhone) return res.status(401).json({ error: "يرجى تسجيل الدخول" });
+
+      const cleanPhone = customerPhone.replace(/\D/g, '').slice(-9);
+      const loyaltyCard = await storage.getLoyaltyCardByPhone(cleanPhone);
+      if (!loyaltyCard) return res.status(404).json({ error: "لم يتم العثور على بطاقة الولاء" });
+
+      const points          = Number(loyaltyCard.points) || 0;
+      const sarValue        = (points * 0.02).toFixed(2);
+      const tier            = (loyaltyCard as any).tier || "bronze";
+      const tierLabels: Record<string, string> = {
+        bronze: "برونزي", silver: "فضي", gold: "ذهبي", platinum: "بلاتيني"
+      };
+      const customerName = req.customer?.name || loyaltyCard.customerName || "عميل";
+      const qrValue      = loyaltyCard.qrToken || loyaltyCard.cardNumber || cleanPhone;
+
+      const passJson = {
+        formatVersion: 1,
+        passTypeIdentifier: passTypeId,
+        serialNumber: `BLACKROSE-${cleanPhone}`,
+        teamIdentifier: teamId,
+        organizationName: "Black Rose Cafe",
+        description: "Black Rose Cafe - بطاقة الولاء",
+        logoText: "BLACK ROSE",
+        backgroundColor: "rgb(17, 17, 17)",
+        foregroundColor: "rgb(255, 255, 255)",
+        labelColor: "rgb(196, 176, 138)",
+        storeCard: {
+          primaryFields: [
+            { key: "points", label: "نقاطك", value: points, textAlignment: "PKTextAlignmentRight" }
+          ],
+          secondaryFields: [
+            { key: "sar", label: "قيمة بالريال", value: `${sarValue} ريال` },
+            { key: "tier", label: "المستوى", value: tierLabels[tier] || "برونزي" }
+          ],
+          auxiliaryFields: [
+            { key: "name", label: "العميل", value: customerName },
+            { key: "card", label: "رقم البطاقة", value: loyaltyCard.cardNumber || cleanPhone }
+          ],
+          backFields: [
+            { key: "how", label: "كيف تستخدم نقاطك", value: "أخبر الكاشير باسمك أو أعرض رمز QR. 50 نقطة = 1 ريال خصم." },
+            { key: "min", label: "الحد الأدنى للاسترداد", value: "100 نقطة" },
+            { key: "website", label: "الموقع الإلكتروني", value: "blackrose.com.sa" },
+            { key: "vat", label: "الرقم الضريبي", value: "312718675800003" },
+          ]
+        },
+        barcodes: [
+          { message: qrValue, format: "PKBarcodeFormatQR", messageEncoding: "iso-8859-1", altText: loyaltyCard.cardNumber || cleanPhone }
+        ],
+        barcode: { message: qrValue, format: "PKBarcodeFormatQR", messageEncoding: "iso-8859-1" }
+      };
+
+      // Load images from public folder
+      const publicDir = path.join(process.cwd(), "client/public");
+      const readImg = (name: string): Buffer => {
+        try { return fs.readFileSync(path.join(publicDir, name)); } catch { return Buffer.alloc(0); }
+      };
+      const logoBuffer = (() => {
+        for (const n of ["black-rose-logo.png", "blackrose-logo.png", "logo.png", "icon.png"]) {
+          const b = readImg(n); if (b.length > 0) return b;
+        }
+        return Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+      })();
+      const iconBuffer = (() => {
+        for (const n of ["icon.png", "app-icon.png", "favicon.png", "black-rose-logo.png"]) {
+          const b = readImg(n); if (b.length > 0) return b;
+        }
+        return logoBuffer;
+      })();
+
+      const { PKPass } = await import("passkit-generator");
+
+      const pass = await PKPass.from(
+        {
+          model: {
+            "pass.json":   Buffer.from(JSON.stringify(passJson)),
+            "icon.png":    iconBuffer,
+            "icon@2x.png": iconBuffer,
+            "icon@3x.png": iconBuffer,
+            "logo.png":    logoBuffer,
+            "logo@2x.png": logoBuffer,
+            "logo@3x.png": logoBuffer,
+          },
+          certificates: {
+            wwdr:                decodePem(wwdrRaw),
+            signerCert:          decodePem(certRaw),
+            signerKey:           decodePem(keyRaw),
+            signerKeyPassphrase: keyPhrase,
+          },
+        }
+      );
+
+      const passBuffer = await pass.getAsBuffer();
+      const safeName   = customerName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20) || "loyalty";
+
+      res.set({
+        "Content-Type":        "application/vnd.apple.pkpass",
+        "Content-Disposition": `attachment; filename="blackrose-${safeName}.pkpass"`,
+        "Content-Length":      String(passBuffer.length),
+      });
+      res.send(passBuffer);
+
+    } catch (err: any) {
+      console.error("[APPLE WALLET]", err.message);
+      res.status(500).json({ error: "فشل في إنشاء بطاقة Apple Wallet", detail: err.message });
+    }
+  });
+
   // Customer loyalty transactions endpoint
   app.get("/api/customer/loyalty-transactions", requireCustomerAuth, async (req: CustomerAuthRequest, res) => {
     try {

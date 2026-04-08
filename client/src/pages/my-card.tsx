@@ -44,6 +44,7 @@ export default function MyCardPage() {
   const { toast } = useToast();
   const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
   const [showQr, setShowQr] = useState(false);
+  const [addingToWallet, setAddingToWallet] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferPhone, setTransferPhone] = useState("");
@@ -122,6 +123,52 @@ export default function MyCardPage() {
     transferMutation.mutate({ recipientPhone: transferPhone, points: pts, pin: transferPin || undefined });
   };
 
+  const handleAddToAppleWallet = async () => {
+    setAddingToWallet(true);
+    try {
+      const resp = await fetch('/api/wallet/apple-pass', {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        if (resp.status === 503) {
+          toast({
+            title: tc("Apple Wallet غير مفعّل", "Apple Wallet Not Configured"),
+            description: tc(
+              "يجب على المدير إعداد شهادات Apple Developer أولاً لتفعيل هذه الميزة.",
+              "The admin needs to configure Apple Developer certificates first."
+            ),
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: tc("خطأ", "Error"), description: err?.error || tc("فشل إنشاء البطاقة", "Failed to generate pass"), variant: "destructive" });
+        }
+        return;
+      }
+
+      const blob  = await resp.blob();
+      const url   = URL.createObjectURL(blob);
+      const link  = document.createElement('a');
+      link.href   = url;
+      link.download = `blackrose-loyalty.pkpass`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: tc("✅ تم تحميل البطاقة", "✅ Pass Downloaded"),
+        description: tc("افتح الملف لإضافته إلى Apple Wallet", "Open the file to add it to Apple Wallet"),
+      });
+    } catch (e: any) {
+      toast({ title: tc("خطأ", "Error"), description: e?.message, variant: "destructive" });
+    } finally {
+      setAddingToWallet(false);
+    }
+  };
+
   if (!customer) {
     return (
       <CustomerLayout>
@@ -167,18 +214,66 @@ export default function MyCardPage() {
           customerName={customer?.name || card?.customerName}
         />
 
-        {/* QR button */}
-        {qrCodeUrl && (
-          <Button
-            variant="outline"
-            className="w-full gap-2 border-primary/40"
-            onClick={() => setShowQr(true)}
-            data-testid="button-show-qr"
+        {/* QR + Apple Wallet buttons */}
+        <div className="flex gap-2">
+          {qrCodeUrl && (
+            <Button
+              variant="outline"
+              className="flex-1 gap-2 border-primary/40"
+              onClick={() => setShowQr(true)}
+              data-testid="button-show-qr"
+            >
+              <QrCode className="w-4 h-4" />
+              {tc("عرض رمز QR","Show QR Code")}
+            </Button>
+          )}
+
+          {/* Add to Apple Wallet */}
+          <button
+            onClick={handleAddToAppleWallet}
+            disabled={addingToWallet}
+            data-testid="button-add-apple-wallet"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              flex: qrCodeUrl ? '0 0 auto' : '1 1 0',
+              height: 40,
+              paddingLeft: 16,
+              paddingRight: 16,
+              borderRadius: 8,
+              background: addingToWallet ? '#333' : '#000',
+              color: '#fff',
+              border: 'none',
+              cursor: addingToWallet ? 'wait' : 'pointer',
+              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif',
+              fontSize: 13,
+              fontWeight: 600,
+              letterSpacing: '-0.2px',
+              whiteSpace: 'nowrap',
+              transition: 'opacity 0.15s',
+              opacity: addingToWallet ? 0.7 : 1,
+              minWidth: qrCodeUrl ? undefined : '100%',
+            }}
           >
-            <QrCode className="w-4 h-4" />
-            {tc("عرض رمز QR","Show QR Code")}
-          </Button>
-        )}
+            {/* Apple Wallet icon SVG */}
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+              <rect width="18" height="18" rx="4" fill="#1C8EF9"/>
+              <rect x="2" y="6" width="14" height="8" rx="2" fill="white" fillOpacity="0.15"/>
+              <rect x="2" y="8.5" width="14" height="1" fill="white" fillOpacity="0.4"/>
+              <circle cx="13.5" cy="12" r="2.5" fill="#FFD60A"/>
+              <circle cx="13.5" cy="12" r="1.5" fill="#FF9F0A"/>
+              <rect x="3.5" y="10" width="5" height="1" rx="0.5" fill="white" fillOpacity="0.6"/>
+              <path d="M9 4C9 2.9 8.1 2 7 2C5.9 2 5 2.9 5 4H9Z" fill="white" fillOpacity="0.5"/>
+              <path d="M13 4C13 2.9 12.1 2 11 2C9.9 2 9 2.9 9 4H13Z" fill="white" fillOpacity="0.5"/>
+            </svg>
+            {addingToWallet
+              ? tc("جارٍ التحضير...", "Preparing...")
+              : tc("أضف لـ Apple Wallet", "Add to Apple Wallet")
+            }
+          </button>
+        </div>
 
         {/* ── SAR BALANCE BOX ─────────────────────────────────────── */}
         <div className="bg-gradient-to-br from-primary/10 to-primary/5 border-2 border-primary/30 rounded-2xl p-5 space-y-3" data-testid="sar-balance-card">
