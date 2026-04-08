@@ -260,7 +260,7 @@ export default function MyCardPage() {
             </Button>
           )}
 
-          {/* Add to Apple Wallet */}
+          {/* Add to Apple Wallet — Official Badge Style */}
           <button
             onClick={handleAddToAppleWallet}
             disabled={addingToWallet}
@@ -269,41 +269,44 @@ export default function MyCardPage() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 8,
+              gap: 6,
               flex: qrCodeUrl ? '0 0 auto' : '1 1 0',
-              height: 40,
-              paddingLeft: 16,
-              paddingRight: 16,
-              borderRadius: 8,
-              background: addingToWallet ? '#333' : '#000',
+              height: 44,
+              paddingLeft: 14,
+              paddingRight: 18,
+              borderRadius: 10,
+              background: addingToWallet ? '#222' : '#000',
               color: '#fff',
               border: 'none',
               cursor: addingToWallet ? 'wait' : 'pointer',
-              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif',
-              fontSize: 13,
-              fontWeight: 600,
-              letterSpacing: '-0.2px',
+              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif',
               whiteSpace: 'nowrap',
               transition: 'opacity 0.15s',
-              opacity: addingToWallet ? 0.7 : 1,
-              minWidth: qrCodeUrl ? undefined : '100%',
+              opacity: addingToWallet ? 0.6 : 1,
             }}
           >
-            {/* Apple Wallet icon SVG */}
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-              <rect width="18" height="18" rx="4" fill="#1C8EF9"/>
-              <rect x="2" y="6" width="14" height="8" rx="2" fill="white" fillOpacity="0.15"/>
-              <rect x="2" y="8.5" width="14" height="1" fill="white" fillOpacity="0.4"/>
-              <circle cx="13.5" cy="12" r="2.5" fill="#FFD60A"/>
-              <circle cx="13.5" cy="12" r="1.5" fill="#FF9F0A"/>
-              <rect x="3.5" y="10" width="5" height="1" rx="0.5" fill="white" fillOpacity="0.6"/>
-              <path d="M9 4C9 2.9 8.1 2 7 2C5.9 2 5 2.9 5 4H9Z" fill="white" fillOpacity="0.5"/>
-              <path d="M13 4C13 2.9 12.1 2 11 2C9.9 2 9 2.9 9 4H13Z" fill="white" fillOpacity="0.5"/>
-            </svg>
-            {addingToWallet
-              ? tc("جارٍ التحضير...", "Preparing...")
-              : tc("أضف لـ Apple Wallet", "Add to Apple Wallet")
-            }
+            {addingToWallet ? (
+              /* Spinner while loading */
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0, animation: 'spin 1s linear infinite' }}>
+                <circle cx="9" cy="9" r="7" stroke="white" strokeWidth="2" strokeOpacity="0.3"/>
+                <path d="M9 2a7 7 0 0 1 7 7" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            ) : (
+              /* Apple logo — standard path */
+              <svg width="17" height="20" viewBox="0 0 814 1000" fill="white" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+                <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-37.6-155.5-127.4C46 790.7 0 663 0 541.8c0-207.5 135.4-317.3 268.5-317.3 71 0 130.3 46.4 174.1 46.4 42.8 0 109.7-49.2 192.7-49.2 31 0 108.2 2.6 168.1 80.6zM552.5 80.3c34.3-41.7 57.8-97.3 57.8-152.9 0-5.8-.7-11.7-1.3-17.5-55.2 2-120.2 37-158.6 83.5-33.7 39.5-63.7 94.8-63.7 151.1 0 6.4.7 12.9 1.3 14.9 3.2.7 8.4 1.3 13.6 1.3 49.8 0 109.7-33.1 150.9-80.4z"/>
+              </svg>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.1 }}>
+              {!addingToWallet && (
+                <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>
+                  {tc("أضف إلى", "Add to")}
+                </span>
+              )}
+              <span style={{ fontSize: addingToWallet ? 13 : 17, fontWeight: 600, letterSpacing: '-0.3px' }}>
+                {addingToWallet ? tc("جارٍ التحضير...", "Preparing...") : "Apple Wallet"}
+              </span>
+            </div>
           </button>
         </div>
 

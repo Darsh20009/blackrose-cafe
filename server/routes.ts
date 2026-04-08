@@ -9485,9 +9485,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         barcode: { message: qrValue, format: "PKBarcodeFormatQR", messageEncoding: "iso-8859-1", altText: cardNumber }
       };
 
-      // Generate properly sized PNG images for Apple Wallet
-      // Apple requires: icon 29x29 (@1x), 58x58 (@2x), 87x87 (@3x)
-      //                 logo 160x50 (@1x), 320x100 (@2x), 480x150 (@3x)
+      // Build pass files in a temp .pass directory (required by passkit-generator)
+      const os   = await import('os');
       const { PNG } = await import('pngjs');
 
       const makeSolidPng = (w: number, h: number, r: number, g: number, b: number): Buffer => {
@@ -9495,57 +9494,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (let y = 0; y < h; y++) {
           for (let x = 0; x < w; x++) {
             const idx = (w * y + x) * 4;
-            png.data[idx]     = r;
-            png.data[idx + 1] = g;
-            png.data[idx + 2] = b;
-            png.data[idx + 3] = 255;
+            png.data[idx] = r; png.data[idx+1] = g; png.data[idx+2] = b; png.data[idx+3] = 255;
           }
         }
         return PNG.sync.write(png);
       };
 
-      // Dark background matching pass backgroundColor: rgb(17,17,17)
-      const icon29  = makeSolidPng(29,  29,  17, 17, 17);
-      const icon58  = makeSolidPng(58,  58,  17, 17, 17);
-      const icon87  = makeSolidPng(87,  87,  17, 17, 17);
-      const logo160 = makeSolidPng(160, 50,  17, 17, 17);
-      const logo320 = makeSolidPng(320, 100, 17, 17, 17);
-      const logo480 = makeSolidPng(480, 150, 17, 17, 17);
+      const passDir = path.join(os.tmpdir(), `blackrose-${Date.now()}.pass`);
+      fs.mkdirSync(passDir, { recursive: true });
 
-      const iconBuffer = icon29;
-      const logoBuffer = logo160;
+      try {
+        // Write all pass files — directory must end with .pass
+        fs.writeFileSync(path.join(passDir, 'pass.json'), JSON.stringify(passJson));
+        fs.writeFileSync(path.join(passDir, 'icon.png'),    makeSolidPng(29,  29,  17, 17, 17));
+        fs.writeFileSync(path.join(passDir, 'icon@2x.png'), makeSolidPng(58,  58,  17, 17, 17));
+        fs.writeFileSync(path.join(passDir, 'icon@3x.png'), makeSolidPng(87,  87,  17, 17, 17));
+        fs.writeFileSync(path.join(passDir, 'logo.png'),    makeSolidPng(160, 50,  17, 17, 17));
+        fs.writeFileSync(path.join(passDir, 'logo@2x.png'), makeSolidPng(320, 100, 17, 17, 17));
+        fs.writeFileSync(path.join(passDir, 'logo@3x.png'), makeSolidPng(480, 150, 17, 17, 17));
 
-      const { PKPass } = await import("passkit-generator");
+        const { PKPass } = await import("passkit-generator");
 
-      const pass = await PKPass.from(
-        {
-          model: {
-            "pass.json":   Buffer.from(JSON.stringify(passJson)),
-            "icon.png":    icon29,
-            "icon@2x.png": icon58,
-            "icon@3x.png": icon87,
-            "logo.png":    logo160,
-            "logo@2x.png": logo320,
-            "logo@3x.png": logo480,
-          },
+        const pass = await PKPass.from({
+          model: passDir,
           certificates: {
             wwdr:                decodePem(wwdrRaw),
             signerCert:          decodePem(certRaw),
             signerKey:           decodePem(keyRaw),
             signerKeyPassphrase: keyPhrase,
           },
-        }
-      );
+        });
 
-      const passBuffer = await pass.getAsBuffer();
-      const safeName   = customerName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20) || "loyalty";
+        const passBuffer = await pass.getAsBuffer();
+        const safeName   = customerName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20) || "loyalty";
 
-      res.set({
-        "Content-Type":        "application/vnd.apple.pkpass",
-        "Content-Disposition": `attachment; filename="blackrose-${safeName}.pkpass"`,
-        "Content-Length":      String(passBuffer.length),
-      });
-      res.send(passBuffer);
+        res.set({
+          "Content-Type":        "application/vnd.apple.pkpass",
+          "Content-Disposition": `attachment; filename="blackrose-${safeName}.pkpass"`,
+          "Content-Length":      String(passBuffer.length),
+        });
+        res.send(passBuffer);
+      } finally {
+        // Always clean up temp directory
+        try { fs.rmSync(passDir, { recursive: true, force: true }); } catch {}
+      }
 
     } catch (err: any) {
       console.error("[APPLE WALLET]", err.message);
