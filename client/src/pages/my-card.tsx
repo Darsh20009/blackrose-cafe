@@ -123,73 +123,64 @@ export default function MyCardPage() {
     transferMutation.mutate({ recipientPhone: transferPhone, points: pts, pin: transferPin || undefined });
   };
 
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
   const handleAddToAppleWallet = async () => {
     setAddingToWallet(true);
     try {
-      // First verify the endpoint works (check for errors without downloading)
-      const checkResp = await fetch('/api/wallet/apple-pass', {
+      if (isIOS) {
+        // iOS: Navigate directly — Safari intercepts pkpass MIME type and opens Wallet
+        // Session cookie is sent automatically by the browser with this navigation.
+        // We show a toast immediately; if the pass fails, Safari shows its own error.
+        toast({
+          title: tc("⏳ جارٍ التحضير...", "⏳ Preparing pass..."),
+          description: tc("سيفتح Apple Wallet خلال ثوانٍ", "Apple Wallet will open in a few seconds"),
+        });
+        // Small delay so toast shows before navigation
+        await new Promise(r => setTimeout(r, 400));
+        window.location.href = '/api/wallet/apple-pass';
+        return;
+      }
+
+      // Desktop: Fetch the pkpass, then trigger a download
+      const resp = await fetch('/api/wallet/apple-pass', {
         method: 'GET',
         credentials: 'include',
-        headers: { 'X-Check-Only': '1' },
       });
 
-      // If server returns JSON error (non-pkpass content-type), show error
-      const contentType = checkResp.headers.get('content-type') || '';
-      if (!checkResp.ok || !contentType.includes('pkpass')) {
-        const err = await checkResp.json().catch(() => ({}));
-        if (checkResp.status === 503) {
-          toast({
-            title: tc("Apple Wallet غير مفعّل", "Apple Wallet Not Configured"),
-            description: tc(
-              "يجب على المدير إعداد شهادات Apple Developer أولاً.",
-              "The admin needs to configure Apple Developer certificates first."
-            ),
-            variant: "destructive",
-          });
-        } else if (checkResp.status === 404) {
-          toast({
-            title: tc("بطاقة غير موجودة", "Card Not Found"),
-            description: tc("لم يتم العثور على بطاقة ولاء لحسابك.", "No loyalty card found for your account."),
-            variant: "destructive",
-          });
+      const contentType = resp.headers.get('content-type') || '';
+      if (!resp.ok || !contentType.includes('pkpass')) {
+        let errMsg = tc("فشل إنشاء البطاقة", "Failed to generate pass");
+        try { const err = await resp.json(); errMsg = err?.error || errMsg; } catch (_) {}
+
+        if (resp.status === 401) {
+          toast({ title: tc("يرجى تسجيل الدخول", "Please log in"), description: tc("انتهت جلستك، أعد تسجيل الدخول", "Session expired, please log in again"), variant: "destructive" });
+        } else if (resp.status === 503) {
+          toast({ title: tc("Apple Wallet غير مهيأ", "Apple Wallet Not Configured"), description: tc("يجب إعداد شهادات Apple Developer أولاً", "Apple Developer certificates must be configured first"), variant: "destructive" });
+        } else if (resp.status === 404) {
+          toast({ title: tc("بطاقة غير موجودة", "Card Not Found"), description: tc("لم يتم العثور على بطاقة ولاء لحسابك", "No loyalty card found for your account"), variant: "destructive" });
         } else {
-          toast({
-            title: tc("خطأ", "Error"),
-            description: err?.error || tc("فشل إنشاء البطاقة", "Failed to generate pass"),
-            variant: "destructive",
-          });
+          toast({ title: tc("خطأ", "Error"), description: errMsg, variant: "destructive" });
         }
         return;
       }
 
-      // iOS Safari: navigate directly to URL — this triggers Apple Wallet natively
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(new Blob([blob], { type: 'application/vnd.apple.pkpass' }));
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = 'blackrose-loyalty.pkpass';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 8000);
 
-      if (isIOS) {
-        // Direct navigation triggers Apple Wallet on iOS
-        window.location.href = '/api/wallet/apple-pass';
-        toast({
-          title: tc("✅ جاري فتح Apple Wallet", "✅ Opening Apple Wallet"),
-          description: tc("انتظر لحظة ليفتح Apple Wallet تلقائياً", "Wait a moment for Apple Wallet to open automatically"),
-        });
-      } else {
-        // Desktop: download the .pkpass file
-        const blob = await checkResp.blob();
-        const url  = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href  = url;
-        link.download = 'blackrose-loyalty.pkpass';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(url), 3000);
-
-        toast({
-          title: tc("✅ تم تحميل البطاقة", "✅ Pass Downloaded"),
-          description: tc("افتح ملف .pkpass لإضافته إلى Apple Wallet", "Open the .pkpass file to add it to Apple Wallet"),
-        });
-      }
+      toast({
+        title: tc("✅ تم تحميل البطاقة", "✅ Pass Downloaded"),
+        description: tc("افتح ملف .pkpass لإضافته إلى Apple Wallet", "Open the .pkpass file to add it to Apple Wallet"),
+      });
     } catch (e: any) {
       toast({
         title: tc("خطأ في الاتصال", "Connection Error"),

@@ -9530,7 +9530,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         res.set({
           "Content-Type":        "application/vnd.apple.pkpass",
-          "Content-Disposition": `attachment; filename="blackrose-${safeName}.pkpass"`,
+          "Content-Disposition": `inline; filename="blackrose-${safeName}.pkpass"`,
+          "Cache-Control":       "no-store",
           "Content-Length":      String(passBuffer.length),
         });
         res.send(passBuffer);

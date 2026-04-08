@@ -298,7 +298,7 @@ export default function EmployeeAttendance() {
   const formattedTime = now.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background pb-20" dir="rtl">
+    <div className="min-h-screen bg-gray-50 dark:bg-background pb-nav" dir="rtl">
       <div className="max-w-lg mx-auto p-4 space-y-4">
 
         {/* Header */}

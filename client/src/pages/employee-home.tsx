@@ -73,7 +73,7 @@ export default function EmployeeHome() {
   const initials = (employee.fullName || "?").split(" ").map((w: string) => w[0]).slice(0, 2).join("");
 
   return (
-    <div className="min-h-screen bg-background pb-20" dir="rtl">
+    <div className="min-h-screen bg-background pb-nav" dir="rtl">
 
       {/* Header */}
       <div className="bg-card border-b border-border px-4 py-4">

@@ -4,9 +4,9 @@ import { Home, ClipboardList, CreditCard, LogOut, Menu, Languages } from "lucide
 import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { 
-  Coffee, ChefHat, Users, Settings, BarChart3, Wallet, Warehouse, 
-  Table, ShoppingCart, Calendar, FileText, Utensils, Eye 
+import {
+  Coffee, ChefHat, Users, Settings, BarChart3, Wallet, Warehouse,
+  Table, ShoppingCart, Calendar, FileText, Utensils, Eye
 } from "lucide-react";
 
 interface MobileBottomNavProps {
@@ -45,41 +45,41 @@ export function MobileBottomNav({ employeeRole, onLogout }: MobileBottomNavProps
   };
 
   const allPages = [
-    { path: "/employee/home", icon: Home, label: t('mobile_nav.home') },
-    { path: "/employee/dashboard", icon: BarChart3, label: t('mobile_nav.dashboard') },
-    { path: "/employee/pos", icon: CreditCard, label: t('mobile_nav.pos') },
-    { path: "/employee/orders", icon: ClipboardList, label: t('mobile_nav.orders') },
-    { path: "/employee/cashier", icon: ShoppingCart, label: t('mobile_nav.cashier') },
-    { path: "/employee/kitchen", icon: ChefHat, label: t('mobile_nav.kitchen') },
-    { path: "/employee/table-orders", icon: Table, label: t('mobile_nav.tables') },
-    { path: "/employee/loyalty", icon: Users, label: t('mobile_nav.loyalty') },
-    { path: "/employee/attendance", icon: Calendar, label: t('mobile_nav.attendance') },
-    { path: "/employee/leave-request", icon: FileText, label: t('mobile_nav.leave') },
+    { path: "/employee/home",        icon: Home,        label: t('mobile_nav.home') },
+    { path: "/employee/dashboard",   icon: BarChart3,   label: t('mobile_nav.dashboard') },
+    { path: "/employee/pos",         icon: CreditCard,  label: t('mobile_nav.pos') },
+    { path: "/employee/orders",      icon: ClipboardList, label: t('mobile_nav.orders') },
+    { path: "/employee/cashier",     icon: ShoppingCart, label: t('mobile_nav.cashier') },
+    { path: "/employee/kitchen",     icon: ChefHat,     label: t('mobile_nav.kitchen') },
+    { path: "/employee/table-orders",icon: Table,       label: t('mobile_nav.tables') },
+    { path: "/employee/loyalty",     icon: Users,       label: t('mobile_nav.loyalty') },
+    { path: "/employee/attendance",  icon: Calendar,    label: t('mobile_nav.attendance') },
+    { path: "/employee/leave-request", icon: FileText,  label: t('mobile_nav.leave') },
     ...(isManager ? [
-      { path: "/employee/menu-management", icon: Coffee, label: t('mobile_nav.drinks') },
+      { path: "/employee/menu-management",         icon: Coffee,    label: t('mobile_nav.drinks') },
       { path: "/employee/menu-management?type=food", icon: Utensils, label: t('mobile_nav.food') },
-      { path: "/admin/settings", icon: Settings, label: t('mobile_nav.settings') },
-      { path: "/manager/accounting", icon: Wallet, label: t('mobile_nav.accounting') },
-      { path: "/manager/inventory", icon: Warehouse, label: t('mobile_nav.inventory') },
+      { path: "/admin/settings",                   icon: Settings,  label: t('mobile_nav.settings') },
+      { path: "/manager/accounting",               icon: Wallet,    label: t('mobile_nav.accounting') },
+      { path: "/manager/inventory",                icon: Warehouse, label: t('mobile_nav.inventory') },
     ] : []),
   ];
 
   const visibleNav = [
-    { path: "/employee/home", icon: Home, label: t('mobile_nav.home') },
-    { path: "/employee/orders", icon: ClipboardList, label: t('mobile_nav.orders') },
-    { path: "/employee/pos", icon: CreditCard, label: t('mobile_nav.pos') },
-    { path: "/employee/cashier", icon: ShoppingCart, label: t('mobile_nav.cashier') },
-    { path: "/employee/kitchen", icon: ChefHat, label: t('mobile_nav.kitchen') },
-    { path: "/employee/table-orders", icon: Table, label: t('mobile_nav.tables') },
-    ...(isManager ? [
-      { path: "/employee/menu-management", icon: Coffee, label: t('mobile_nav.drinks') },
-    ] : []),
+    { path: "/employee/home",        icon: Home,         label: t('mobile_nav.home') },
+    { path: "/employee/orders",      icon: ClipboardList, label: t('mobile_nav.orders') },
+    { path: "/employee/pos",         icon: CreditCard,   label: t('mobile_nav.pos') },
+    { path: "/employee/attendance",  icon: Calendar,     label: t('mobile_nav.attendance') },
+    { path: "/employee/kitchen",     icon: ChefHat,      label: t('mobile_nav.kitchen') },
+    ...(isManager ? [{ path: "/employee/menu-management", icon: Coffee, label: t('mobile_nav.drinks') }] : []),
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden bg-background border-t shadow-lg">
+    <div
+      className="fixed bottom-0 left-0 right-0 z-50 sm:hidden bg-background border-t border-border shadow-[0_-1px_12px_rgba(0,0,0,0.08)]"
+      style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 4px)' }}
+    >
       <div
-        className="flex items-center overflow-x-auto no-scrollbar px-1 py-1.5 gap-0.5"
+        className="flex items-center overflow-x-auto no-scrollbar px-1 pt-1.5 gap-0.5"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {visibleNav.map((item) => {
@@ -91,15 +91,15 @@ export function MobileBottomNav({ employeeRole, onLogout }: MobileBottomNavProps
           return (
             <Link key={item.path} href={item.path}>
               <button
-                className={`flex flex-col items-center gap-0.5 min-w-[56px] px-2 py-1 rounded-lg text-[10px] whitespace-nowrap shrink-0 transition-colors ${
+                className={`flex flex-col items-center gap-0.5 min-w-[56px] px-2 py-1.5 rounded-xl text-[10px] whitespace-nowrap shrink-0 transition-all active:scale-95 ${
                   isActive
                     ? 'text-primary font-bold bg-primary/10'
-                    : 'text-muted-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 }`}
                 data-testid={`mobile-nav-${item.path.split('/').pop()?.split('?')[0]}`}
               >
                 <Icon className="h-5 w-5" />
-                <span>{item.label}</span>
+                <span className="leading-none mt-0.5">{item.label}</span>
               </button>
             </Link>
           );
@@ -108,19 +108,24 @@ export function MobileBottomNav({ employeeRole, onLogout }: MobileBottomNavProps
         <Sheet open={showMenu} onOpenChange={setShowMenu}>
           <SheetTrigger asChild>
             <button
-              className="flex flex-col items-center gap-0.5 min-w-[56px] px-2 py-1 rounded-lg text-[10px] whitespace-nowrap shrink-0 text-muted-foreground"
+              className="flex flex-col items-center gap-0.5 min-w-[56px] px-2 py-1.5 rounded-xl text-[10px] whitespace-nowrap shrink-0 text-muted-foreground hover:bg-muted/50 transition-all active:scale-95"
               data-testid="mobile-nav-menu"
             >
               <Menu className="h-5 w-5" />
-              <span>{t('mobile_nav.more')}</span>
+              <span className="leading-none mt-0.5">{t('mobile_nav.more')}</span>
             </button>
           </SheetTrigger>
-          <SheetContent side="bottom" className="h-[70vh] rounded-t-2xl flex flex-col overflow-hidden p-0">
-            <SheetHeader className="px-4 pt-4 pb-2 shrink-0">
-              <SheetTitle>{t('mobile_nav.menu_title')}</SheetTitle>
+          <SheetContent
+            side="bottom"
+            className="rounded-t-2xl flex flex-col overflow-hidden p-0"
+            style={{ maxHeight: '75dvh', paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 16px)' }}
+          >
+            <div className="w-10 h-1 bg-muted-foreground/20 rounded-full mx-auto mt-3 mb-1 shrink-0" />
+            <SheetHeader className="px-4 pb-2 shrink-0">
+              <SheetTitle className="text-base">{t('mobile_nav.menu_title')}</SheetTitle>
             </SheetHeader>
             <div className="flex-1 overflow-y-auto min-h-0 px-4">
-              <div className="grid grid-cols-3 gap-3 py-2">
+              <div className="grid grid-cols-3 gap-2 py-2 pb-4">
                 {allPages.map((item) => {
                   const Icon = item.icon;
                   const fullPath = location + window.location.search;
@@ -129,35 +134,27 @@ export function MobileBottomNav({ employeeRole, onLogout }: MobileBottomNavProps
                     : location === item.path;
                   return (
                     <Link key={item.path} href={item.path}>
-                      <button 
+                      <button
                         onClick={() => setShowMenu(false)}
-                        className={`flex flex-col items-center gap-1.5 p-3 rounded-xl w-full transition-colors ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}`}
+                        className={`flex flex-col items-center gap-1.5 p-3 rounded-xl w-full transition-all active:scale-95 ${
+                          isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'
+                        }`}
                         data-testid={`mobile-menu-${item.path.split('/').pop()}`}
                       >
                         <Icon className="h-6 w-6" />
-                        <span className="text-xs font-medium">{item.label}</span>
+                        <span className="text-[11px] font-medium text-center leading-tight">{item.label}</span>
                       </button>
                     </Link>
                   );
                 })}
               </div>
             </div>
-            <div className="border-t px-4 pt-4 pb-6 shrink-0 space-y-2">
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={toggleLanguage}
-                data-testid="mobile-menu-language"
-              >
+            <div className="border-t px-4 pt-3 pb-2 shrink-0 space-y-2">
+              <Button variant="outline" className="w-full h-11 text-sm" onClick={toggleLanguage} data-testid="mobile-menu-language">
                 <Languages className="h-4 w-4 mr-2" />
                 {i18n.language === 'ar' ? 'English' : 'عربي'}
               </Button>
-              <Button 
-                variant="destructive" 
-                className="w-full" 
-                onClick={handleLogout}
-                data-testid="mobile-menu-logout"
-              >
+              <Button variant="destructive" className="w-full h-11 text-sm" onClick={handleLogout} data-testid="mobile-menu-logout">
                 <LogOut className="h-4 w-4 ml-2" />
                 {t('mobile_nav.logout')}
               </Button>

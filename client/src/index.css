@@ -67,8 +67,11 @@ a, button, input, select, textarea, label, [role="button"] {
 .min-h-dvh { min-height: 100dvh; }
 
 /* Utility: Bottom-safe — adds iOS home-bar padding */
-.pb-safe { padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px); }
-.mb-safe { margin-bottom: env(safe-area-inset-bottom, 0px); }
+.pb-safe    { padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px); }
+.mb-safe    { margin-bottom:  env(safe-area-inset-bottom, 0px); }
+
+/* Pages with bottom nav — 72px nav + safe area */
+.pb-nav     { padding-bottom: calc(4.5rem + max(env(safe-area-inset-bottom, 0px), 0px)); }
 
 /* Fixed bottom bars — always above iOS home indicator */
 .fixed-bottom-safe {
@@ -78,6 +81,18 @@ a, button, input, select, textarea, label, [role="button"] {
   right: 0;
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 4px);
   z-index: 50;
+}
+
+/* Prevent text from jumping during iOS tap */
+* { -webkit-text-size-adjust: 100%; }
+
+/* Touch-friendly tap target for standalone icon buttons */
+.btn-icon-safe {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .hover-elevate {
