@@ -126,44 +126,76 @@ export default function MyCardPage() {
   const handleAddToAppleWallet = async () => {
     setAddingToWallet(true);
     try {
-      const resp = await fetch('/api/wallet/apple-pass', {
+      // First verify the endpoint works (check for errors without downloading)
+      const checkResp = await fetch('/api/wallet/apple-pass', {
         method: 'GET',
         credentials: 'include',
+        headers: { 'X-Check-Only': '1' },
       });
 
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        if (resp.status === 503) {
+      // If server returns JSON error (non-pkpass content-type), show error
+      const contentType = checkResp.headers.get('content-type') || '';
+      if (!checkResp.ok || !contentType.includes('pkpass')) {
+        const err = await checkResp.json().catch(() => ({}));
+        if (checkResp.status === 503) {
           toast({
             title: tc("Apple Wallet غير مفعّل", "Apple Wallet Not Configured"),
             description: tc(
-              "يجب على المدير إعداد شهادات Apple Developer أولاً لتفعيل هذه الميزة.",
+              "يجب على المدير إعداد شهادات Apple Developer أولاً.",
               "The admin needs to configure Apple Developer certificates first."
             ),
             variant: "destructive",
           });
+        } else if (checkResp.status === 404) {
+          toast({
+            title: tc("بطاقة غير موجودة", "Card Not Found"),
+            description: tc("لم يتم العثور على بطاقة ولاء لحسابك.", "No loyalty card found for your account."),
+            variant: "destructive",
+          });
         } else {
-          toast({ title: tc("خطأ", "Error"), description: err?.error || tc("فشل إنشاء البطاقة", "Failed to generate pass"), variant: "destructive" });
+          toast({
+            title: tc("خطأ", "Error"),
+            description: err?.error || tc("فشل إنشاء البطاقة", "Failed to generate pass"),
+            variant: "destructive",
+          });
         }
         return;
       }
 
-      const blob  = await resp.blob();
-      const url   = URL.createObjectURL(blob);
-      const link  = document.createElement('a');
-      link.href   = url;
-      link.download = `blackrose-loyalty.pkpass`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      // iOS Safari: navigate directly to URL — this triggers Apple Wallet natively
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-      toast({
-        title: tc("✅ تم تحميل البطاقة", "✅ Pass Downloaded"),
-        description: tc("افتح الملف لإضافته إلى Apple Wallet", "Open the file to add it to Apple Wallet"),
-      });
+      if (isIOS) {
+        // Direct navigation triggers Apple Wallet on iOS
+        window.location.href = '/api/wallet/apple-pass';
+        toast({
+          title: tc("✅ جاري فتح Apple Wallet", "✅ Opening Apple Wallet"),
+          description: tc("انتظر لحظة ليفتح Apple Wallet تلقائياً", "Wait a moment for Apple Wallet to open automatically"),
+        });
+      } else {
+        // Desktop: download the .pkpass file
+        const blob = await checkResp.blob();
+        const url  = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href  = url;
+        link.download = 'blackrose-loyalty.pkpass';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 3000);
+
+        toast({
+          title: tc("✅ تم تحميل البطاقة", "✅ Pass Downloaded"),
+          description: tc("افتح ملف .pkpass لإضافته إلى Apple Wallet", "Open the .pkpass file to add it to Apple Wallet"),
+        });
+      }
     } catch (e: any) {
-      toast({ title: tc("خطأ", "Error"), description: e?.message, variant: "destructive" });
+      toast({
+        title: tc("خطأ في الاتصال", "Connection Error"),
+        description: e?.message || tc("تعذّر الوصول للخادم", "Could not reach server"),
+        variant: "destructive",
+      });
     } finally {
       setAddingToWallet(false);
     }

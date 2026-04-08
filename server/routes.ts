@@ -9415,72 +9415,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const customerPhone = req.customer?.phone;
       if (!customerPhone) return res.status(401).json({ error: "يرجى تسجيل الدخول" });
 
-      const cleanPhone = customerPhone.replace(/\D/g, '').slice(-9);
-      const loyaltyCard = await storage.getLoyaltyCardByPhone(cleanPhone);
+      // Try multiple phone formats to find the loyalty card
+      const rawDigits  = customerPhone.replace(/\D/g, '');
+      const phoneVariants = [
+        rawDigits.slice(-9),
+        rawDigits,
+        rawDigits.startsWith('966') ? rawDigits.slice(3) : '0' + rawDigits.slice(-9),
+        '0' + rawDigits.slice(-9),
+      ];
+
+      let loyaltyCard: any = null;
+      for (const ph of phoneVariants) {
+        loyaltyCard = await storage.getLoyaltyCardByPhone(ph);
+        if (loyaltyCard) break;
+      }
       if (!loyaltyCard) return res.status(404).json({ error: "لم يتم العثور على بطاقة الولاء" });
 
-      const points          = Number(loyaltyCard.points) || 0;
-      const sarValue        = (points * 0.02).toFixed(2);
-      const tier            = (loyaltyCard as any).tier || "bronze";
+      // Get real loyalty settings from business config
+      const businessConfig   = await storage.getBusinessConfig('demo-tenant').catch(() => null) as any;
+      const loyaltyConfig    = businessConfig?.loyaltyConfig || {};
+      const pointsValueInSar = loyaltyConfig.pointsValueInSar ?? 0.02;
+
+      const points       = Number(loyaltyCard.points) || 0;
+      const sarValue     = (points * pointsValueInSar).toFixed(2);
+      const tier         = loyaltyCard.tier || "bronze";
       const tierLabels: Record<string, string> = {
         bronze: "برونزي", silver: "فضي", gold: "ذهبي", platinum: "بلاتيني"
       };
       const customerName = req.customer?.name || loyaltyCard.customerName || "عميل";
-      const qrValue      = loyaltyCard.qrToken || loyaltyCard.cardNumber || cleanPhone;
+      const qrValue      = loyaltyCard.qrToken || loyaltyCard.cardNumber || rawDigits.slice(-9);
 
+      const cardNumber = loyaltyCard.cardNumber || rawDigits.slice(-9);
       const passJson = {
         formatVersion: 1,
         passTypeIdentifier: passTypeId,
-        serialNumber: `BLACKROSE-${cleanPhone}`,
+        serialNumber: `BLACKROSE-${rawDigits.slice(-9)}`,
         teamIdentifier: teamId,
         organizationName: "Black Rose Cafe",
-        description: "Black Rose Cafe - بطاقة الولاء",
-        logoText: "BLACK ROSE",
+        description: "بطاقة ولاء - Black Rose Cafe",
+        logoText: "Black Rose",
         backgroundColor: "rgb(17, 17, 17)",
         foregroundColor: "rgb(255, 255, 255)",
         labelColor: "rgb(196, 176, 138)",
         storeCard: {
+          headerFields: [
+            { key: "tier", label: "المستوى", value: tierLabels[tier] || "برونزي", textAlignment: "PKTextAlignmentRight" }
+          ],
           primaryFields: [
-            { key: "points", label: "نقاطك", value: points, textAlignment: "PKTextAlignmentRight" }
+            { key: "points", label: "نقاطك", value: String(points), textAlignment: "PKTextAlignmentNatural" }
           ],
           secondaryFields: [
-            { key: "sar", label: "قيمة بالريال", value: `${sarValue} ريال` },
-            { key: "tier", label: "المستوى", value: tierLabels[tier] || "برونزي" }
+            { key: "sar", label: "قيمة بالريال", value: `${sarValue} ر.س` },
+            { key: "name", label: "العميل", value: customerName }
           ],
           auxiliaryFields: [
-            { key: "name", label: "العميل", value: customerName },
-            { key: "card", label: "رقم البطاقة", value: loyaltyCard.cardNumber || cleanPhone }
+            { key: "card", label: "رقم البطاقة", value: cardNumber }
           ],
           backFields: [
-            { key: "how", label: "كيف تستخدم نقاطك", value: "أخبر الكاشير باسمك أو أعرض رمز QR. 50 نقطة = 1 ريال خصم." },
+            { key: "how", label: "كيف تستخدم نقاطك؟", value: "أخبر الكاشير باسمك أو رقم جوالك، أو أعرض رمز QR ليخصم النقاط تلقائياً." },
+            { key: "rate", label: "معدل النقاط", value: `كل 50 نقطة = 1 ريال خصم` },
             { key: "min", label: "الحد الأدنى للاسترداد", value: "100 نقطة" },
             { key: "website", label: "الموقع الإلكتروني", value: "blackrose.com.sa" },
-            { key: "vat", label: "الرقم الضريبي", value: "312718675800003" },
+            { key: "phone", label: "رقم الجوال المسجل", value: rawDigits.slice(-9) },
           ]
         },
         barcodes: [
-          { message: qrValue, format: "PKBarcodeFormatQR", messageEncoding: "iso-8859-1", altText: loyaltyCard.cardNumber || cleanPhone }
+          { message: qrValue, format: "PKBarcodeFormatQR", messageEncoding: "iso-8859-1", altText: cardNumber }
         ],
-        barcode: { message: qrValue, format: "PKBarcodeFormatQR", messageEncoding: "iso-8859-1" }
+        barcode: { message: qrValue, format: "PKBarcodeFormatQR", messageEncoding: "iso-8859-1", altText: cardNumber }
       };
 
-      // Load images from public folder
-      const publicDir = path.join(process.cwd(), "client/public");
-      const readImg = (name: string): Buffer => {
-        try { return fs.readFileSync(path.join(publicDir, name)); } catch { return Buffer.alloc(0); }
+      // Generate properly sized PNG images for Apple Wallet
+      // Apple requires: icon 29x29 (@1x), 58x58 (@2x), 87x87 (@3x)
+      //                 logo 160x50 (@1x), 320x100 (@2x), 480x150 (@3x)
+      const { PNG } = await import('pngjs');
+
+      const makeSolidPng = (w: number, h: number, r: number, g: number, b: number): Buffer => {
+        const png = new PNG({ width: w, height: h });
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const idx = (w * y + x) * 4;
+            png.data[idx]     = r;
+            png.data[idx + 1] = g;
+            png.data[idx + 2] = b;
+            png.data[idx + 3] = 255;
+          }
+        }
+        return PNG.sync.write(png);
       };
-      const logoBuffer = (() => {
-        for (const n of ["black-rose-logo.png", "blackrose-logo.png", "logo.png", "icon.png"]) {
-          const b = readImg(n); if (b.length > 0) return b;
-        }
-        return Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
-      })();
-      const iconBuffer = (() => {
-        for (const n of ["icon.png", "app-icon.png", "favicon.png", "black-rose-logo.png"]) {
-          const b = readImg(n); if (b.length > 0) return b;
-        }
-        return logoBuffer;
-      })();
+
+      // Dark background matching pass backgroundColor: rgb(17,17,17)
+      const icon29  = makeSolidPng(29,  29,  17, 17, 17);
+      const icon58  = makeSolidPng(58,  58,  17, 17, 17);
+      const icon87  = makeSolidPng(87,  87,  17, 17, 17);
+      const logo160 = makeSolidPng(160, 50,  17, 17, 17);
+      const logo320 = makeSolidPng(320, 100, 17, 17, 17);
+      const logo480 = makeSolidPng(480, 150, 17, 17, 17);
+
+      const iconBuffer = icon29;
+      const logoBuffer = logo160;
 
       const { PKPass } = await import("passkit-generator");
 
@@ -9488,12 +9521,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         {
           model: {
             "pass.json":   Buffer.from(JSON.stringify(passJson)),
-            "icon.png":    iconBuffer,
-            "icon@2x.png": iconBuffer,
-            "icon@3x.png": iconBuffer,
-            "logo.png":    logoBuffer,
-            "logo@2x.png": logoBuffer,
-            "logo@3x.png": logoBuffer,
+            "icon.png":    icon29,
+            "icon@2x.png": icon58,
+            "icon@3x.png": icon87,
+            "logo.png":    logo160,
+            "logo@2x.png": logo320,
+            "logo@3x.png": logo480,
           },
           certificates: {
             wwdr:                decodePem(wwdrRaw),
