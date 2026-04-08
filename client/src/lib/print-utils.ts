@@ -483,18 +483,6 @@ function formatDate(dateStr: string): { date: string; time: string } {
 export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig = {}): Promise<void> {
   const shouldAutoPrint = config.autoPrint !== undefined ? config.autoPrint : true;
 
-  // ══════════════════════════════════════════════════════════════
-  //  فتح نوافذ الطباعة قبل أي عمل غير متزامن (await)
-  //  يضمن موافقة المتصفح — لا حاجب Popup يُمكنه الإيقاف
-  // ══════════════════════════════════════════════════════════════
-  const _popupOpts = 'width=1,height=1,left=-9999,top=-9999,toolbar=no,menubar=no,scrollbars=yes,resizable=yes';
-  let _customerWin: Window | null = null;
-  let _empWin: Window | null = null;
-  if (shouldAutoPrint) {
-    _customerWin = window.open('about:blank', '_blank', _popupOpts);
-    _empWin      = window.open('about:blank', '_blank', _popupOpts);
-  }
-
   const totalAmount = parseNumber(data.total);
 
   const codeDiscountAmount = data.discount ? parseNumber(data.discount.amount) : 0;
@@ -796,15 +784,49 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 </html>`;
 
   // ══════════════════════════════════════════════════════════════
-  //  طلبا طباعة منفصلان عبر نوافذ منبثقة
-  //  Job 1 → فاتورة العميل  (300 ms)
-  //  Job 2 → نسخة الموظف   (1800 ms)
+  //  طباعة موحدة: العميل (ص١) + الموظف (ص٢) — مهمة واحدة بلا popups
+  //  يحل مشكلة حجب النوافذ المنبثقة ومشكلة ظهور نسخة واحدة فقط
   // ══════════════════════════════════════════════════════════════
+
+  // مساعدتان لاستخلاص محتوى <body> و <style> من مستند HTML كامل
+  const _extractBody = (html: string): string => {
+    const m = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    return m ? m[1].trim() : html;
+  };
+  const _extractStyles = (html: string): string => {
+    const out: string[] = [];
+    const re = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html)) !== null) out.push(m[1]);
+    return out.join('\n');
+  };
+
+  // مستند موحد: فاتورة العميل ثم نسخة الموظف مع فاصل صفحة بينهما
+  const _buildCombined = (): string => `<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head>
+  <meta charset="UTF-8">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+    @page { size: 80mm auto; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { direction: rtl; font-family: 'Cairo', Arial, sans-serif; color: #000; background: #fff;
+           -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    ${_extractStyles(customerHtml)}
+    ${_extractStyles(empHtml)}
+    .pb { display: block; page-break-after: always; break-after: page; }
+  </style>
+</head>
+<body>
+  <div class="pb">${_extractBody(customerHtml)}</div>
+  <div>${_extractBody(empHtml)}</div>
+</body></html>`;
+
   if (shouldAutoPrint) {
-    _printInPopup(_customerWin, customerHtml, 300);
-    _printInPopup(_empWin,      empHtml,      1800);
+    _printQueue.push({ html: _buildCombined(), paperWidth: '80mm', isFullDoc: true });
+    _drainPrintQueue();
   } else {
-    // وضع المعاينة اليدوية: نافذة منبثقة واحدة تحتوي على زرّي طباعة منفصلَين
+    // وضع المعاينة اليدوية — نافذة واحدة مع زر طباعة موحد
+    const combined = _buildCombined();
     const previewHtml = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -815,12 +837,11 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Cairo', sans-serif; background: #f0f0f0; padding: 16px; direction: rtl; }
     .toolbar { display: flex; gap: 10px; margin-bottom: 16px; justify-content: center; flex-wrap: wrap; }
-    .btn { padding: 10px 20px; font-size: 14px; font-family: 'Cairo', sans-serif; border: none;
+    .btn { padding: 10px 24px; font-size: 14px; font-family: 'Cairo', sans-serif; border: none;
            border-radius: 8px; cursor: pointer; font-weight: 700; transition: opacity .2s; }
     .btn:hover { opacity: 0.85; }
-    .btn-customer { background: #1a1a1a; color: #fff; }
-    .btn-employee { background: #b45309; color: #fff; }
-    .btn-close { background: #6b7280; color: #fff; }
+    .btn-print { background: #1a1a1a; color: #fff; font-size: 16px; }
+    .btn-close  { background: #6b7280; color: #fff; }
     .frames { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
     iframe { border: 1px solid #ccc; background: #fff; border-radius: 4px; box-shadow: 0 2px 8px #0002; }
     h3 { text-align: center; font-size: 11px; color: #555; margin-bottom: 6px; }
@@ -830,8 +851,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 </head>
 <body>
   <div class="toolbar">
-    <button class="btn btn-customer" onclick="printFrame('f-customer')">🖨 طباعة فاتورة العميل</button>
-    <button class="btn btn-employee" onclick="printFrame('f-employee')">🖨 طباعة نسخة الموظف</button>
+    <button class="btn btn-print" onclick="printBoth()">🖨 طباعة النسختين معاً</button>
     <button class="btn btn-close" onclick="window.close()">✕ إغلاق</button>
   </div>
   <div class="frames">
@@ -845,13 +865,21 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     </div>
   </div>
   <script>
-    function printFrame(id) {
-      var f = document.getElementById(id);
-      if (!f || !f.contentWindow) return;
-      f.contentWindow.focus();
-      f.contentWindow.print();
+    var _combined = ${JSON.stringify(combined)};
+    function printBoth() {
+      var f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;';
+      document.body.appendChild(f);
+      f.contentDocument.open();
+      f.contentDocument.write(_combined);
+      f.contentDocument.close();
+      setTimeout(function() {
+        f.contentWindow.focus();
+        f.contentWindow.print();
+        f.addEventListener('afterprint', function() { setTimeout(function(){ f.remove(); }, 300); });
+        setTimeout(function(){ try{ f.remove(); }catch{} }, 8000);
+      }, 250);
     }
-    // inject HTML into iframes after page loads
     window.addEventListener('load', function() {
       var fc = document.getElementById('f-customer');
       var fe = document.getElementById('f-employee');
