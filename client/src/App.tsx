@@ -138,29 +138,7 @@ const DriveThroughPage = lazy(() => import("@/pages/drive-through"));
 import blackroseLogo from "@assets/blackrose-logo.png";
 import blackroseLogoStaff from "@assets/blackrose-logo.png";
 
-const PageLoader = () => {
-  const isEmployee = window.location.pathname.startsWith('/employee') || 
-                     window.location.pathname.startsWith('/manager') ||
-                     window.location.pathname.startsWith('/admin') ||
-                     window.location.pathname === '/0';
-  
-  return (
-    <div className="w-full h-screen flex items-center justify-center" style={{ background: '#111' }}>
-      <div className="flex flex-col items-center gap-4">
-        <img
-          src={isEmployee ? blackroseLogoStaff : blackroseLogo}
-          alt={isEmployee ? "BLACK ROSE SYSTEMS" : "BLACK ROSE CAFE"}
-          className="w-20 h-20 object-contain"
-        />
-        <div className="flex items-center justify-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#BE1845] animate-bounce" style={{ animationDelay: '0ms' }} />
-          <div className="w-1.5 h-1.5 rounded-full bg-[#BE1845] animate-bounce" style={{ animationDelay: '150ms' }} />
-          <div className="w-1.5 h-1.5 rounded-full bg-[#BE1845] animate-bounce" style={{ animationDelay: '300ms' }} />
-        </div>
-      </div>
-    </div>
-  );
-};
+const PageLoader = () => null;
 
 const MaintenancePage = lazy(() => import("@/pages/maintenance"));
 
