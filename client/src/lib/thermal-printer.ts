@@ -42,7 +42,7 @@ const CMD = {
 
 export interface PrinterSettings {
   enabled: boolean;
-  mode: 'webusb' | 'network' | 'bluetooth' | 'browser';
+  mode: 'webusb' | 'network' | 'bluetooth' | 'browser' | 'relay';
   paperWidth: '58mm' | '80mm';
   autoPrint: boolean;
   autoKitchenCopy: boolean;
@@ -58,6 +58,10 @@ export interface PrinterSettings {
   // Bluetooth printer
   bluetoothDeviceName?: string;
   bluetoothDeviceId?: string;
+  // Local Relay Agent — for Android/TabSense devices that can't use QZ Tray
+  // The relay agent is a small Node.js server running on the local network.
+  // Download: /print-relay.js  — run with: node print-relay.js
+  relayAgentUrl?: string; // e.g. "http://192.168.8.10:8089"
 }
 
 const DEFAULT_SETTINGS: PrinterSettings = {
@@ -588,6 +592,100 @@ export async function networkPrint(escData: Uint8Array, ip: string, port: number
   }
 }
 
+// ─── Local Relay Agent ────────────────────────────────────────────────────────
+// A tiny Node.js HTTP server that runs on the local network (Windows / Mac / Pi)
+// and bridges browser → TCP printer. Perfect for Android (Tab Sense) devices
+// where QZ Tray is not available.
+//
+// Download the relay script from the app: /print-relay.js
+// Run with: node print-relay.js
+//
+// The browser calls http://RELAY_IP:8089/print with base64 ESC/POS data.
+// The relay opens a raw TCP socket to the printer and forwards the bytes.
+
+/**
+ * Send ESC/POS data to a LAN printer via the local relay agent.
+ * The relay agent runs on the same local network as the printer.
+ */
+export async function relayAgentPrint(escData: Uint8Array, relayUrl: string, printerIp: string, printerPort = 9100): Promise<PrintResult> {
+  try {
+    const base = relayUrl.replace(/\/+$/, '');
+    const b64  = btoa(Array.from(escData, b => String.fromCharCode(b)).join(''));
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const resp = await fetch(`${base}/print`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ ip: printerIp, port: printerPort, data: b64 }),
+        signal:  controller.signal,
+      });
+      const result = await resp.json();
+      if (!resp.ok || !result.success) {
+        return { success: false, mode: 'error', error: result.error || 'فشل وكيل الطباعة المحلي' };
+      }
+      return { success: true, mode: 'network' };
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err: any) {
+    if (err.name === 'AbortError') return { success: false, mode: 'error', error: 'انتهت مهلة الاتصال بوكيل الطباعة' };
+    return { success: false, mode: 'error', error: `وكيل الطباعة: ${err?.message || 'لا يمكن الاتصال'}` };
+  }
+}
+
+/**
+ * Test connection to the relay agent (and optionally to the printer through it).
+ */
+export async function testRelayAgent(relayUrl: string, printerIp?: string, printerPort = 9100): Promise<{ connected: boolean; message: string }> {
+  try {
+    const base = relayUrl.replace(/\/+$/, '');
+
+    // 1. Ping the relay agent itself
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 5000);
+    const resp = await fetch(`${base}/status`, { signal: controller.signal });
+    if (!resp.ok) throw new Error(`الوكيل أجاب بخطأ ${resp.status}`);
+    const info = await resp.json();
+
+    // 2. If printer IP provided, also test printer reachability through the relay
+    if (printerIp) {
+      const c2 = new AbortController();
+      setTimeout(() => c2.abort(), 6000);
+      const r2 = await fetch(`${base}/test`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ ip: printerIp, port: printerPort }),
+        signal:  c2.signal,
+      });
+      const t2 = await r2.json();
+      if (!t2.success) {
+        return {
+          connected: false,
+          message:   `✅ وكيل الطباعة يعمل — لكن الطابعة ${printerIp}:${printerPort} لا تستجيب.\n${t2.error || ''}`,
+        };
+      }
+      return {
+        connected: true,
+        message:   `✅ وكيل الطباعة جاهز (${info.localIPs?.join(' / ') || relayUrl})\n✅ الطابعة ${printerIp}:${printerPort} تستجيب — جاهزة للطباعة`,
+      };
+    }
+
+    return {
+      connected: true,
+      message:   `✅ وكيل الطباعة يعمل (v${info.version || '?'}) على ${info.localIPs?.join(' / ') || relayUrl}`,
+    };
+  } catch (err: any) {
+    const isNetErr = err.name === 'AbortError' || err.message?.includes('fetch') || err.message?.includes('network');
+    return {
+      connected: false,
+      message:   isNetErr
+        ? `❌ لا يمكن الوصول لوكيل الطباعة على ${relayUrl}\nتأكد أن البرنامج يعمل وأن الجهاز والكاشير على نفس الشبكة.`
+        : `❌ ${err.message}`,
+    };
+  }
+}
+
 /**
  * Scan the local network for printers on a given port.
  * Calls the server-side discovery endpoint which probes the full /24 subnet.
@@ -839,15 +937,29 @@ export function getBluetoothState(): { connected: boolean; deviceName: string | 
 
 /**
  * High-level print function.
- * 1. Tries Network (LAN/TCP) if mode=network and IP is configured
- * 2. Tries Bluetooth (BLE) if mode=bluetooth
- * 3. Tries WebUSB if device is connected + mode=webusb
- * 4. Falls back to browser print dialog
+ * 1. Tries Relay Agent (local Node.js bridge) if mode=relay and relay URL is configured
+ * 2. Tries Network (LAN/TCP) if mode=network and IP is configured
+ * 3. Tries Bluetooth (BLE) if mode=bluetooth
+ * 4. Tries WebUSB if device is connected + mode=webusb
+ * 5. Falls back to browser print dialog
  */
 export async function thermalPrint(escData: Uint8Array, fallbackHtml: string, fallbackPaper: '58mm' | '80mm' = '80mm'): Promise<PrintResult> {
   const settings = loadPrinterSettings();
 
   if (!settings.enabled) return { success: false, mode: 'error', error: 'الطابعة معطّلة في الإعدادات' };
+
+  // Relay Agent mode — local Node.js bridge for Android / Tab Sense devices
+  if (settings.mode === 'relay') {
+    if (!settings.relayAgentUrl) {
+      return { success: false, mode: 'error', error: 'لم يتم تحديد رابط وكيل الطباعة المحلي' };
+    }
+    if (!settings.networkIp) {
+      return { success: false, mode: 'error', error: 'لم يتم تحديد IP الطابعة' };
+    }
+    const result = await relayAgentPrint(escData, settings.relayAgentUrl, settings.networkIp, settings.networkPort || 9100);
+    if (result.success) return result;
+    console.warn('[RelayAgent] Falling back to browser:', result.error);
+  }
 
   // Network (LAN/TCP) mode — ProPos, Epson LAN, Xprinter NW, etc.
   if (settings.mode === 'network') {
@@ -899,7 +1011,9 @@ export async function autoPrintOrder(receiptEsc: Uint8Array, kitchenEsc: Uint8Ar
 
   if (kitchenEsc && settings.autoKitchenCopy) {
     await new Promise(r => setTimeout(r, 1500));
-    if (settings.mode === 'network' && settings.networkIp) {
+    if (settings.mode === 'relay' && settings.relayAgentUrl && settings.networkIp) {
+      await relayAgentPrint(kitchenEsc, settings.relayAgentUrl, settings.networkIp, settings.networkPort || 9100);
+    } else if (settings.mode === 'network' && settings.networkIp) {
       await networkPrint(kitchenEsc, settings.networkIp, settings.networkPort || 9100);
     } else if (settings.mode === 'bluetooth') {
       await bluetoothPrint(kitchenEsc);

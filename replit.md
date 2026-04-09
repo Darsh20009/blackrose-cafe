@@ -28,6 +28,36 @@ This is the **single source of truth** for ALL branding across the entire system
 
 **Note for server-side branding** (email templates in `server/mail-service.ts`): These contain hardcoded brand strings that should be manually kept in sync with `brand.ts` values.
 
+## Printing System — Local Relay Agent (April 2026)
+
+### Problem Solved
+Tab Sense (Android POS terminals) and other Android devices could not print to LAN thermal printers because:
+- Browsers cannot open raw TCP sockets
+- QZ Tray (the previous solution) requires a desktop app — doesn't work on Android
+- The cloud server cannot reach private LAN IPs (192.168.x.x)
+
+### Solution: Local Print Relay Agent
+A lightweight Node.js HTTP server (`public/print-relay.js`) that runs on any device on the local network (Windows laptop, Raspberry Pi, etc.) and bridges browser → TCP printer.
+
+**Architecture:**
+```
+Tab Sense browser → HTTP → Relay Agent (local network) → TCP → Thermal Printer
+```
+
+**Files changed:**
+- `client/src/lib/thermal-printer.ts`: Added `relay` mode, `relayAgentUrl` setting, `relayAgentPrint()` and `testRelayAgent()` functions
+- `client/src/components/printer-settings-panel.tsx`: Added "Local Relay 🆕" mode in the dropdown with full setup UI, download button, and test connection
+- `public/print-relay.js`: The downloadable relay agent script (served at `/print-relay.js`)
+
+**How users set it up:**
+1. Download `print-relay.js` from printer settings (or `/print-relay.js`)
+2. Install Node.js on any device on the local network
+3. Run `node print-relay.js` — shows device IPs on startup
+4. In printer settings: select "وكيل محلي" (Local Relay), enter relay URL + printer IP
+5. Click "Test Connection" to verify
+
+**Relay agent port:** 8089 (configurable via `PORT=xxxx node print-relay.js`)
+
 ## Latest Fixes (April 2026 - Attendance Report, Cleaner Role, Owner Dashboard)
 
 ### Changes Applied (April 5, 2026)

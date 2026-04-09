@@ -31,6 +31,7 @@ import {
   loadSavedBtDevice,
   getBluetoothState,
   isQZTrayAvailable,
+  testRelayAgent,
   type PrinterSettings,
   type PrinterStatus,
 } from "@/lib/thermal-printer";
@@ -59,6 +60,10 @@ export default function PrinterSettingsPanel() {
   });
   // QZ Tray state
   const [qzStatus, setQzStatus] = useState<'checking' | 'available' | 'unavailable' | null>(null);
+
+  // Relay Agent state
+  const [relayTesting, setRelayTesting] = useState(false);
+  const [relayStatus, setRelayStatus] = useState<{ connected: boolean; message: string } | null>(null);
 
   // Bluetooth state
   const [btConnecting, setBtConnecting] = useState(false);
@@ -209,6 +214,29 @@ export default function PrinterSettingsPanel() {
     toast({ title: tc("تم إزالة الطابعة", "Printer Removed"), description: tc("سيتم استخدام الطباعة عبر المتصفح", "Browser print will be used") });
   }
 
+  async function handleTestRelayAgent() {
+    const relayUrl = settings.relayAgentUrl?.trim();
+    if (!relayUrl) {
+      toast({ title: tc("خطأ", "Error"), description: tc("الرجاء إدخال رابط وكيل الطباعة", "Please enter the relay agent URL"), variant: "destructive" });
+      return;
+    }
+    setRelayTesting(true);
+    setRelayStatus(null);
+    try {
+      const result = await testRelayAgent(relayUrl, settings.networkIp?.trim(), settings.networkPort || 9100);
+      setRelayStatus(result);
+      toast({
+        title: result.connected ? tc("✅ الوكيل جاهز", "✅ Relay Ready") : tc("❌ فشل الاتصال", "❌ Connection Failed"),
+        description: result.message.split('\n')[0],
+        variant: result.connected ? "default" : "destructive",
+      });
+    } catch (e: any) {
+      toast({ title: tc("خطأ", "Error"), description: e?.message, variant: "destructive" });
+    } finally {
+      setRelayTesting(false);
+    }
+  }
+
   async function handleTestNetworkPrinter() {
     const ip = settings.networkIp?.trim();
     if (!ip) {
@@ -284,28 +312,33 @@ export default function PrinterSettingsPanel() {
   const savedDevice = status?.savedDevice;
   const isNetworkMode = settings.mode === 'network';
   const isBluetoothMode = settings.mode === 'bluetooth';
+  const isRelayMode = settings.mode === 'relay';
 
-  const statusBadgeColor = isNetworkMode
-    ? (networkStatus?.connected ? '#16a34a' : '#f59e0b')
-    : isBluetoothMode
-      ? (btState.connected ? '#16a34a' : (savedBtDevice ? '#f59e0b' : '#e5e7eb'))
-      : isUsbConnected
-        ? '#16a34a'
-        : '#e5e7eb';
+  const statusBadgeColor = isRelayMode
+    ? (relayStatus?.connected ? '#16a34a' : '#8b5cf6')
+    : isNetworkMode
+      ? (networkStatus?.connected ? '#16a34a' : '#f59e0b')
+      : isBluetoothMode
+        ? (btState.connected ? '#16a34a' : (savedBtDevice ? '#f59e0b' : '#e5e7eb'))
+        : isUsbConnected
+          ? '#16a34a'
+          : '#e5e7eb';
 
-  const statusBadgeLabel = isNetworkMode
-    ? (settings.networkIp ? `LAN: ${settings.networkIp}` : tc("طابعة شبكية", "Network Printer"))
-    : isBluetoothMode
-      ? (btState.connected
-          ? `BT: ${btState.deviceName || tc("متصلة", "Connected")}`
-          : savedBtDevice
-            ? `BT: ${savedBtDevice.name} (${tc("غير متصلة", "Disconnected")})`
-            : tc("طابعة بلوتوث", "Bluetooth Printer"))
-      : isUsbConnected
-        ? tc("متصلة (USB)", "Connected (USB)")
-        : settings.mode === 'browser'
-          ? tc("طباعة المتصفح", "Browser Print")
-          : tc("غير متصلة", "Disconnected");
+  const statusBadgeLabel = isRelayMode
+    ? (settings.relayAgentUrl ? `Relay: ${settings.relayAgentUrl.replace(/^https?:\/\//, '').split(':')[0]}` : tc("وكيل محلي", "Local Relay"))
+    : isNetworkMode
+      ? (settings.networkIp ? `LAN: ${settings.networkIp}` : tc("طابعة شبكية", "Network Printer"))
+      : isBluetoothMode
+        ? (btState.connected
+            ? `BT: ${btState.deviceName || tc("متصلة", "Connected")}`
+            : savedBtDevice
+              ? `BT: ${savedBtDevice.name} (${tc("غير متصلة", "Disconnected")})`
+              : tc("طابعة بلوتوث", "Bluetooth Printer"))
+        : isUsbConnected
+          ? tc("متصلة (USB)", "Connected (USB)")
+          : settings.mode === 'browser'
+            ? tc("طباعة المتصفح", "Browser Print")
+            : tc("غير متصلة", "Disconnected");
 
   return (
     <div className="space-y-4">
@@ -429,9 +462,25 @@ export default function PrinterSettingsPanel() {
             </div>
           )}
 
+          {/* Relay Agent status */}
+          {isRelayMode && relayStatus && (
+            <div className={`text-sm rounded-lg px-3 py-2 border ${relayStatus.connected ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+              <div className="flex items-start gap-2">
+                <Network className={`w-4 h-4 mt-0.5 flex-shrink-0 ${relayStatus.connected ? 'text-green-600' : 'text-red-500'}`} />
+                <span className={`flex-1 font-medium whitespace-pre-line leading-relaxed ${relayStatus.connected ? 'text-green-800' : 'text-red-700'}`}>
+                  {relayStatus.message}
+                </span>
+                {relayStatus.connected
+                  ? <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  : <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                }
+              </div>
+            </div>
+          )}
+
           {/* Action buttons */}
           <div className="flex flex-wrap gap-2">
-            {webUsbAvailable && !isNetworkMode && !isBluetoothMode && (
+            {webUsbAvailable && !isNetworkMode && !isBluetoothMode && !isRelayMode && (
               <Button
                 size="sm"
                 onClick={handleConnectUSB}
@@ -481,6 +530,18 @@ export default function PrinterSettingsPanel() {
                 {tc("إلغاء الاقتران", "Forget Printer")}
               </Button>
             )}
+            {isRelayMode && (
+              <Button
+                size="sm"
+                onClick={handleTestRelayAgent}
+                disabled={relayTesting || !settings.relayAgentUrl?.trim()}
+                className="bg-violet-600 hover:bg-violet-700 text-white"
+                data-testid="button-test-relay-agent"
+              >
+                <Network className="w-4 h-4 ml-1" />
+                {relayTesting ? tc("جارٍ الفحص...", "Testing...") : tc("اختبار الوكيل", "Test Relay")}
+              </Button>
+            )}
             {isNetworkMode && (
               <Button
                 size="sm"
@@ -493,7 +554,7 @@ export default function PrinterSettingsPanel() {
                 {networkTesting ? tc("جارٍ الفحص...", "Testing...") : tc("اختبار الاتصال", "Test Connection")}
               </Button>
             )}
-            {savedDevice && !isNetworkMode && !isBluetoothMode && (
+            {savedDevice && !isNetworkMode && !isBluetoothMode && !isRelayMode && (
               <Button size="sm" variant="outline" onClick={handleDisconnect} className="text-red-600 border-red-200" data-testid="button-disconnect-printer">
                 <Trash2 className="w-4 h-4 ml-1" />
                 {tc("إزالة الطابعة", "Remove Printer")}
@@ -543,11 +604,14 @@ export default function PrinterSettingsPanel() {
                 }
               </p>
             </div>
-            <Select value={settings.mode} onValueChange={(v: any) => updateSetting('mode', v)}>
-              <SelectTrigger className="w-36" data-testid="select-print-mode">
+            <Select value={settings.mode} onValueChange={(v: any) => { updateSetting('mode', v); setRelayStatus(null); setNetworkStatus(null); }}>
+              <SelectTrigger className="w-40" data-testid="select-print-mode">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="relay">
+                  <span className="flex items-center gap-1"><Network className="w-3 h-3 text-violet-600" /> {tc("وكيل محلي 🆕", "Local Relay 🆕")}</span>
+                </SelectItem>
                 <SelectItem value="network">
                   <span className="flex items-center gap-1"><Network className="w-3 h-3" /> {tc("شبكة LAN", "Network LAN")}</span>
                 </SelectItem>
@@ -563,6 +627,120 @@ export default function PrinterSettingsPanel() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Relay Agent Settings — for Tab Sense / Android / any device where QZ Tray is unavailable */}
+          {isRelayMode && (
+            <>
+              <Separator />
+              <div className="space-y-3 bg-violet-50 border border-violet-200 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-violet-800">
+                  <Network className="w-4 h-4" />
+                  {tc("وكيل الطباعة المحلي — لأجهزة تاب سينس وأندرويد", "Local Print Relay — For Tab Sense & Android Devices")}
+                </div>
+
+                {/* What is this? */}
+                <div className="text-xs text-violet-700 bg-violet-100 rounded-lg p-2.5 space-y-1">
+                  <p className="font-bold">{tc("🔧 ما هو وكيل الطباعة؟", "🔧 What is the Print Relay?")}</p>
+                  <p>{tc(
+                    "برنامج صغير يشتغل على أي جهاز في الشبكة (لابتوب / ويندوز / Raspberry Pi). يستقبل أوامر الطباعة من متصفحك ويرسلها مباشرة للطابعة عبر TCP — بدون نوافذ ولا سحابة.",
+                    "A small program that runs on any device on your network (laptop / Windows / Raspberry Pi). It receives print jobs from your browser and sends them directly to the printer via TCP — no dialogs, no cloud."
+                  )}</p>
+                </div>
+
+                {/* Step 1: Download */}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-violet-800">{tc("الخطوة 1: تحميل وتشغيل وكيل الطباعة", "Step 1: Download & Run the Relay Agent")}</p>
+                  <ol className="text-xs text-violet-700 space-y-1 list-decimal list-inside pr-2">
+                    <li>{tc("ثبّت Node.js على الجهاز:", "Install Node.js on the device:")} <a href="https://nodejs.org" target="_blank" rel="noopener noreferrer" className="text-violet-600 underline">nodejs.org</a></li>
+                    <li>
+                      {tc("حمّل سكريبت الوكيل:", "Download the relay script:")}
+                      <a
+                        href="/print-relay.js"
+                        download="print-relay.js"
+                        className="mr-1 inline-flex items-center gap-1 px-2 py-0.5 bg-violet-600 text-white rounded text-xs font-semibold hover:bg-violet-700"
+                        data-testid="link-download-relay-script"
+                      >
+                        ⬇ {tc("تحميل print-relay.js", "Download print-relay.js")}
+                      </a>
+                    </li>
+                    <li>{tc("افتح موجه الأوامر (cmd) في نفس المجلد", "Open Command Prompt (cmd) in the same folder")}</li>
+                    <li>
+                      {tc("شغّل:", "Run:")}
+                      <code className="mr-1 bg-violet-200 px-1.5 py-0.5 rounded font-mono text-violet-900">node print-relay.js</code>
+                    </li>
+                    <li>{tc("ستظهر رسالة 'يعمل' مع IP الجهاز — انسخ هذا الـ IP", "You'll see 'running' message with device IP — copy that IP")}</li>
+                  </ol>
+                </div>
+
+                <Separator className="border-violet-200" />
+
+                {/* Step 2: Configure */}
+                <p className="text-xs font-semibold text-violet-800">{tc("الخطوة 2: إدخال إعدادات الاتصال", "Step 2: Enter Connection Settings")}</p>
+
+                {/* Relay Agent URL */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-violet-700">{tc("رابط وكيل الطباعة (IP الجهاز الذي يشغّل الوكيل)", "Relay Agent URL (IP of the device running the relay)")}</Label>
+                  <Input
+                    placeholder="http://192.168.8.10:8089"
+                    value={settings.relayAgentUrl || ''}
+                    onChange={(e) => updateSetting('relayAgentUrl', e.target.value.trim())}
+                    className="font-mono text-sm border-violet-300 focus:border-violet-500"
+                    data-testid="input-relay-agent-url"
+                    dir="ltr"
+                  />
+                  <p className="text-xs text-violet-500">{tc("مثال: http://192.168.8.10:8089 (IP الجهاز الذي يشغّل الوكيل + المنفذ 8089)", "Example: http://192.168.8.10:8089 (IP of relay device + port 8089)")}</p>
+                </div>
+
+                {/* Printer IP and Port */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs text-violet-700">{tc("IP الطابعة", "Printer IP")}</Label>
+                    <Input
+                      placeholder="192.168.8.77"
+                      value={settings.networkIp || ''}
+                      onChange={(e) => updateSetting('networkIp', e.target.value)}
+                      className="font-mono text-sm border-violet-300"
+                      data-testid="input-relay-printer-ip"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-violet-700">{tc("البورت", "Port")}</Label>
+                    <Input
+                      placeholder="9100"
+                      value={String(settings.networkPort || 9100)}
+                      onChange={(e) => updateSetting('networkPort', Number(e.target.value) || 9100)}
+                      className="font-mono text-sm border-violet-300"
+                      data-testid="input-relay-printer-port"
+                      type="number"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                {/* Test button */}
+                <Button
+                  onClick={handleTestRelayAgent}
+                  disabled={relayTesting || !settings.relayAgentUrl?.trim()}
+                  className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+                  data-testid="button-test-relay-full"
+                >
+                  {relayTesting ? (
+                    <><RefreshCw className="w-4 h-4 ml-2 animate-spin" />{tc("جارٍ الفحص...", "Testing...")}</>
+                  ) : (
+                    <><CheckCircle2 className="w-4 h-4 ml-2" />{tc("اختبار الاتصال بالوكيل والطابعة", "Test Relay & Printer Connection")}</>
+                  )}
+                </Button>
+
+                <p className="text-xs text-violet-500 text-center">
+                  {tc(
+                    "💡 الوكيل والطابعة يجب أن يكونا على نفس الشبكة. الكاشير (تاب سينس) يتصل بالوكيل، والوكيل يتصل بالطابعة.",
+                    "💡 The relay and printer must be on the same network. The cashier (Tab Sense) connects to the relay, which connects to the printer."
+                  )}
+                </p>
+              </div>
+            </>
+          )}
 
           {/* Network Printer Settings (shown only in network mode) */}
           {isNetworkMode && (
@@ -913,7 +1091,19 @@ export default function PrinterSettingsPanel() {
           <div className="flex gap-2">
             <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <div className="text-xs text-amber-800 space-y-2">
-              {isNetworkMode ? (
+              {isRelayMode ? (
+                <>
+                  <p className="font-semibold">{tc("إعداد وكيل الطباعة المحلي (لتاب سينس وأندرويد):", "Local Print Relay Setup (for Tab Sense & Android):")}</p>
+                  <ol className="list-decimal list-inside space-y-0.5 pr-2">
+                    <li>{tc("ثبّت Node.js على أي جهاز (ويندوز/ماك/لينكس) في نفس الشبكة", "Install Node.js on any device (Win/Mac/Linux) on the same network")}</li>
+                    <li>{tc("حمّل print-relay.js من الإعدادات أعلاه وشغّله بـ: node print-relay.js", "Download print-relay.js from settings above and run: node print-relay.js")}</li>
+                    <li>{tc("انسخ IP الجهاز الذي يشغّل الوكيل (يظهر عند التشغيل)", "Copy the IP of the device running the relay (shown on startup)")}</li>
+                    <li>{tc("أدخل رابط الوكيل: http://192.168.x.x:8089", "Enter relay URL: http://192.168.x.x:8089")}</li>
+                    <li>{tc("أدخل IP الطابعة ثم اضغط 'اختبار الاتصال'", "Enter printer IP then click 'Test Connection'")}</li>
+                  </ol>
+                  <p>{tc("💡 الوكيل يعمل مع أي طابعة ESC/POS شبكية ويحل مشكلة تاب سينس والأجهزة الأندرويد", "💡 The relay works with any ESC/POS network printer and solves Tab Sense / Android printing issues")}</p>
+                </>
+              ) : isNetworkMode ? (
                 <>
                   <p className="font-semibold">{tc("إعداد الطابعة الشبكية (ProPos / LAN):", "Network Printer Setup (ProPos / LAN):")}</p>
                   <ol className="list-decimal list-inside space-y-0.5 pr-2">
