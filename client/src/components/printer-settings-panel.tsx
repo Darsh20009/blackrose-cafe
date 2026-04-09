@@ -125,13 +125,35 @@ export default function PrinterSettingsPanel() {
     toast({ title: tc("تم قطع الاتصال", "Disconnected"), description: tc("سيتم استخدام الطباعة عبر المتصفح", "Browser print will be used") });
   }
 
+  /**
+   * Normalize any IP-like string to a subnet prefix ending with a dot.
+   * "192.168.8.77"  → "192.168.8."
+   * "192.168.8."    → "192.168.8."
+   * "192.168.8"     → "192.168.8."
+   * "garbage"       → undefined
+   */
+  function normalizeSubnet(raw: string): string | undefined {
+    const s = raw.trim();
+    if (!s) return undefined;
+    // Already a valid subnet prefix (X.X.X.)
+    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.$/.test(s)) return s;
+    // Full IP address (X.X.X.X) — extract first 3 octets
+    const fullIp = s.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/);
+    if (fullIp) return fullIp[1] + '.';
+    // Three octets without trailing dot (X.X.X)
+    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(s)) return s + '.';
+    return undefined;
+  }
+
   async function handleDiscoverPrinters() {
     setDiscovering(true);
     setDiscoverProgress(tc("جارٍ فحص الشبكة المحلية...", "Scanning local network..."));
     setDiscoveredPrinters([]);
     try {
       const port = settings.networkPort || 9100;
-      const hint = subnetHint.trim() || undefined;
+      const hint = normalizeSubnet(subnetHint);
+      // If the user typed a full IP, update the hint field to show the corrected subnet
+      if (hint && subnetHint.trim() !== hint) setSubnetHint(hint);
       const scanLabel = hint ? hint + '1-254' : tc("شبكة السيرفر", "server network");
       setDiscoverProgress(tc(`فحص ${scanLabel} على المنفذ ${port}...`, `Scanning ${scanLabel} on port ${port}...`));
       const found = await discoverNetworkPrinters(port, 300, hint);
