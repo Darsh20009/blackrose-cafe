@@ -647,29 +647,68 @@ export default function PrinterSettingsPanel() {
                   )}</p>
                 </div>
 
-                {/* Step 1: Download */}
-                <div className="space-y-1.5">
-                  <p className="text-xs font-semibold text-violet-800">{tc("الخطوة 1: تحميل وتشغيل وكيل الطباعة", "Step 1: Download & Run the Relay Agent")}</p>
-                  <ol className="text-xs text-violet-700 space-y-1 list-decimal list-inside pr-2">
-                    <li>{tc("ثبّت Node.js على الجهاز:", "Install Node.js on the device:")} <a href="https://nodejs.org" target="_blank" rel="noopener noreferrer" className="text-violet-600 underline">nodejs.org</a></li>
-                    <li>
-                      {tc("حمّل سكريبت الوكيل:", "Download the relay script:")}
-                      <a
-                        href="/print-relay.js"
-                        download="print-relay.js"
-                        className="mr-1 inline-flex items-center gap-1 px-2 py-0.5 bg-violet-600 text-white rounded text-xs font-semibold hover:bg-violet-700"
-                        data-testid="link-download-relay-script"
-                      >
-                        ⬇ {tc("تحميل print-relay.js", "Download print-relay.js")}
-                      </a>
-                    </li>
-                    <li>{tc("افتح موجه الأوامر (cmd) في نفس المجلد", "Open Command Prompt (cmd) in the same folder")}</li>
-                    <li>
-                      {tc("شغّل:", "Run:")}
-                      <code className="mr-1 bg-violet-200 px-1.5 py-0.5 rounded font-mono text-violet-900">node print-relay.js</code>
-                    </li>
-                    <li>{tc("ستظهر رسالة 'يعمل' مع IP الجهاز — انسخ هذا الـ IP", "You'll see 'running' message with device IP — copy that IP")}</li>
-                  </ol>
+                {/* Step 1: Download - with tabs for Windows vs Android */}
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-violet-800">{tc("الخطوة 1: تشغيل وكيل الطباعة على أي جهاز في الشبكة", "Step 1: Run the Relay Agent on any device on the network")}</p>
+
+                  {/* Windows/PC instructions */}
+                  <div className="bg-white border border-violet-200 rounded-lg p-2.5 space-y-1.5">
+                    <p className="text-xs font-bold text-violet-800">🖥️ {tc("ويندوز / لابتوب", "Windows / Laptop")}</p>
+                    <ol className="text-xs text-violet-700 space-y-1 list-decimal list-inside pr-2">
+                      <li>{tc("ثبّت Node.js:", "Install Node.js:")} <a href="https://nodejs.org" target="_blank" rel="noopener noreferrer" className="text-violet-600 underline">nodejs.org</a></li>
+                      <li>
+                        {tc("حمّل السكريبت:", "Download the script:")}
+                        <a
+                          href="/print-relay.js"
+                          download="print-relay.js"
+                          className="mr-1 inline-flex items-center gap-1 px-2 py-0.5 bg-violet-600 text-white rounded text-xs font-semibold hover:bg-violet-700"
+                          data-testid="link-download-relay-script"
+                        >
+                          ⬇ {tc("تحميل print-relay.js", "Download print-relay.js")}
+                        </a>
+                      </li>
+                      <li>{tc("افتح cmd في نفس المجلد وشغّل:", "Open cmd in same folder and run:")} <code className="bg-violet-100 px-1 rounded font-mono text-violet-900">node print-relay.js</code></li>
+                      <li>{tc("ستظهر IPs الجهاز — انسخها للحقل أدناه", "Device IPs will appear — copy to field below")}</li>
+                    </ol>
+                  </div>
+
+                  {/* Android/Termux instructions */}
+                  <div className="bg-white border border-violet-200 rounded-lg p-2.5 space-y-1.5">
+                    <p className="text-xs font-bold text-violet-800">📱 {tc("أندرويد (Termux) — بدون لابتوب!", "Android (Termux) — No laptop needed!")}</p>
+                    <p className="text-xs text-violet-600">{tc("يمكن تشغيل الوكيل على أي هاتف أو تابلت أندرويد في الشبكة", "The relay can run on any Android phone/tablet on the network")}</p>
+                    <ol className="text-xs text-violet-700 space-y-1 list-decimal list-inside pr-2">
+                      <li>
+                        {tc("ثبّت Termux من F-Droid (مجاني، بدون Root):", "Install Termux from F-Droid (free, no root):")}
+                        {" "}<a href="https://f-droid.org/packages/com.termux/" target="_blank" rel="noopener noreferrer" className="text-violet-600 underline">f-droid.org</a>
+                      </li>
+                      <li>
+                        {tc("افتح Termux وثبّت Node.js:", "Open Termux and install Node.js:")}
+                        <code className="block mt-0.5 bg-violet-100 px-1.5 py-1 rounded font-mono text-violet-900 text-[10px] leading-relaxed" dir="ltr">
+                          pkg update -y && pkg install nodejs -y
+                        </code>
+                      </li>
+                      <li>
+                        {tc("حمّل السكريبت من هذا الرابط على الأندرويد:", "Download the script on Android from this URL:")}
+                        <code className="block mt-0.5 bg-violet-100 px-1.5 py-1 rounded font-mono text-violet-900 text-[10px]" dir="ltr">
+                          {`curl -o print-relay.js ${window.location.origin}/print-relay.js`}
+                        </code>
+                        <p className="text-[10px] text-violet-500 mt-0.5">{tc("(انسخ الأمر أعلاه والصقه في Termux)", "(Copy the command above and paste it in Termux)")}</p>
+                      </li>
+                      <li>
+                        {tc("شغّل:", "Run:")}
+                        <code className="mr-1 bg-violet-100 px-1 rounded font-mono text-violet-900">node print-relay.js</code>
+                      </li>
+                      <li>{tc("ابقِ Termux مفتوحاً — سيعمل الوكيل في الخلفية", "Keep Termux open — relay runs in background")}</li>
+                      <li>{tc("ستظهر IPs الجهاز — أدخل IP الأندرويد في حقل «رابط الوكيل» أدناه", "Device IPs will appear — enter Android IP in 'Relay URL' field below")}</li>
+                    </ol>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 text-xs text-amber-800">
+                    💡 {tc(
+                      "الجهاز الذي يشغّل الوكيل يجب أن يكون على نفس الشبكة (WiFi) مع الطابعة. تاب سينس أيضاً يجب أن يكون على نفس الشبكة.",
+                      "The relay device must be on the same network (WiFi) as the printer. Tab Sense must also be on the same network."
+                    )}
+                  </div>
                 </div>
 
                 <Separator className="border-violet-200" />
