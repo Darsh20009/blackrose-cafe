@@ -139,3 +139,17 @@ const appointmentSchema = new mongoose.Schema({
 });
 
 export const AppointmentModel = mongoose.models.Appointment || mongoose.model('Appointment', appointmentSchema);
+
+// ── Cloud Print Queue ─────────────────────────────────────────────────────────
+// Stores print jobs submitted by browsers so a local print agent can pick them up
+const printJobSchema = new mongoose.Schema({
+  data: { type: String, required: true },      // base64 ESC/POS bytes
+  printerIp: { type: String, required: true },  // e.g. "192.168.8.77"
+  printerPort: { type: Number, default: 9100 },
+  status: { type: String, default: 'pending' }, // 'pending' | 'done' | 'error'
+  errorMsg: String,
+  createdAt: { type: Date, default: Date.now, expires: 300 }, // auto-delete after 5 min
+  doneAt: Date,
+});
+
+export const PrintJobModel = mongoose.models.PrintJob || mongoose.model('PrintJob', printJobSchema);

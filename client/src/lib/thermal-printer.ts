@@ -42,7 +42,7 @@ const CMD = {
 
 export interface PrinterSettings {
   enabled: boolean;
-  mode: 'webusb' | 'network' | 'bluetooth' | 'browser' | 'relay';
+  mode: 'webusb' | 'network' | 'bluetooth' | 'browser' | 'relay' | 'queue';
   paperWidth: '58mm' | '80mm';
   autoPrint: boolean;
   autoKitchenCopy: boolean;
@@ -943,10 +943,44 @@ export function getBluetoothState(): { connected: boolean; deviceName: string | 
  * 4. Tries WebUSB if device is connected + mode=webusb
  * 5. Falls back to browser print dialog
  */
+/**
+ * Cloud Print Queue mode — posts the job to the QIROX server.
+ * A local print-agent.js running near the printer picks up the job and prints.
+ */
+export async function queuePrint(escData: Uint8Array, printerIp: string, printerPort = 9100): Promise<PrintResult> {
+  try {
+    const b64 = btoa(Array.from(escData, b => String.fromCharCode(b)).join(''));
+    const resp = await fetch('/api/print-queue', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ data: b64, printerIp, printerPort }),
+    });
+    const result = await resp.json();
+    if (!resp.ok || !result.ok) {
+      return { success: false, mode: 'error', error: result.error || 'فشل إرسال طلب الطباعة' };
+    }
+    return { success: true, mode: 'network' };
+  } catch (err: any) {
+    return { success: false, mode: 'error', error: `طابور الطباعة: ${err?.message || 'خطأ'}` };
+  }
+}
+
 export async function thermalPrint(escData: Uint8Array, fallbackHtml: string, fallbackPaper: '58mm' | '80mm' = '80mm'): Promise<PrintResult> {
   const settings = loadPrinterSettings();
 
   if (!settings.enabled) return { success: false, mode: 'error', error: 'الطابعة معطّلة في الإعدادات' };
+
+  // Cloud Queue mode — send to server, local print agent picks up and prints
+  if (settings.mode === 'queue') {
+    if (!settings.networkIp) {
+      return { success: false, mode: 'error', error: 'لم يتم تحديد IP الطابعة' };
+    }
+    const result = await queuePrint(escData, settings.networkIp, settings.networkPort || 9100);
+    if (result.success) return result;
+    console.warn('[QueuePrint] Failed:', result.error);
+    // Don't fallback to browser for queue mode — show the error
+    return result;
+  }
 
   // Relay Agent mode — local Node.js bridge for Android / Tab Sense devices
   if (settings.mode === 'relay') {
@@ -1011,7 +1045,9 @@ export async function autoPrintOrder(receiptEsc: Uint8Array, kitchenEsc: Uint8Ar
 
   if (kitchenEsc && settings.autoKitchenCopy) {
     await new Promise(r => setTimeout(r, 1500));
-    if (settings.mode === 'relay' && settings.relayAgentUrl && settings.networkIp) {
+    if (settings.mode === 'queue' && settings.networkIp) {
+      await queuePrint(kitchenEsc, settings.networkIp, settings.networkPort || 9100);
+    } else if (settings.mode === 'relay' && settings.relayAgentUrl && settings.networkIp) {
       await relayAgentPrint(kitchenEsc, settings.relayAgentUrl, settings.networkIp, settings.networkPort || 9100);
     } else if (settings.mode === 'network' && settings.networkIp) {
       await networkPrint(kitchenEsc, settings.networkIp, settings.networkPort || 9100);

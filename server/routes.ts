@@ -617,7 +617,7 @@ const upload = multer({
 // Simple POS device status tracker
 let posDeviceStatus = { connected: false, lastCheck: Date.now() };
 
-import { BusinessConfigModel, AppointmentModel } from "./models";
+import { BusinessConfigModel, AppointmentModel, PrintJobModel } from "./models";
 
 function getAppBaseUrl(): string {
   if (process.env.SITE_URL) return process.env.SITE_URL;
@@ -18952,6 +18952,71 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
   app.get("/api/qirox-studio/invoices", async (_req, res) => qiroxStudioProxy("/invoices", res));
   app.get("/api/qirox-studio/wallet", async (_req, res) => qiroxStudioProxy("/wallet", res));
   app.get("/api/qirox-studio/customers", async (_req, res) => qiroxStudioProxy("/customers", res));
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // ── Cloud Print Queue ──────────────────────────────────────────────────────
+  // Allows browsers (Tab Sense/Android) to submit print jobs to the cloud,
+  // so a local print agent (running near the printer) can pick them up via TCP.
+  // Auth: browser submits with employee session; agent uses PRINT_AGENT_KEY.
+  {
+    const crypto = await import('crypto');
+    const PRINT_AGENT_KEY: string = crypto.default
+      .createHash('sha256')
+      .update((process.env.SESSION_SECRET || 'qirox-default') + '-print-agent-v1')
+      .digest('hex')
+      .slice(0, 32);
+
+    const agentAuth = (req: any, res: any, next: any) => {
+      const key = req.headers['x-print-agent-key'] || req.query.key;
+      if (key !== PRINT_AGENT_KEY) {
+        return res.status(401).json({ error: 'Invalid print agent key' });
+      }
+      next();
+    };
+
+    // Submit a print job (called by browser; employee session required)
+    app.post('/api/print-queue', requireAuth as any, async (req: any, res: any) => {
+      try {
+        const { data, printerIp, printerPort } = req.body;
+        if (!data || !printerIp) {
+          return res.status(400).json({ error: 'data and printerIp are required' });
+        }
+        const job = await PrintJobModel.create({ data, printerIp, printerPort: printerPort || 9100 });
+        res.json({ ok: true, jobId: job._id });
+      } catch (e: any) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // Poll for the oldest pending job (called by print agent)
+    app.get('/api/print-queue/pending', agentAuth, async (_req: any, res: any) => {
+      try {
+        const job = await PrintJobModel.findOne({ status: 'pending' }).sort({ createdAt: 1 }).lean();
+        res.json({ job: job || null });
+      } catch (e: any) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // Mark job as done or error (called by print agent)
+    app.patch('/api/print-queue/:id/done', agentAuth, async (req: any, res: any) => {
+      try {
+        const update: any = { status: req.body.error ? 'error' : 'done', doneAt: new Date() };
+        if (req.body.error) update.errorMsg = req.body.error;
+        await PrintJobModel.findByIdAndUpdate(req.params.id, update);
+        res.json({ ok: true });
+      } catch (e: any) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // Get agent config (server URL + key) — for settings page
+    app.get('/api/print-queue/agent-info', requireAuth as any, async (_req: any, res: any) => {
+      const serverUrl = process.env.SITE_URL ||
+        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'http://localhost:5000');
+      res.json({ serverUrl, agentKey: PRINT_AGENT_KEY });
+    });
+  }
   // ─────────────────────────────────────────────────────────────────────────────
 
   const httpServer = createServer(app);

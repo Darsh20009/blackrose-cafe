@@ -616,13 +616,15 @@ export default function PrinterSettingsPanel() {
             <div>
               <Label className="text-sm font-medium">{tc("وضع الطباعة", "Print Mode")}</Label>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {settings.mode === 'network'
-                  ? tc("طابعة شبكية (LAN/WiFi) — ProPos، Epson، Xprinter", "Network printer (LAN/WiFi) — ProPos, Epson, Xprinter")
-                  : settings.mode === 'bluetooth'
-                    ? tc("طابعة بلوتوث (BLE) — Xprinter BT، MUNBYN، Rongta", "Bluetooth printer (BLE) — Xprinter BT, MUNBYN, Rongta")
-                    : settings.mode === 'webusb'
-                      ? tc("اتصال USB مباشر — بدون نوافذ طباعة", "Direct USB — no print dialogs")
-                      : tc("طباعة عبر المتصفح — تظهر نافذة الطباعة", "Browser print — dialog will appear")
+                {settings.mode === 'queue'
+                  ? tc("طابور سحابي — الأفضل لتاب سينس وأندرويد", "Cloud Queue — Best for Tab Sense & Android")
+                  : settings.mode === 'network'
+                    ? tc("طابعة شبكية (LAN/WiFi) — ProPos، Epson، Xprinter", "Network printer (LAN/WiFi) — ProPos, Epson, Xprinter")
+                    : settings.mode === 'bluetooth'
+                      ? tc("طابعة بلوتوث (BLE) — Xprinter BT، MUNBYN، Rongta", "Bluetooth printer (BLE) — Xprinter BT, MUNBYN, Rongta")
+                      : settings.mode === 'webusb'
+                        ? tc("اتصال USB مباشر — بدون نوافذ طباعة", "Direct USB — no print dialogs")
+                        : tc("طباعة عبر المتصفح — تظهر نافذة الطباعة", "Browser print — dialog will appear")
                 }
               </p>
             </div>
@@ -631,8 +633,11 @@ export default function PrinterSettingsPanel() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="queue">
+                  <span className="flex items-center gap-1"><Network className="w-3 h-3 text-green-600" /> {tc("طابور سحابي ⭐", "Cloud Queue ⭐")}</span>
+                </SelectItem>
                 <SelectItem value="relay">
-                  <span className="flex items-center gap-1"><Network className="w-3 h-3 text-violet-600" /> {tc("وكيل محلي 🆕", "Local Relay 🆕")}</span>
+                  <span className="flex items-center gap-1"><Network className="w-3 h-3 text-violet-600" /> {tc("وكيل محلي", "Local Relay")}</span>
                 </SelectItem>
                 <SelectItem value="network">
                   <span className="flex items-center gap-1"><Network className="w-3 h-3" /> {tc("شبكة LAN", "Network LAN")}</span>
@@ -649,6 +654,89 @@ export default function PrinterSettingsPanel() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Cloud Print Queue — Best for Tab Sense / Android */}
+          {settings.mode === 'queue' && (
+            <>
+              <Separator />
+              <div className="space-y-3 bg-green-50 border border-green-300 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-green-800">
+                  <Network className="w-4 h-4" />
+                  {tc("الطابور السحابي ⭐ — الحل المثالي لتاب سينس وأندرويد", "Cloud Queue ⭐ — Perfect for Tab Sense & Android")}
+                </div>
+
+                <div className="text-xs text-green-700 bg-green-100 rounded-lg p-2.5 space-y-1">
+                  <p className="font-bold">{tc("🚀 كيف يعمل؟", "🚀 How it works?")}</p>
+                  <p>{tc(
+                    "الكاشير يرسل أمر الطباعة للسيرفر. عامل الطباعة (يشتغل على أي جهاز قريب من الطابعة) يسحب الأمر تلقائياً ويطبع — بدون أي إعداد شبكة.",
+                    "Cashier sends print job to the cloud server. The print agent (running on any device near the printer) picks it up automatically and prints — no network config needed."
+                  )}</p>
+                </div>
+
+                {/* Printer IP & Port */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs text-green-700">{tc("IP الطابعة", "Printer IP")}</Label>
+                    <Input
+                      placeholder="192.168.8.77"
+                      value={settings.networkIp || ''}
+                      onChange={(e) => updateSetting('networkIp', e.target.value)}
+                      className="font-mono text-sm border-green-300"
+                      data-testid="input-queue-printer-ip"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-green-700">{tc("البورت", "Port")}</Label>
+                    <Input
+                      placeholder="9100"
+                      value={String(settings.networkPort || 9100)}
+                      onChange={(e) => updateSetting('networkPort', Number(e.target.value) || 9100)}
+                      className="font-mono text-sm border-green-300"
+                      data-testid="input-queue-printer-port"
+                      type="number"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                {/* Download pre-configured agent */}
+                <div className="bg-white border-2 border-green-300 rounded-xl p-3 space-y-2">
+                  <p className="text-sm font-bold text-green-900">
+                    {tc("خطوة واحدة فقط — على أي جهاز ويندوز في الكافيه:", "One step only — on any Windows PC in the cafe:")}
+                  </p>
+                  <p className="text-xs text-green-700">
+                    {tc("حمّل الملف التالي وشغّله بدبل كليك — يعمل تلقائياً بدون أي إعداد ويبدأ مع الويندوز", "Download this file and double-click — works automatically with no setup and starts with Windows")}
+                  </p>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('/api/print-queue/agent-info');
+                        const { serverUrl, agentKey } = await res.json();
+                        const ip = settings.networkIp || '192.168.8.77';
+                        const port = settings.networkPort || 9100;
+                        const batContent = `@echo off\r\nchcp 65001 >nul 2>&1\r\ntitle QIROX - عامل الطباعة\r\necho.\r\necho  [QIROX] جارٍ التحقق من Node.js...\r\nnode --version >nul 2>&1\r\nif %errorlevel% neq 0 (\r\n  echo  [!] Node.js غير مثبت — حمّله من nodejs.org ثم أعد تشغيل هذا الملف\r\n  start https://nodejs.org\r\n  pause\r\n  exit /b 1\r\n)\r\necho  [✓] Node.js موجود\r\nif not exist print-agent.js (\r\n  echo  جارٍ تحميل عامل الطباعة...\r\n  powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '${serverUrl}/print-agent.js' -OutFile 'print-agent.js' -UseBasicParsing"\r\n)\r\nset QIROX_SERVER=${serverUrl}\r\nset QIROX_KEY=${agentKey}\r\nset PRINTER_IP=${ip}\r\nset PRINTER_PORT=${port}\r\nreg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "QIROXPrintAgent" /t REG_SZ /d "\\"%~f0\\"" /f >nul 2>&1\r\necho  [✓] سيبدأ تلقائياً مع كل تشغيل للويندوز\r\necho.\r\necho  الطابعة: ${ip}:${port}\r\necho  الطابور: ${serverUrl}\r\necho.\r\nnode print-agent.js --server ${serverUrl} --key ${agentKey} --ip ${ip} --port ${port}\r\npause\r\n`;
+                        const blob = new Blob([batContent], { type: 'application/octet-stream' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url; a.download = 'qirox-print-agent.bat'; a.click();
+                        URL.revokeObjectURL(url);
+                      } catch (e: any) {
+                        alert(tc('خطأ في تحميل الإعدادات: ' + e.message, 'Error fetching config: ' + e.message));
+                      }
+                    }}
+                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold transition-colors"
+                    data-testid="button-download-print-agent"
+                  >
+                    ⬇ {tc("تحميل qirox-print-agent.bat (دبل كليك وخلاص)", "Download qirox-print-agent.bat (just double-click)")}
+                  </button>
+                  <p className="text-[11px] text-green-600 text-center">
+                    {tc("الملف مُعدّ مسبقاً بكل الإعدادات — لا تحتاج لكتابة أي شيء", "Pre-configured with all settings — no typing required")}
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Relay Agent Settings — for Tab Sense / Android / any device where QZ Tray is unavailable */}
           {isRelayMode && (
