@@ -1,5 +1,6 @@
 {
-  "name": "BLACK ROSE CAFE",
+  "id": "/",
+  "name": "BLACK ROSE CAFE - بلاك روز كافيه",
   "short_name": "Black Rose",
   "description": "نظام إدارة مقهى بلاك روز | BLACK ROSE CAFE Management System",
   "start_url": "/",
@@ -11,7 +12,7 @@
     "browser"
   ],
   "background_color": "#0d3322",
-  "theme_color": "#2D9B6E",
+  "theme_color": "#BE1845",
   "orientation": "any",
   "lang": "ar",
   "dir": "rtl",
@@ -22,7 +23,14 @@
   "prefer_related_applications": false,
   "screenshots": [
     {
-      "src": "/logo.png",
+      "src": "/logo-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "form_factor": "narrow",
+      "label": "BLACK ROSE CAFE"
+    },
+    {
+      "src": "/logo-512.png",
       "type": "image/png",
       "sizes": "512x512",
       "form_factor": "wide",
@@ -47,12 +55,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
-    },
-    {
-      "src": "/logo-1024.png",
-      "sizes": "1024x1024",
-      "type": "image/png",
-      "purpose": "any"
     }
   ],
   "shortcuts": [
