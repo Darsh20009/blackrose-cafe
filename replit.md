@@ -201,6 +201,15 @@ Fully dynamic plan management UI in the QIROX super admin panel:
   - `pos-system.tsx`: Open bills count badge changed from `bg-orange-500` to `bg-primary`
 - **PRESERVED intentional amber/orange**: Star rating stars, loyalty tier gold colors, payment gateway test mode banners, ZATCA warning text, order status "in transit" (orange), urgent order pulse badges, maintenance mode warning, promo notification type colors, low-stock warning indicators, "coming soon" payment method badges, kitchen delivery status indicators
 
+## Replit Migration Notes (April 2026)
+
+- Added `uuid` as a direct dependency because the server imports it at runtime during account setup.
+- Replit dev preview uses the existing `Start application` workflow on port 5000 with `npm run dev`.
+- Vite HMR is configured for Replit's proxied preview host in `vite.config.ts` and `server/vite.ts`.
+- The app websocket server now handles only `/ws/orders` upgrades so it does not intercept Vite's development websocket.
+- Service workers are unregistered/skipped in development to prevent stale cached bundles in the Replit preview while preserving production PWA behavior.
+- PayMob automatic startup configuration now requires `PAYMOB_SECRET_KEY`, `PAYMOB_PUBLIC_KEY`, and `PAYMOB_HMAC_SECRET` environment variables instead of hardcoded fallback credentials.
+
 ## Quick Start
 
 - **Dev**: `NODE_ENV=development node_modules/.bin/tsx server/index.ts` (starts server + Vite middleware on port 5000)

@@ -522,12 +522,17 @@ app.use((req, res, next) => {
   server.listen(port, "0.0.0.0", async () => {
     log(`serving on port ${port}`);
 
-    // Auto-configure PayMob Saudi Arabia payment gateway
+    // Auto-configure PayMob Saudi Arabia payment gateway when credentials are provided
     try {
       const { BusinessConfigModel } = await import("./models");
-      const PAYMOB_SECRET_KEY = process.env.PAYMOB_SECRET_KEY || 'sau_sk_live_f9f32292f60b99100851d282d8237c8f61524e1123ae3163cf6cc48a39804121';
-      const PAYMOB_PUBLIC_KEY = process.env.PAYMOB_PUBLIC_KEY || 'sau_pk_live_cVPlDhiOak19QXrhERc9RDRmEsuAnTYh';
-      const PAYMOB_HMAC_SECRET = process.env.PAYMOB_HMAC_SECRET || 'ED62F89FD0A9ADE40D47E0C5FC62FBF2';
+      const PAYMOB_SECRET_KEY = process.env.PAYMOB_SECRET_KEY;
+      const PAYMOB_PUBLIC_KEY = process.env.PAYMOB_PUBLIC_KEY;
+      const PAYMOB_HMAC_SECRET = process.env.PAYMOB_HMAC_SECRET;
+
+      if (!PAYMOB_SECRET_KEY || !PAYMOB_PUBLIC_KEY || !PAYMOB_HMAC_SECRET) {
+        console.log('ℹ️ PayMob credentials not configured; skipping automatic payment gateway setup');
+        return;
+      }
 
       const config = await BusinessConfigModel.findOne({ tenantId: 'demo-tenant' });
       if (config) {

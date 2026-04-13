@@ -25,7 +25,16 @@ class OrderWebSocketManager {
   private heartbeatInterval: NodeJS.Timeout | null = null;
 
   setup(server: Server) {
-    this.wss = new WebSocketServer({ server, path: "/ws/orders" });
+    this.wss = new WebSocketServer({ noServer: true });
+
+    server.on("upgrade", (request, socket, head) => {
+      const pathname = new URL(request.url || "", "http://localhost").pathname;
+      if (pathname !== "/ws/orders") return;
+
+      this.wss?.handleUpgrade(request, socket, head, (ws) => {
+        this.wss?.emit("connection", ws, request);
+      });
+    });
 
     this.wss.on("connection", (ws, req) => {
       console.log("[WS] New client connected");

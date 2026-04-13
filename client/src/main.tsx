@@ -9,8 +9,14 @@ applyBrandColors();
 
 createRoot(document.getElementById("root")!).render(<App />);
 
+if (import.meta.env.DEV && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations()
+    .then((registrations) => registrations.forEach((registration) => registration.unregister()))
+    .catch(() => {});
+}
+
 // Register Service Worker for PWA
-if ('serviceWorker' in navigator) {
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   // Capture whether a SW was already controlling this page BEFORE we register.
   // If null → first install (no reload needed).
   // If non-null → there was an old SW → any controller change means a real update.
