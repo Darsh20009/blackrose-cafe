@@ -122,7 +122,7 @@ export default function PrinterSettingsPanel() {
     clearSavedDevice();
     savePrinterSettings({ mode: 'browser' });
     await refreshStatus();
-    toast({ title: tc("تم قطع الاتصال", "Disconnected"), description: tc("سيتم استخدام الطباعة عبر المتصفح", "Browser print will be used") });
+    toast({ title: tc("تم قطع الاتصال", "Disconnected"), description: tc("راجع إعدادات الطابعة واختر الوضع المناسب", "Check printer settings and choose the appropriate mode") });
   }
 
   /**
@@ -233,7 +233,7 @@ export default function PrinterSettingsPanel() {
     setSettings(loadPrinterSettings());
     setBtState({ connected: false, deviceName: null });
     setBtStatus(null);
-    toast({ title: tc("تم إزالة الطابعة", "Printer Removed"), description: tc("سيتم استخدام الطباعة عبر المتصفح", "Browser print will be used") });
+    toast({ title: tc("تم إزالة الطابعة", "Printer Removed"), description: tc("راجع إعدادات الطابعة واختر الوضع المناسب", "Check printer settings and choose the appropriate mode") });
   }
 
   async function handleTestRelayAgent() {
@@ -307,7 +307,7 @@ export default function PrinterSettingsPanel() {
         feedLines: settings.feedLines,
       });
 
-      const result = await thermalPrint(escData, '<p style="text-align:center;font-family:Cairo,sans-serif;padding:20px"><b>BLACK ROSE CAFE</b><br/>اختبار طباعة<br/>✓ الطابعة تعمل</p>', settings.paperWidth);
+      const result = await thermalPrint(escData, '', settings.paperWidth);
 
       if (result.success) {
         toast({
@@ -972,70 +972,76 @@ export default function PrinterSettingsPanel() {
                 </div>
                 <p className="text-xs text-blue-600">
                   {tc(
-                    "💡 البورت الافتراضي 9100. الطابعة والجهاز يجب أن يكونا على نفس الشبكة.",
-                    "💡 Default port is 9100. The printer and device must be on the same network."
+                    "💡 البورت الافتراضي 9100. للطباعة المباشرة ESC/POS: أدخل رابط وكيل الطباعة أدناه.",
+                    "💡 Default port is 9100. For direct ESC/POS printing: enter the relay agent URL below."
                   )}
                 </p>
 
-                {/* QZ Tray status + setup guide */}
-                <div className={`rounded-lg border p-3 text-sm space-y-2 ${
-                  qzStatus === 'available' ? 'bg-green-50 border-green-300' : 'bg-orange-50 border-orange-300'
-                }`}>
-                  <div className="flex items-center justify-between">
+                {/* Relay Agent URL — visible in network mode for LAN routing */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-blue-700 font-semibold">
+                    {tc("رابط وكيل الطباعة (للطباعة المباشرة ESC/POS)", "Print Relay URL (for direct ESC/POS)")}
+                  </Label>
+                  <Input
+                    placeholder="http://192.168.8.10:8089"
+                    value={settings.relayAgentUrl || ''}
+                    onChange={(e) => updateSetting('relayAgentUrl', e.target.value.trim())}
+                    className="font-mono text-sm border-blue-300 focus:border-blue-500"
+                    data-testid="input-network-relay-agent-url"
+                    dir="ltr"
+                  />
+                  <p className="text-xs text-blue-500">
+                    {tc(
+                      "شغّل print-relay.js على أي جهاز بالشبكة، ثم أدخل رابطه هنا. مثال: http://192.168.8.10:8089",
+                      "Run print-relay.js on any network device, then enter its URL here. e.g. http://192.168.8.10:8089"
+                    )}
+                  </p>
+                </div>
+
+                {/* LAN Printer guide — relay agent is required for LAN IPs */}
+                {settings.networkIp && (
+                  <div className={`rounded-lg border p-3 text-sm space-y-2 ${
+                    settings.relayAgentUrl
+                      ? 'bg-green-50 border-green-300'
+                      : 'bg-amber-50 border-amber-300'
+                  }`}>
                     <div className="flex items-center gap-2 font-bold">
-                      {qzStatus === 'available' ? (
-                        <><CheckCircle2 className="w-5 h-5 text-green-600" /><span className="text-green-800">{tc("QZ Tray جاهز ✓", "QZ Tray Ready ✓")}</span></>
-                      ) : qzStatus === 'checking' ? (
-                        <><RefreshCw className="w-4 h-4 animate-spin text-gray-500" /><span className="text-gray-600">{tc("جارٍ التحقق...", "Checking...")}</span></>
+                      {settings.relayAgentUrl ? (
+                        <><CheckCircle2 className="w-5 h-5 text-green-600" /><span className="text-green-800">{tc("وكيل الطباعة مكوّن ✓", "Print Relay Configured ✓")}</span></>
                       ) : (
-                        <><AlertCircle className="w-5 h-5 text-orange-600" /><span className="text-orange-800">{tc("QZ Tray مطلوب للطباعة LAN", "QZ Tray Required for LAN")}</span></>
+                        <><AlertCircle className="w-5 h-5 text-amber-600" /><span className="text-amber-800">{tc("وكيل الطباعة مطلوب للطباعة المباشرة", "Print Relay Required for Direct Printing")}</span></>
                       )}
                     </div>
-                    {qzStatus !== 'checking' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs border-gray-300"
-                        onClick={() => {
-                          setQzStatus('checking');
-                          isQZTrayAvailable().then(ok => setQzStatus(ok ? 'available' : 'unavailable'));
-                        }}
-                      >
-                        <RefreshCw className="w-3 h-3 ml-1" />
-                        {tc("إعادة الفحص", "Recheck")}
-                      </Button>
+                    {settings.relayAgentUrl ? (
+                      <p className="text-xs text-green-700 font-medium">
+                        {tc(
+                          "✅ الطباعة ستُرسَل مباشرةً عبر ESC/POS على المنفذ 9100 — بدون PDF وبدون نوافذ.",
+                          "✅ Jobs sent directly via ESC/POS on port 9100 — no PDF, no dialogs."
+                        )}
+                      </p>
+                    ) : (
+                      <div className="space-y-2 text-xs text-amber-800">
+                        <p className="font-semibold">{tc("لطباعة ESC/POS مباشرة على IP:9100، شغّل وكيل الطباعة المحلي:", "For direct ESC/POS printing to IP:9100, run the local print relay:")}</p>
+                        <ol className="space-y-1 pr-3 list-decimal list-inside text-amber-700">
+                          <li>{tc("ثبّت Node.js على جهاز الكاشير (nodejs.org)", "Install Node.js on the cashier device (nodejs.org)")}</li>
+                          <li>{tc('حمّل ملف الوكيل: اضغط زر "⬇ الوكيل" أدناه', 'Download the relay file: click "⬇ Relay" below')}</li>
+                          <li>{tc("شغّله: node print-relay.js", "Run it: node print-relay.js")}</li>
+                          <li>{tc("أدخل رابطه هنا (مثال: http://192.168.8.10:8089)", "Enter its URL here (e.g. http://192.168.8.10:8089)")}</li>
+                        </ol>
+                        <a
+                          href="/print-relay.js"
+                          download="print-relay.js"
+                          className="inline-flex items-center gap-1.5 mt-1 px-3 py-1.5 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700 transition-colors"
+                        >
+                          {tc("⬇ تحميل وكيل الطباعة", "⬇ Download Print Relay")}
+                        </a>
+                        <p className="text-amber-600 pt-1 border-t border-amber-200 font-medium">
+                          {tc("⚡ الوكيل يرسل ESC/POS مباشرة للطابعة عبر TCP — بدون PDF نهائياً.", "⚡ The relay sends ESC/POS directly to printer via TCP — zero PDF.")}
+                        </p>
+                      </div>
                     )}
                   </div>
-
-                  {qzStatus === 'available' && (
-                    <p className="text-xs text-green-700 font-medium">
-                      {tc("الطابعة ستطبع مباشرةً بدون نوافذ — الطباعة الصامتة مفعّلة.", "Printer will receive jobs silently — no dialog boxes.")}
-                    </p>
-                  )}
-
-                  {(qzStatus === 'unavailable' || qzStatus === null) && (
-                    <div className="space-y-2 text-xs text-orange-800">
-                      <p className="font-semibold">{tc("⚠️ السيرفر السحابي لا يصل للطابعة المحلية. الحل:", "⚠️ Cloud server can't reach local printer. Fix:")}</p>
-                      <ol className="space-y-1 pr-3 list-decimal list-inside text-orange-700">
-                        <li>{tc("حمّل QZ Tray على جهاز الكاشير", "Download QZ Tray on the cashier machine")}</li>
-                        <li>{tc("ثبّته وشغّله (يعمل في الخلفية)", "Install & run it (runs in background)")}</li>
-                        <li>{tc("في أول تشغيل: اقبل طلب السماح في النافذة", "On first run: accept the permission dialog")}</li>
-                        <li>{tc('اضغط "إعادة الفحص" هنا', 'Click "Recheck" here')}</li>
-                      </ol>
-                      <a
-                        href="https://qz.io/download/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 mt-1 px-3 py-1.5 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700 transition-colors"
-                      >
-                        {tc("⬇ تحميل QZ Tray مجاناً", "⬇ Download QZ Tray (Free)")}
-                      </a>
-                      <p className="text-orange-600 pt-1 border-t border-orange-200">
-                        {tc("بدون QZ Tray: الطباعة ستعمل عبر نافذة المتصفح (dialog) مؤقتاً.", "Without QZ Tray: printing falls back to browser dialog temporarily.")}
-                      </p>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             </>
           )}

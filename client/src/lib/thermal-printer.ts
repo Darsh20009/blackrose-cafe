@@ -559,14 +559,19 @@ export async function networkPrint(escData: Uint8Array, ip: string, port: number
     console.warn('[NetworkPrint] QZ Tray failed:', qzResult.error);
   }
 
-  // 2. For private LAN IPs: skip server-side TCP entirely (cloud can't reach them)
-  //    This prevents the 3-8 second timeout that freezes the UI
+  // 2. For private LAN IPs: use relay agent if configured (cloud server can't reach LAN IPs)
   if (_isPrivateLanIP(ip)) {
-    console.info(`[NetworkPrint] ${ip} is a private LAN IP — skipping server-side TCP (install QZ Tray for silent LAN printing)`);
-    return { success: false, mode: 'error', error: `طابعة LAN (${ip}) — ثبّت QZ Tray للطباعة الصامتة` };
+    const settings = loadPrinterSettings();
+    if (settings.relayAgentUrl) {
+      console.info(`[NetworkPrint] LAN IP ${ip} — routing via relay agent: ${settings.relayAgentUrl}`);
+      return relayAgentPrint(escData, settings.relayAgentUrl, ip, port);
+    }
+    // No relay agent — fail fast (avoid 4-8s timeout freezing the UI)
+    console.info(`[NetworkPrint] LAN IP ${ip} — no relay agent configured`);
+    return { success: false, mode: 'error', error: `الطابعة (${ip}) على الشبكة المحلية — فعّل وكيل الطباعة في الإعدادات` };
   }
 
-  // 3. Server-side TCP — only for public/accessible IPs (local server deployments)
+  // 3. Server-side TCP — for public/accessible IPs (local server deployments)
   try {
     const base64Data = btoa(Array.from(escData, b => String.fromCharCode(b)).join(''));
     const controller = new AbortController();
@@ -970,19 +975,18 @@ export async function thermalPrint(escData: Uint8Array, fallbackHtml: string, fa
 
   if (!settings.enabled) return { success: false, mode: 'error', error: 'الطابعة معطّلة في الإعدادات' };
 
-  // Cloud Queue mode — send to server, local print agent picks up and prints
+  // ── Cloud Queue mode ── send to server, local print agent picks up and prints
   if (settings.mode === 'queue') {
     if (!settings.networkIp) {
       return { success: false, mode: 'error', error: 'لم يتم تحديد IP الطابعة' };
     }
     const result = await queuePrint(escData, settings.networkIp, settings.networkPort || 9100);
     if (result.success) return result;
-    console.warn('[QueuePrint] Failed:', result.error);
-    // Don't fallback to browser for queue mode — show the error
-    return result;
+    console.error('[QueuePrint] Failed:', result.error);
+    return result; // No PDF fallback — return error directly
   }
 
-  // Relay Agent mode — local Node.js bridge for Android / Tab Sense devices
+  // ── Relay Agent mode ── local Node.js bridge (ESC/POS direct → TCP)
   if (settings.mode === 'relay') {
     if (!settings.relayAgentUrl) {
       return { success: false, mode: 'error', error: 'لم يتم تحديد رابط وكيل الطباعة المحلي' };
@@ -992,27 +996,31 @@ export async function thermalPrint(escData: Uint8Array, fallbackHtml: string, fa
     }
     const result = await relayAgentPrint(escData, settings.relayAgentUrl, settings.networkIp, settings.networkPort || 9100);
     if (result.success) return result;
-    console.warn('[RelayAgent] Falling back to browser:', result.error);
+    console.error('[RelayAgent] ESC/POS print failed:', result.error);
+    return result; // No PDF fallback — ESC/POS or nothing
   }
 
-  // Network (LAN/TCP) mode — ProPos, Epson LAN, Xprinter NW, etc.
+  // ── Network (LAN/TCP) mode ── direct ESC/POS via TCP socket
+  // For LAN IPs, networkPrint() auto-routes through relay agent if configured
   if (settings.mode === 'network') {
     if (!settings.networkIp) {
       return { success: false, mode: 'error', error: 'لم يتم تحديد IP الطابعة الشبكية' };
     }
     const result = await networkPrint(escData, settings.networkIp, settings.networkPort || 9100);
     if (result.success) return result;
-    console.warn('[NetworkPrint] Falling back to browser:', result.error);
+    console.error('[NetworkPrint] ESC/POS print failed:', result.error);
+    return result; // No PDF fallback — raw ESC/POS only
   }
 
-  // Bluetooth (BLE) mode
+  // ── Bluetooth (BLE) mode ── ESC/POS over BLE
   if (settings.mode === 'bluetooth') {
     const result = await bluetoothPrint(escData);
     if (result.success) return result;
-    console.warn('[BluetoothPrint] Falling back to browser:', result.error);
+    console.error('[BluetoothPrint] ESC/POS print failed:', result.error);
+    return result; // No PDF fallback
   }
 
-  // WebUSB mode
+  // ── WebUSB mode ── ESC/POS direct to USB printer
   if (settings.mode === 'webusb') {
     if (!_usbDevice) {
       await reconnectSavedUSBPrinter();
@@ -1020,17 +1028,22 @@ export async function thermalPrint(escData: Uint8Array, fallbackHtml: string, fa
     if (_usbDevice) {
       const ok = await _sendToUSB(escData);
       if (ok) return { success: true, mode: 'webusb' };
+      _usbDevice = null; // Device lost — clear cache
     }
+    return { success: false, mode: 'error', error: 'الطابعة USB غير متصلة — أعد التوصيل من إعدادات الطابعة' };
   }
 
-  // Fallback: browser print dialog via iframe
-  // Only trigger browser print if there is actual HTML content to show.
-  // Passing empty fallbackHtml means the caller handles its own browser fallback.
-  if (fallbackHtml && fallbackHtml.trim()) {
-    const { printHtmlInPage } = await import('./print-utils');
-    printHtmlInPage(fallbackHtml, fallbackPaper);
+  // ── Browser mode ── HTML print via iframe (explicit opt-in only)
+  if (settings.mode === 'browser') {
+    if (fallbackHtml && fallbackHtml.trim()) {
+      const { printHtmlInPage } = await import('./print-utils');
+      printHtmlInPage(fallbackHtml, fallbackPaper);
+      return { success: true, mode: 'browser' };
+    }
+    return { success: false, mode: 'error', error: 'لا يوجد محتوى للطباعة عبر المتصفح' };
   }
-  return { success: true, mode: 'browser' };
+
+  return { success: false, mode: 'error', error: 'وضع الطباعة غير محدد — تحقق من إعدادات الطابعة' };
 }
 
 /**
@@ -1041,20 +1054,18 @@ export async function autoPrintOrder(receiptEsc: Uint8Array, kitchenEsc: Uint8Ar
   const settings = loadPrinterSettings();
   if (!settings.autoPrint) return;
 
-  await thermalPrint(receiptEsc, receiptHtml, paperWidth);
+  // Print customer receipt — ESC/POS direct, no PDF fallback
+  const receiptResult = await thermalPrint(receiptEsc, '', paperWidth);
+  if (!receiptResult.success) {
+    console.error('[AutoPrint] Receipt failed:', receiptResult.error);
+  }
 
+  // Print kitchen copy — delay 1.5s to avoid overwhelming the printer buffer
   if (kitchenEsc && settings.autoKitchenCopy) {
     await new Promise(r => setTimeout(r, 1500));
-    if (settings.mode === 'queue' && settings.networkIp) {
-      await queuePrint(kitchenEsc, settings.networkIp, settings.networkPort || 9100);
-    } else if (settings.mode === 'relay' && settings.relayAgentUrl && settings.networkIp) {
-      await relayAgentPrint(kitchenEsc, settings.relayAgentUrl, settings.networkIp, settings.networkPort || 9100);
-    } else if (settings.mode === 'network' && settings.networkIp) {
-      await networkPrint(kitchenEsc, settings.networkIp, settings.networkPort || 9100);
-    } else if (settings.mode === 'bluetooth') {
-      await bluetoothPrint(kitchenEsc);
-    } else if (_usbDevice) {
-      await _sendToUSB(kitchenEsc);
+    const kitchenResult = await thermalPrint(kitchenEsc, '', paperWidth);
+    if (!kitchenResult.success) {
+      console.error('[AutoPrint] Kitchen copy failed:', kitchenResult.error);
     }
   }
 }
