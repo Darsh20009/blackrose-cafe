@@ -93,6 +93,7 @@ const [editReservationPackages, setEditReservationPackages] = useState<Reservati
  const { toast } = useToast();
   const tc = useTranslate();
  const queryClient = useQueryClient();
+ const canManageMenu = !employee || ["manager", "branch_manager", "admin", "owner"].includes(employee.role);
  const [selectedIngredients, setSelectedIngredients] = useState<Array<{ingredientId: string, name: string, quantity: number, unit: string}>>([]);
  const [recipeItems, setRecipeItems] = useState<RecipeIngredient[]>([]);
  const [isRecipeDialogOpen, setIsRecipeDialogOpen] = useState(false);
@@ -173,17 +174,17 @@ const [aiEditDescription, setAiEditDescription] = useState("");
 
  const { data: rawItems = [] } = useQuery<RawItem[]>({
    queryKey: ["/api/inventory/raw-items"],
-   enabled: (employee?.role === "manager" || !employee),
+   enabled: canManageMenu,
  });
 
  const { data: allRecipes = [] } = useQuery<RecipeItem[]>({
    queryKey: ["/api/inventory/all-recipes"],
-   enabled: (employee?.role === "manager" || !employee),
+   enabled: canManageMenu,
  });
 
  const { data: branches = [] } = useQuery<Branch[]>({
    queryKey: ["/api/branches"],
-   enabled: (employee?.role === "manager" || !employee),
+   enabled: canManageMenu,
  });
 
  const calculateRecipeCost = (items: RecipeIngredient[]) => {
@@ -682,7 +683,7 @@ const [aiEditDescription, setAiEditDescription] = useState("");
    if (!step1Data) return;
    
    // Show confirmation dialog for admin override
-   if (employee?.role === "manager") {
+   if (canManageMenu) {
      setSkipRecipeConfirmOpen(true);
      return;
    }
@@ -887,7 +888,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
          </div>
          </div>
          <div className="flex flex-wrap gap-2">
- {(employee?.role === "manager" || !employee) && (
+{canManageMenu && (
  <Button
    variant="outline"
    onClick={openCategoryReorder}
@@ -898,7 +899,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
    {tc("ترتيب الأقسام", "Reorder Categories")}
  </Button>
  )}
- {(employee?.role === "manager" || !employee) && (
+{canManageMenu && (
  <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
   setIsAddDialogOpen(open);
   if (open) {
@@ -1354,7 +1355,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
   )}
 </div>
 
-{(employee?.role === "manager" || !employee) && branches.length > 0 && (
+{canManageMenu && branches.length > 0 && (
    <div>
      <Label className="text-gray-300">متوفر في الفروع</Label>
      <p className="text-gray-500 text-xs mb-2">اختر الفروع التي سيتوفر فيها هذا المنتج (اتركه فارغاً للتوفر في جميع الفروع)</p>
@@ -1416,7 +1417,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
      </Label>
      <p className="text-gray-500 text-sm mb-3">اختر المواد الخام اللازمة لتحضير المشروب مع الكميات</p>
      
-     {(employee?.role === "manager" || !employee) && rawItems.length > 0 ? (
+    {canManageMenu && rawItems.length > 0 ? (
        <>
          <div className="space-y-2 max-h-60 overflow-y-auto mb-3">
            {rawItems.filter(r => r.isActive === 1).map((raw) => {
@@ -1738,7 +1739,7 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
  </select>
  </div>
 
- {(employee?.role === "manager" || !employee) && (
+{canManageMenu && (
  <div className="flex flex-col gap-2">
  <div className="flex items-center gap-2">
    {getProductRecipeCount(item.id) > 0 ? (

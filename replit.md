@@ -210,6 +210,11 @@ Fully dynamic plan management UI in the QIROX super admin panel:
 - Service workers are unregistered/skipped in development to prevent stale cached bundles in the Replit preview while preserving production PWA behavior.
 - PayMob automatic startup configuration now requires `PAYMOB_SECRET_KEY`, `PAYMOB_PUBLIC_KEY`, and `PAYMOB_HMAC_SECRET` environment variables instead of hardcoded fallback credentials.
 
+## Owner Menu Management Access (April 2026)
+
+- Owner and admin roles can now fully access the menu management workflow for both drinks and food, including add/edit dialogs, branch availability, recipe/raw item editing, and category ordering.
+- Owner dashboard includes direct buttons to open drinks management and food management.
+
 ## Quick Start
 
 - **Dev**: `NODE_ENV=development node_modules/.bin/tsx server/index.ts` (starts server + Vite middleware on port 5000)

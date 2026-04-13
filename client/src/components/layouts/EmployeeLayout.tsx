@@ -102,11 +102,11 @@ export function EmployeeLayout({
     { path: "/employee/dashboard", icon: Home, label: "الرئيسية", roles: ["all"] },
     { path: "/employee/cashier", icon: ShoppingBag, label: "الكاشير", roles: ["all"] },
     { path: "/employee/orders", icon: ClipboardList, label: "الطلبات", roles: ["all"] },
-    { path: "/employee/pos", icon: CreditCard, label: "نقطة البيع", roles: ["cashier", "manager", "admin"] },
-    { path: "/employee/kitchen", icon: ChefHat, label: "المطبخ", roles: ["barista", "manager", "admin"] },
+    { path: "/employee/pos", icon: CreditCard, label: "نقطة البيع", roles: ["cashier", "manager", "admin", "owner"] },
+    { path: "/employee/kitchen", icon: ChefHat, label: "المطبخ", roles: ["barista", "manager", "admin", "owner"] },
     { path: "/employee/table-orders", icon: TableIcon, label: "الطاولات", roles: ["all"] },
-    { path: "/employee/menu-management", icon: Coffee, label: "المشروبات", roles: ["manager", "admin"] },
-    { path: "/employee/menu-management?type=food", icon: Utensils, label: "المأكولات", roles: ["manager", "admin"] },
+    { path: "/employee/menu-management", icon: Coffee, label: "المشروبات", roles: ["manager", "admin", "owner"] },
+    { path: "/employee/menu-management?type=food", icon: Utensils, label: "المأكولات", roles: ["manager", "admin", "owner"] },
     { path: "/employee/loyalty", icon: Users, label: "الولاء", roles: ["all"] },
   ];
 
@@ -116,6 +116,7 @@ export function EmployeeLayout({
 
   const roleLabels: Record<string, string> = {
     admin: "مدير النظام",
+    owner: "المالك",
     manager: "مدير",
     cashier: "كاشير",
     barista: "باريستا",

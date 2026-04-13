@@ -12,7 +12,7 @@ import {
   Coffee, Database, Trash2, RefreshCw, AlertTriangle, 
   ShoppingCart, Users, Package, GitBranch, Settings,
   Calendar, CreditCard, Table, Clock, ChevronLeft, ChevronRight,
-  Eye, BarChart3, Shield, ArrowRight
+  Eye, BarChart3, Shield, ArrowRight, Utensils
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { Employee } from "@shared/schema";
@@ -251,6 +251,24 @@ export default function OwnerDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setLocation("/employee/menu-management")}
+              className="border-green-500/50 text-green-300 hover:bg-green-500/10"
+              data-testid="button-owner-manage-drinks"
+            >
+              <Coffee className="w-4 h-4 ml-2" />
+              إدارة المشروبات
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setLocation("/employee/menu-management?type=food")}
+              className="border-orange-500/50 text-orange-300 hover:bg-orange-500/10"
+              data-testid="button-owner-manage-food"
+            >
+              <Utensils className="w-4 h-4 ml-2" />
+              إدارة المأكولات
+            </Button>
             <Button
               variant="outline"
               onClick={fetchStats}
