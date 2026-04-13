@@ -12314,13 +12314,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isAtBranch = isWithinBoundary ? 1 : 0;
       const attendance = new AttendanceModel({
         employeeId: employeeId,
-        branchId: employee.branchId,
+        branchId: employee.branchId || '',
         checkInTime: now,
         checkInLocation: {
           lat: location.lat,
           lng: location.lng
         },
-        checkInPhoto: photoUrl,
+        checkInPhoto: photoUrl || '',
         status: 'checked_in',
         shiftDate: today,
         isLate: isLate ? 1 : 0,

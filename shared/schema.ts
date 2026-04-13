@@ -2325,7 +2325,7 @@ export interface IAttendance extends Document {
 
 const AttendanceSchema = new Schema<IAttendance>({
   employeeId: { type: String, required: true },
-  branchId: { type: String, required: true },
+  branchId: { type: String },
   checkInTime: { type: Date, required: true },
   checkOutTime: { type: Date },
   checkInLocation: {
@@ -2336,7 +2336,7 @@ const AttendanceSchema = new Schema<IAttendance>({
     lat: { type: Number },
     lng: { type: Number }
   },
-  checkInPhoto: { type: String, required: true },
+  checkInPhoto: { type: String },
   checkOutPhoto: { type: String },
   status: { type: String, enum: ['checked_in', 'checked_out', 'late', 'absent'], default: 'checked_in', required: true },
   shiftDate: { type: Date, required: true },
