@@ -8302,8 +8302,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get orders for Kitchen Display System (KDS) - requires authentication
   app.get("/api/orders/kitchen", requireAuth, async (req: AuthRequest, res) => {
     try {
-      // Only allow cashiers, managers, admins, and owners to access KDS
-      const allowedRoles = ['cashier', 'manager', 'admin', 'owner'];
+      // Allow all operational staff to access KDS
+      const allowedRoles = ['cashier', 'barista', 'cook', 'waiter', 'supervisor', 'branch_manager', 'manager', 'admin', 'owner'];
       if (!req.employee?.role || !allowedRoles.includes(req.employee.role)) {
         return res.status(403).json({ error: "Access denied - insufficient permissions" });
       }
@@ -8773,7 +8773,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (status === 'ready') {
         wsManager.broadcastOrderReady(serializedOrder);
-      } else if (status === 'payment_confirmed' || status === 'confirmed') {
+      }
+      if (status === 'payment_confirmed' || status === 'confirmed' || status === 'in_progress') {
         wsManager.broadcastNewOrder(serializedOrder);
       }
 

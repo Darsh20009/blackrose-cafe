@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge, DeliveryTypeBadge, TimerBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
-import { Play, Check, Printer, Clock, Coffee, MapPin, User, AlertTriangle, Flame, Timer, UtensilsCrossed, Car, ShoppingBag, Bell } from "lucide-react";
+import { Play, Check, CheckCircle, Printer, Clock, Coffee, MapPin, User, AlertTriangle, Flame, Timer, UtensilsCrossed, Car, ShoppingBag, Bell } from "lucide-react";
 import { PrepCountdown } from "@/components/PrepCountdown";
 
 interface OrderItem {
@@ -66,6 +66,7 @@ interface OrderCardProps {
   showTimer?: boolean;
   onStartPreparing?: (id: string, estimatedPrepTime?: number) => void;
   onMarkReady?: (id: string) => void;
+  onMarkCompleted?: (id: string) => void;
   onUpdateTime?: (id: string, additionalMinutes: number) => void;
   onPrint?: (id: string) => void;
   isPending?: boolean;
@@ -164,6 +165,7 @@ export function OrderCard({
   showTimer = true,
   onStartPreparing,
   onMarkReady,
+  onMarkCompleted,
   onUpdateTime,
   onPrint,
   isPending = false,
@@ -484,6 +486,18 @@ export function OrderCard({
                     جاهز للتسليم
                   </Button>
                 )}
+                {displayStatus === "ready" && onMarkCompleted && (
+                  <Button
+                    onClick={() => onMarkCompleted(order.id)}
+                    disabled={isPending}
+                    variant="outline"
+                    className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
+                    data-testid={`button-mark-completed-${order.orderNumber}`}
+                  >
+                    <CheckCircle className="h-4 w-4 ml-2" />
+                    تم التسليم
+                  </Button>
+                )}
               </div>
             )}
             {onPrint && (
@@ -581,6 +595,18 @@ export function OrderCard({
             >
               <Check className="h-4 w-4 ml-2" />
               جاهز للتسليم
+            </Button>
+          )}
+          {displayStatus === "ready" && onMarkCompleted && (
+            <Button
+              onClick={() => onMarkCompleted(order.id)}
+              disabled={isPending}
+              variant="outline"
+              className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
+              data-testid={`button-mark-completed-${order.orderNumber}`}
+            >
+              <CheckCircle className="h-4 w-4 ml-2" />
+              تم التسليم
             </Button>
           )}
         </CardFooter>
