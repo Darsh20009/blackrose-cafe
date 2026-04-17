@@ -486,19 +486,19 @@ export function OrderCard({
                     جاهز للتسليم
                   </Button>
                 )}
-                {displayStatus === "ready" && onMarkCompleted && (
-                  <Button
-                    onClick={() => onMarkCompleted(order.id)}
-                    disabled={isPending}
-                    variant="outline"
-                    className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
-                    data-testid={`button-mark-completed-${order.orderNumber}`}
-                  >
-                    <CheckCircle className="h-4 w-4 ml-2" />
-                    تم التسليم
-                  </Button>
-                )}
               </div>
+            )}
+            {displayStatus === "ready" && onMarkCompleted && (
+              <Button
+                onClick={() => onMarkCompleted(order.id)}
+                disabled={isPending}
+                variant="outline"
+                className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
+                data-testid={`button-mark-completed-${order.orderNumber}`}
+              >
+                <CheckCircle className="h-4 w-4 ml-2" />
+                تم التسليم
+              </Button>
             )}
             {onPrint && (
               <Button 

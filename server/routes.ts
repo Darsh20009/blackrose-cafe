@@ -12453,7 +12453,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Verify this attendance belongs to this employee and is still checked in
       const attendance = await AttendanceModel.findOne({
         _id: attendanceId,
-        employeeId: String(employee._id),
+        employeeId: String(employee.id),
         status: 'checked_in',
       });
       if (!attendance) {
@@ -12474,14 +12474,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           Math.cos(lat * Math.PI / 180) *
           Math.sin(dLng / 2) ** 2;
         distanceFromBranch = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-        const radius = branch.location.radius || 200;
+        const radius = (branch.location as any).radius || 200;
         isInsideBranch = distanceFromBranch <= radius;
       }
 
       // Save track point
       const track = new LocationTrackModel({
         attendanceId: String(attendance._id),
-        employeeId: String(employee._id),
+        employeeId: String(employee.id),
         branchId: attendance.branchId,
         lat,
         lng,
@@ -12495,14 +12495,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Broadcast via WebSocket to managers
       const { wsManager } = await import("./websocket");
       wsManager.broadcastEmployeeLocation({
-        employeeId: String(employee._id),
+        employeeId: String(employee.id),
         attendanceId: String(attendance._id),
         branchId: attendance.branchId,
         location: { lat, lng },
         isInsideBranch,
         distanceFromBranch,
         employeeName: employee.fullName,
-        employeePhoto: employee.imageUrl,
+        employeePhoto: (employee as any).imageUrl,
       });
 
       res.json({ success: true, isInsideBranch, distanceFromBranch });
@@ -18567,7 +18567,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─────────────────────────────────────────────────────────────────────────
   app.get("/api/system/status", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
-      const { OrderModel, EmployeeModel, AttendanceModel, CoffeeItem, BranchModel } = await import("@shared/schema");
+      const { OrderModel, EmployeeModel, AttendanceModel, CoffeeItemModel, BranchModel } = await import("@shared/schema");
       const today = getSaudiStartOfDay();
       const tomorrow = getSaudiEndOfDay();
 
@@ -18579,7 +18579,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         OrderModel.countDocuments(orderDateFilter),
         EmployeeModel.countDocuments({ isActive: { $ne: false }, ...branchFilter }),
         AttendanceModel.countDocuments({ shiftDate: { $gte: today, $lt: tomorrow }, status: 'checked_in', ...branchFilter }),
-        CoffeeItem.countDocuments({ isAvailable: { $ne: false } }),
+        CoffeeItemModel.countDocuments({ isAvailable: { $ne: false } }),
         BranchModel.countDocuments({ isActive: { $ne: false } })
       ]);
 

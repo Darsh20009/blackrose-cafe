@@ -556,12 +556,12 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
   }).join('');
 
   const orderTypeLabel = data.orderTypeName || (
-    data.orderType === 'dine_in' || data.orderType === 'dine-in' ? 'طاولة' :
-    data.orderType === 'takeaway' || data.orderType === 'pickup' ? 'سفري' :
-    data.orderType === 'delivery' ? 'توصيل' :
-    data.orderType === 'car_pickup' || data.orderType === 'car-pickup' ? 'سيارة' :
-    data.orderType === 'online' ? 'أونلاين' :
-    data.orderType === 'drive_thru' ? 'درايف ثرو' : ''
+    (data.orderType as string) === 'dine_in' || (data.orderType as string) === 'dine-in' ? 'طاولة' :
+    (data.orderType as string) === 'takeaway' || (data.orderType as string) === 'pickup' ? 'سفري' :
+    (data.orderType as string) === 'delivery' ? 'توصيل' :
+    (data.orderType as string) === 'car_pickup' || (data.orderType as string) === 'car-pickup' ? 'سيارة' :
+    (data.orderType as string) === 'online' ? 'أونلاين' :
+    (data.orderType as string) === 'drive_thru' ? 'درايف ثرو' : ''
   );
 
   // ══════════════════════════════════════════════

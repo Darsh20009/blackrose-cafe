@@ -808,12 +808,12 @@ export default function PosSystem() {
           tableNumber: orderType === "dine_in" ? tableNumber : undefined,
           orderType: orderType as any,
           orderTypeName: (
-            orderType === 'dine_in' || orderType === 'dine-in' ? 'طاولة' :
-            orderType === 'takeaway' || orderType === 'pickup' ? 'سفري' :
-            orderType === 'delivery' ? 'توصيل' :
-            orderType === 'car_pickup' || orderType === 'car-pickup' ? 'سيارة' :
-            orderType === 'online' ? 'أونلاين' :
-            orderType === 'drive_thru' ? 'درايف ثرو' : ''
+            (orderType as string) === 'dine_in' || (orderType as string) === 'dine-in' ? 'طاولة' :
+            (orderType as string) === 'takeaway' || (orderType as string) === 'pickup' ? 'سفري' :
+            (orderType as string) === 'delivery' ? 'توصيل' :
+            (orderType as string) === 'car_pickup' || (orderType as string) === 'car-pickup' ? 'سيارة' :
+            (orderType as string) === 'online' ? 'أونلاين' :
+            (orderType as string) === 'drive_thru' ? 'درايف ثرو' : ''
           ),
           date: new Date().toISOString(),
           crNumber: businessConfig?.commercialRegistration,

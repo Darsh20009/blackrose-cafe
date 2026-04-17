@@ -282,7 +282,7 @@ function getAudioDataUrl(type: NotificationSoundType): string {
         audioCache[type] = generateBeepWav([880, 659], 300);
         break;
       default:
-        audioCache[type] = generateBeepWav([523, 659, 784], 350);
+        (audioCache as Record<string, string>)[type] = generateBeepWav([523, 659, 784], 350);
     }
   }
   return audioCache[type]!;

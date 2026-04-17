@@ -218,7 +218,7 @@ export default function AdminEmployees() {
     }
   };
 
-  const filteredEmployees = employees.filter((emp: Employee) => {
+  const filteredEmployees = (employees as Employee[]).filter((emp: Employee) => {
     const matchSearch = emp.fullName?.includes(search) || emp.phone?.includes(search) || emp.username?.includes(search);
     const matchRole = roleFilter === 'all' || emp.role === roleFilter;
     const matchStatus = statusFilter === 'all' || (statusFilter === 'active' ? emp.isActivated === 1 : emp.isActivated === 0);

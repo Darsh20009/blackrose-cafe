@@ -77,11 +77,11 @@ export default function DriveThroughPage() {
   }, [categories]);
 
   const filteredItems = useMemo(() => {
-    let list = items.filter((it) => it.isAvailable !== false && it.isActive !== false);
+    let list = items.filter((it) => it.isAvailable !== 0);
     if (selectedCategory !== "الكل") {
       list = list.filter((it) => {
-        const cat = categories.find((c: any) => c.id === it.categoryId || c.nameAr === selectedCategory);
-        return cat && (it.categoryId === cat.id);
+        const cat = categories.find((c: any) => c.id === it.category || c.nameAr === selectedCategory);
+        return cat && (it.category === cat.id);
       });
     }
     if (searchQuery.trim()) {
@@ -343,8 +343,8 @@ export default function DriveThroughPage() {
             )}
             <div className="p-3">
               <p className="text-white font-bold text-sm leading-tight mb-1">{item.nameAr}</p>
-              {item.descriptionAr && (
-                <p className="text-gray-500 text-xs mb-2 line-clamp-1">{item.descriptionAr}</p>
+              {item.description && (
+                <p className="text-gray-500 text-xs mb-2 line-clamp-1">{item.description}</p>
               )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1 text-amber-400 font-bold text-sm">
