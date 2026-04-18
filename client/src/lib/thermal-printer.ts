@@ -815,6 +815,52 @@ export function forgetBluetoothPrinter() {
 }
 
 /**
+ * Reconnect to a previously paired BLE printer WITHOUT showing the device picker.
+ * Uses navigator.bluetooth.getDevices() (Chrome 85+) to get permitted devices.
+ * Call this on page load or after the user taps a "Reconnect" button.
+ * Returns the device name on success, or throws an error.
+ */
+export async function reconnectBluetoothPrinter(): Promise<string> {
+  if (!isBluetoothSupported()) throw new Error('Web Bluetooth غير مدعوم');
+
+  const bt = (navigator as any).bluetooth as Bluetooth;
+
+  // getDevices() returns previously permitted devices (no user gesture needed)
+  if (typeof bt.getDevices !== 'function') {
+    throw new Error('إعادة الاتصال التلقائي غير مدعوم في هذا الإصدار من Chrome — اضغط "ابحث عن طابعة" بدلاً من ذلك');
+  }
+
+  const saved = loadSavedBtDevice();
+  const devices: BluetoothDevice[] = await bt.getDevices();
+
+  if (devices.length === 0) {
+    throw new Error('لا توجد طابعات مسموح بها — اضغط "ابحث عن طابعة" أولاً');
+  }
+
+  // Find the device matching the saved name/id (if any), otherwise use the first one
+  const target = saved
+    ? (devices.find(d => d.id === saved.id || d.name === saved.name) ?? devices[0])
+    : devices[0];
+
+  if (!target.gatt) throw new Error('GATT غير متوفر لهذا الجهاز');
+
+  const server = await target.gatt.connect();
+  const characteristic = await _findWriteCharacteristic(server);
+  if (!characteristic) throw new Error('لم يُعثر على طابعة BLE متوافقة');
+
+  _btDevice = target;
+  _btCharacteristic = characteristic;
+  saveBtDevice(target.name ?? target.id, target.id);
+
+  target.addEventListener('gattserverdisconnected', () => {
+    _btDevice = null;
+    _btCharacteristic = null;
+  });
+
+  return target.name ?? target.id;
+}
+
+/**
  * Open the OS Bluetooth device picker and connect to the selected BLE printer.
  * Returns the device name on success, or throws an error.
  */

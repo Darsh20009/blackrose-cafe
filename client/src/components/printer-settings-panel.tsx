@@ -26,6 +26,7 @@ import {
   discoverNetworkPrinters,
   isBluetoothSupported,
   connectBluetoothPrinter,
+  reconnectBluetoothPrinter,
   testBluetoothPrinter,
   forgetBluetoothPrinter,
   loadSavedBtDevice,
@@ -67,6 +68,7 @@ export default function PrinterSettingsPanel() {
 
   // Bluetooth state
   const [btConnecting, setBtConnecting] = useState(false);
+  const [btReconnecting, setBtReconnecting] = useState(false);
   const [btTesting, setBtTesting] = useState(false);
   const [btStatus, setBtStatus] = useState<{ connected: boolean; message: string } | null>(null);
   const [btState, setBtState] = useState<{ connected: boolean; deviceName: string | null }>(() => getBluetoothState());
@@ -74,6 +76,15 @@ export default function PrinterSettingsPanel() {
 
   useEffect(() => {
     refreshStatus();
+    // Auto-try silent BT reconnect on load if mode is bluetooth and device not connected
+    if (loadPrinterSettings().mode === 'bluetooth' && !getBluetoothState().connected) {
+      reconnectBluetoothPrinter()
+        .then(name => {
+          setBtState(getBluetoothState());
+          toast({ title: `✅ تم إعادة الاتصال بـ "${name}" تلقائياً` });
+        })
+        .catch(() => { /* silent — user will see "reconnect" button */ });
+    }
   }, []);
 
   // Check QZ Tray availability when in network mode
@@ -206,6 +217,23 @@ export default function PrinterSettingsPanel() {
       toast({ title: tc("خطأ في البلوتوث", "Bluetooth Error"), description: e?.message || tc("فشل الاتصال بالطابعة", "Failed to connect to printer"), variant: "destructive" });
     } finally {
       setBtConnecting(false);
+    }
+  }
+
+  async function handleReconnectBluetooth() {
+    setBtReconnecting(true);
+    setBtStatus(null);
+    try {
+      const deviceName = await reconnectBluetoothPrinter();
+      const state = getBluetoothState();
+      setBtState(state);
+      setBtStatus({ connected: true, message: `✅ ${tc("تم إعادة الاتصال بـ", "Reconnected to")} "${deviceName}"` });
+      toast({ title: tc("✅ تم إعادة الاتصال", "✅ Reconnected"), description: deviceName });
+    } catch (e: any) {
+      setBtStatus({ connected: false, message: e?.message || tc("فشل إعادة الاتصال", "Reconnect failed") });
+      toast({ title: tc("فشل إعادة الاتصال", "Reconnect Failed"), description: e?.message || tc("اضغط 'ابحث عن طابعة' لإعادة الاقتران", "Press 'Search printer' to re-pair"), variant: "destructive" });
+    } finally {
+      setBtReconnecting(false);
     }
   }
 
@@ -1056,6 +1084,35 @@ export default function PrinterSettingsPanel() {
                   {tc("إعدادات الطابعة اللاسلكية (BLE Bluetooth)", "Bluetooth Wireless Printer Settings (BLE)")}
                 </div>
 
+                {/* Device name display */}
+                {(btState.deviceName || savedBtDevice?.name) && (
+                  <div className="bg-white border rounded-lg p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-semibold text-gray-700">
+                        {btState.deviceName || savedBtDevice?.name}
+                      </div>
+                      {btState.connected
+                        ? <span className="text-xs text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded-full">● {tc("متصلة", "Connected")}</span>
+                        : <span className="text-xs text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-full">○ {tc("غير متصلة", "Disconnected")}</span>
+                      }
+                    </div>
+                    {!btState.connected && savedBtDevice && (
+                      <Button
+                        onClick={handleReconnectBluetooth}
+                        disabled={btReconnecting || !btAvailable}
+                        size="sm"
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-white"
+                        data-testid="button-reconnect-bluetooth"
+                      >
+                        {btReconnecting
+                          ? <><RefreshCw className="w-3 h-3 ml-1.5 animate-spin" />{tc("جارٍ إعادة الاتصال...", "Reconnecting...")}</>
+                          : <><RefreshCw className="w-3 h-3 ml-1.5" />{tc("أعد الاتصال بدون بحث", "Reconnect without scanning")}</>
+                        }
+                      </Button>
+                    )}
+                  </div>
+                )}
+
                 {/* Connection button */}
                 <Button
                   onClick={handleConnectBluetooth}
@@ -1066,22 +1123,11 @@ export default function PrinterSettingsPanel() {
                   {btConnecting ? (
                     <><RefreshCw className="w-4 h-4 ml-2 animate-spin" />{tc("جارٍ الاقتران...", "Pairing...")}</>
                   ) : btState.connected ? (
-                    <><BluetoothConnected className="w-4 h-4 ml-2" />{tc("تغيير الطابعة", "Change Printer")}</>
+                    <><BluetoothConnected className="w-4 h-4 ml-2" />{tc("تغيير الطابعة / إعادة اقتران", "Change / Re-pair Printer")}</>
                   ) : (
                     <><Bluetooth className="w-4 h-4 ml-2" />{tc("ابحث عن طابعة بلوتوث", "Search for Bluetooth Printer")}</>
                   )}
                 </Button>
-
-                {/* Device name display */}
-                {(btState.deviceName || savedBtDevice?.name) && (
-                  <div className="text-xs text-purple-700 text-center font-medium">
-                    {tc("آخر طابعة مقترنة:", "Last paired:")} <strong>{btState.deviceName || savedBtDevice?.name}</strong>
-                    {btState.connected
-                      ? <span className="text-green-600 mr-1"> ● {tc("متصلة", "Connected")}</span>
-                      : <span className="text-amber-600 mr-1"> ○ {tc("غير متصلة", "Disconnected")}</span>
-                    }
-                  </div>
-                )}
 
                 {/* Compatible printers */}
                 <div className="text-xs text-purple-600 space-y-1">
