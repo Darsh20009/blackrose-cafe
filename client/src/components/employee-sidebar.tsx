@@ -1,6 +1,7 @@
 import { useLocation } from 'wouter';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, ShoppingCart, ClipboardList, Settings, LogOut, User, BarChart3, Warehouse, Wallet, ChefHat, Table, Coffee, Utensils, Languages, Clock, Truck, Building2, Brain, FileSpreadsheet, Tag, Monitor } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { LayoutDashboard, ShoppingCart, ClipboardList, Settings, LogOut, User, BarChart3, Warehouse, Wallet, ChefHat, Table, Coffee, Utensils, Languages, Clock, Truck, Building2, Brain, FileSpreadsheet, Tag, Monitor, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Employee } from '@shared/schema';
 import blackroseLogoStaff from "@assets/blackrose-logo.png";
@@ -13,7 +14,7 @@ interface EmployeeSidebarProps {
 
 type PageId = string;
 
-const PAGE_ID_TO_PATH: Record<PageId, { path: string; label: string; labelEn: string; icon: any; section: 'base' | 'manager' }> = {
+const PAGE_ID_TO_PATH: Record<PageId, { path: string; label: string; labelEn: string; icon: any; section: 'base' | 'manager'; isNotifications?: boolean }> = {
   dashboard: { path: '/employee/dashboard', label: 'لوحة التحكم', labelEn: 'Dashboard', icon: LayoutDashboard, section: 'base' },
   cashier: { path: '/employee/cashier', label: 'الكاشير', labelEn: 'Cashier', icon: ShoppingCart, section: 'base' },
   pos: { path: '/employee/pos', label: 'نقاط البيع', labelEn: 'POS', icon: BarChart3, section: 'base' },
@@ -21,6 +22,7 @@ const PAGE_ID_TO_PATH: Record<PageId, { path: string; label: string; labelEn: st
   orders: { path: '/employee/orders', label: 'الطلبات', labelEn: 'Orders', icon: ClipboardList, section: 'base' },
   kitchen: { path: '/employee/kitchen', label: 'المطبخ', labelEn: 'Kitchen', icon: ChefHat, section: 'base' },
   tables: { path: '/employee/table-orders', label: 'الطاولات', labelEn: 'Tables', icon: Table, section: 'base' },
+  notifications: { path: '/notifications', label: 'الإشعارات', labelEn: 'Notifications', icon: Bell, section: 'base', isNotifications: true },
   menu_management: { path: '/employee/menu-management', label: 'إدارة القائمة', labelEn: 'Menu', icon: Coffee, section: 'manager' },
   inventory: { path: '/manager/inventory', label: 'المخزون', labelEn: 'Inventory', icon: Warehouse, section: 'manager' },
   reports: { path: '/admin/reports', label: 'التقارير', labelEn: 'Reports', icon: BarChart3, section: 'manager' },
@@ -46,20 +48,30 @@ function getAccessiblePages(employee: Employee | null): PageId[] {
 
   const allowedPages = (employee as any).allowedPages;
   if (allowedPages && Array.isArray(allowedPages) && allowedPages.length > 0) {
-    return allowedPages;
+    // Always include notifications
+    return allowedPages.includes('notifications') ? allowedPages : [...allowedPages, 'notifications'];
   }
 
   const roleDefaults: Record<string, PageId[]> = {
-    cashier: ['dashboard', 'cashier', 'pos', 'shifts', 'orders'],
-    barista: ['dashboard', 'orders', 'kitchen', 'shifts'],
-    cook: ['dashboard', 'orders', 'kitchen', 'shifts'],
-    waiter: ['dashboard', 'cashier', 'orders', 'tables', 'shifts'],
-    supervisor: ['dashboard', 'cashier', 'pos', 'shifts', 'orders', 'kitchen', 'tables', 'menu_management', 'reports'],
-    manager: ['dashboard', 'cashier', 'pos', 'shifts', 'orders', 'kitchen', 'tables', 'menu_management', 'inventory', 'reports', 'accounting', 'employees', 'settings', 'delivery', 'unified_reports', 'bi_analytics', 'promotions', 'kiosk'],
-    branch_manager: ['dashboard', 'cashier', 'pos', 'shifts', 'orders', 'kitchen', 'tables', 'menu_management', 'inventory', 'reports', 'accounting', 'employees', 'settings', 'delivery', 'unified_reports', 'bi_analytics', 'promotions', 'kiosk'],
+    cashier: ['dashboard', 'cashier', 'pos', 'shifts', 'orders', 'notifications'],
+    barista: ['dashboard', 'orders', 'kitchen', 'shifts', 'notifications'],
+    cook: ['dashboard', 'orders', 'kitchen', 'shifts', 'notifications'],
+    waiter: ['dashboard', 'cashier', 'orders', 'tables', 'shifts', 'notifications'],
+    supervisor: ['dashboard', 'cashier', 'pos', 'shifts', 'orders', 'kitchen', 'tables', 'menu_management', 'reports', 'notifications'],
+    manager: ['dashboard', 'cashier', 'pos', 'shifts', 'orders', 'kitchen', 'tables', 'menu_management', 'inventory', 'reports', 'accounting', 'employees', 'settings', 'delivery', 'unified_reports', 'bi_analytics', 'promotions', 'kiosk', 'notifications'],
+    branch_manager: ['dashboard', 'cashier', 'pos', 'shifts', 'orders', 'kitchen', 'tables', 'menu_management', 'inventory', 'reports', 'accounting', 'employees', 'settings', 'delivery', 'unified_reports', 'bi_analytics', 'promotions', 'kiosk', 'notifications'],
   };
 
-  return roleDefaults[role] || ['dashboard', 'cashier', 'orders'];
+  return roleDefaults[role] || ['dashboard', 'cashier', 'orders', 'notifications'];
+}
+
+function NotifBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-auto min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+      {count > 99 ? '99+' : count}
+    </span>
+  );
 }
 
 export function EmployeeSidebar({ employee, onLogout }: EmployeeSidebarProps) {
@@ -71,6 +83,15 @@ export function EmployeeSidebar({ employee, onLogout }: EmployeeSidebarProps) {
     i18n.changeLanguage(newLang);
   };
 
+  // Fetch unread notification count — poll every 30s
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ['/api/notifications/unread-count'],
+    refetchInterval: 30_000,
+    retry: false,
+    enabled: !!employee,
+  });
+  const unreadCount = unreadData?.count ?? 0;
+
   const accessiblePages = getAccessiblePages(employee);
   const isAr = i18n.language === 'ar';
   
@@ -78,14 +99,14 @@ export function EmployeeSidebar({ employee, onLogout }: EmployeeSidebarProps) {
     .filter(pageId => PAGE_ID_TO_PATH[pageId]?.section === 'base')
     .map(pageId => {
       const config = PAGE_ID_TO_PATH[pageId];
-      return { label: isAr ? config.label : config.labelEn, icon: config.icon, path: config.path };
+      return { label: isAr ? config.label : config.labelEn, icon: config.icon, path: config.path, isNotifications: config.isNotifications };
     });
 
   const managerItems = accessiblePages
     .filter(pageId => PAGE_ID_TO_PATH[pageId]?.section === 'manager')
     .map(pageId => {
       const config = PAGE_ID_TO_PATH[pageId];
-      return { label: isAr ? config.label : config.labelEn, icon: config.icon, path: config.path };
+      return { label: isAr ? config.label : config.labelEn, icon: config.icon, path: config.path, isNotifications: config.isNotifications };
     });
 
   const showManagerSection = managerItems.length > 0;
@@ -114,6 +135,7 @@ export function EmployeeSidebar({ employee, onLogout }: EmployeeSidebarProps) {
           const isActive = item.path.includes('?')
             ? fullPath === item.path
             : location === item.path && !window.location.search;
+          const showBadge = item.isNotifications && unreadCount > 0;
           return (
             <button
               key={item.path}
@@ -125,8 +147,20 @@ export function EmployeeSidebar({ employee, onLogout }: EmployeeSidebarProps) {
               }`}
               data-testid={`sidebar-link-${item.path.split('/').pop()}`}
             >
-              <Icon className="w-5 h-5" />
-              <span className="font-medium">{item.label}</span>
+              <div className="relative shrink-0">
+                <Icon className="w-5 h-5" />
+                {showBadge && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none ring-1 ring-background">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </div>
+              <span className="font-medium flex-1 text-right">{item.label}</span>
+              {showBadge && (
+                <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </button>
           );
         })}

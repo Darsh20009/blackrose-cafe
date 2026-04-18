@@ -219,6 +219,7 @@ export default function NotificationsPage() {
       apiRequest("PATCH", `/api/notifications/${id}/read`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
     },
   });
 
@@ -227,6 +228,7 @@ export default function NotificationsPage() {
       apiRequest("DELETE", `/api/notifications/${id}`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
     },
   });
 
@@ -235,6 +237,7 @@ export default function NotificationsPage() {
       apiRequest("POST", "/api/notifications/mark-all-read", {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
     },
   });
 

@@ -1,7 +1,8 @@
 import { useLocation, Link } from "wouter";
 import { useTranslation } from "react-i18next";
-import { Home, ClipboardList, CreditCard, LogOut, Menu, Languages } from "lucide-react";
+import { Home, ClipboardList, CreditCard, LogOut, Menu, Languages, Bell } from "lucide-react";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +19,14 @@ export function MobileBottomNav({ employeeRole, onLogout }: MobileBottomNavProps
   const [location] = useLocation();
   const [showMenu, setShowMenu] = useState(false);
   const { t, i18n } = useTranslation();
+
+  // Unread notification count — poll every 30s
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ['/api/notifications/unread-count'],
+    refetchInterval: 30_000,
+    retry: false,
+  });
+  const unreadCount = unreadData?.count ?? 0;
 
   const resolvedRole = employeeRole || (() => {
     try {
@@ -55,6 +64,7 @@ export function MobileBottomNav({ employeeRole, onLogout }: MobileBottomNavProps
     { path: "/employee/loyalty",     icon: Users,       label: t('mobile_nav.loyalty') },
     { path: "/employee/attendance",  icon: Calendar,    label: t('mobile_nav.attendance') },
     { path: "/employee/leave-request", icon: FileText,  label: t('mobile_nav.leave') },
+    { path: "/notifications",        icon: Bell,        label: 'الإشعارات' },
     ...(isManager ? [
       { path: "/employee/menu-management",         icon: Coffee,    label: t('mobile_nav.drinks') },
       { path: "/employee/menu-management?type=food", icon: Utensils, label: t('mobile_nav.food') },
@@ -69,7 +79,7 @@ export function MobileBottomNav({ employeeRole, onLogout }: MobileBottomNavProps
     { path: "/employee/orders",      icon: ClipboardList, label: t('mobile_nav.orders') },
     { path: "/employee/pos",         icon: CreditCard,   label: t('mobile_nav.pos') },
     { path: "/employee/attendance",  icon: Calendar,     label: t('mobile_nav.attendance') },
-    { path: "/employee/kitchen",     icon: ChefHat,      label: t('mobile_nav.kitchen') },
+    { path: "/notifications",        icon: Bell,         label: 'إشعارات', isNotifications: true },
     ...(isManager ? [{ path: "/employee/menu-management", icon: Coffee, label: t('mobile_nav.drinks') }] : []),
   ];
 
@@ -88,6 +98,7 @@ export function MobileBottomNav({ employeeRole, onLogout }: MobileBottomNavProps
           const isActive = item.path.includes('?')
             ? fullPath === item.path
             : location === item.path;
+          const showBadge = (item as any).isNotifications && unreadCount > 0;
           return (
             <Link key={item.path} href={item.path}>
               <button
@@ -98,7 +109,14 @@ export function MobileBottomNav({ employeeRole, onLogout }: MobileBottomNavProps
                 }`}
                 data-testid={`mobile-nav-${item.path.split('/').pop()?.split('?')[0]}`}
               >
-                <Icon className="h-5 w-5" />
+                <div className="relative">
+                  <Icon className="h-5 w-5" />
+                  {showBadge && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-0.5 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none ring-1 ring-background">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </div>
                 <span className="leading-none mt-0.5">{item.label}</span>
               </button>
             </Link>
@@ -111,7 +129,9 @@ export function MobileBottomNav({ employeeRole, onLogout }: MobileBottomNavProps
               className="flex flex-col items-center gap-0.5 min-w-[56px] px-2 py-1.5 rounded-xl text-[10px] whitespace-nowrap shrink-0 text-muted-foreground hover:bg-muted/50 transition-all active:scale-95"
               data-testid="mobile-nav-menu"
             >
-              <Menu className="h-5 w-5" />
+              <div className="relative">
+                <Menu className="h-5 w-5" />
+              </div>
               <span className="leading-none mt-0.5">{t('mobile_nav.more')}</span>
             </button>
           </SheetTrigger>
