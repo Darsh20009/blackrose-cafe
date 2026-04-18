@@ -8314,18 +8314,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: { $in: ['pending', 'confirmed', 'payment_confirmed', 'in_progress', 'ready'] }
       };
 
-      // Apply branch filtering for managers and other roles
+      // Apply branch filtering for all non-admin/owner roles
       if (req.employee.role !== 'admin' && req.employee.role !== 'owner') {
         if (req.employee.branchId) {
           query.branchId = req.employee.branchId;
-        } else if (req.employee.role === 'manager') {
-          // If manager has no branchId, they might not see anything
-          // We can try to find their branch if it's missing in session
+        } else {
+          // Employee has no branchId — find the first active branch for this tenant
+          // Use branch.id (custom UUID string) not branch._id (ObjectId) to match order.branchId
           const { BranchModel } = await import("@shared/schema");
-          const branch = await BranchModel.findOne({ tenantId: req.employee.tenantId });
+          const branch = await BranchModel.findOne({ tenantId: req.employee.tenantId, isActive: true });
           if (branch) {
-            query.branchId = (branch as any)._id?.toString() || (branch as any).id;
+            query.branchId = (branch as any).id; // Custom ID string, matches order.branchId
           }
+          // If no branch found, tenantId filter alone will scope results correctly
         }
       }
 

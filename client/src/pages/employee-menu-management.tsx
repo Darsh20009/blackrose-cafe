@@ -805,16 +805,25 @@ setEditImageUrls((item as any).imageUrls || (item.imageUrl ? [item.imageUrl] : [
  const DRINK_UNIFIED_IDS = ['hot', 'cold'];
  const FOOD_UNIFIED_IDS  = ['desserts', 'bakery', 'sandwiches'];
 
- const availableForDropdown = [
-   ...UNIFIED_CATEGORIES.filter(c => isFood ? FOOD_UNIFIED_IDS.includes(c.id) : DRINK_UNIFIED_IDS.includes(c.id)),
-   ...menuCategories.filter(c => c.department === (isFood ? 'food' : 'drinks')),
- ];
+ // Only show UNIFIED categories when the user has NO custom dynamic categories.
+ // This prevents ghost/duplicate categories when the user has their own category system.
+ const deptDynamicCategories = menuCategories.filter(c => c.department === (isFood ? 'food' : 'drinks'));
+ const availableForDropdown = deptDynamicCategories.length > 0
+   ? deptDynamicCategories
+   : UNIFIED_CATEGORIES.filter(c => isFood ? FOOD_UNIFIED_IDS.includes(c.id) : DRINK_UNIFIED_IDS.includes(c.id));
 
  const defaultCategory = isFood ? 'desserts' : 'hot';
 
- const allowedCategories = [...UNIFIED_CATEGORY_IDS, ...LEGACY_FOOD_CATEGORIES, ...LEGACY_DRINK_CATEGORIES, ...dynamicCategoryIds];
-
- const availableCatIds = new Set(availableForDropdown.map(c => c.id));
+ // For item display: include ALL possible category IDs for this department (dynamic + legacy/unified)
+ // so items saved with old category IDs still show up even after switching to custom categories.
+ const deptLegacyIds = isFood
+   ? [...LEGACY_FOOD_CATEGORIES, ...FOOD_UNIFIED_IDS]
+   : [...LEGACY_DRINK_CATEGORIES, ...DRINK_UNIFIED_IDS];
+ const availableCatIds = new Set([
+   ...availableForDropdown.map(c => c.id),
+   ...deptLegacyIds,
+   ...deptDynamicCategories.map(c => c.id),
+ ]);
  const filteredItems = coffeeItems.filter(item => availableCatIds.has(item.category));
 
  const categorizedItems = filteredItems.reduce((acc, item) => {
