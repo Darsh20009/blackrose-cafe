@@ -60,7 +60,7 @@ export default function WelcomePage() {
             <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-xl p-1 border border-white/30">
               <img src={blackroseLogo} alt="Logo" className="w-full h-full object-contain rounded-xl" />
             </div>
-            <span className="text-white font-bold text-lg tracking-wide">BLACK ROSE CAFE</span>
+            <span className="text-white font-bold text-lg tracking-wide">BLACK ROSE </span>
           </div>
 
           <div className="flex items-center gap-2">
