@@ -2062,6 +2062,12 @@ export default function PosSystem() {
           {lastOrder && (
             <div className="space-y-4">
               <div className="text-center space-y-2 border-b pb-4">
+                <img
+                  src="/black-rose-logo.png"
+                  alt="Black Rose Cafe"
+                  className="w-20 h-20 object-contain mx-auto mb-1"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
                 <h3 className="font-black text-xl text-primary">BLACK ROSE CAFE</h3>
                 {lastOrder.isOffline && (
                   <div className="flex items-center justify-center gap-1.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl px-3 py-2">

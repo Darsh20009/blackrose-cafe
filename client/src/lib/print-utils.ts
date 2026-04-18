@@ -1,6 +1,35 @@
 import QRCode from "qrcode";
 import { VAT_RATE } from "@/lib/constants";
 
+// ── Logo cache ────────────────────────────────────────────────────────────────
+// Embed the logo as a Base64 data URL so it renders immediately in the print
+// popup/iframe without waiting for a network request (fixes missing logo issue).
+let _cachedLogoBase64: string = '';
+
+async function fetchLogoBase64(): Promise<string> {
+  if (_cachedLogoBase64) return _cachedLogoBase64;
+  try {
+    const res = await fetch('/black-rose-logo.png');
+    if (!res.ok) return '';
+    const blob = await res.blob();
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        _cachedLogoBase64 = reader.result as string;
+        resolve(_cachedLogoBase64);
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return '';
+  }
+}
+// Pre-warm the cache on module load so it's ready by the time a receipt is printed
+if (typeof window !== 'undefined') {
+  fetchLogoBase64().catch(() => {});
+}
+
 /**
  * Formats an order number for employee display: #0042
  * Pads the numeric part to at least 4 digits with # prefix.
@@ -627,7 +656,9 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     console.error("Error generating tracking QR:", error);
   }
 
-  const logoUrl = `${window.location.origin}/black-rose-logo.png`;
+  // Use base64-embedded logo so it renders instantly in the popup/iframe
+  // without waiting for a network request (fixes logo not showing on print).
+  const logoUrl = await fetchLogoBase64() || `${window.location.origin}/black-rose-logo.png`;
 
   const itemsHtml = data.items.map(item => {
     const unitPrice = parseNumber(item.coffeeItem.price);
