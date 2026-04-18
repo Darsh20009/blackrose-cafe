@@ -240,6 +240,21 @@ export default function PosSystem() {
   }, []);
 
   useEffect(() => { localStorage.setItem("pos-auto-print", String(autoPrint)); }, [autoPrint]);
+
+  // Show toast when thermal printing fails (USB/BT/Network error dispatched by print-utils)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { error: string; mode: string } | undefined;
+      toast({
+        title: '🖨️ فشلت الطباعة',
+        description: detail?.error || 'تحقق من إعدادات الطابعة',
+        variant: 'destructive',
+      });
+    };
+    window.addEventListener('qirox:print-error', handler);
+    return () => window.removeEventListener('qirox:print-error', handler);
+  }, [toast]);
+
   useEffect(() => { localStorage.setItem("pos-show-vat-label", String(showVatLabel)); }, [showVatLabel]);
   useEffect(() => { localStorage.setItem("pos-zoom", String(posZoom)); }, [posZoom]);
   useEffect(() => { if (orderItems.length === 0 && showOrderReview) setShowOrderReview(false); }, [orderItems.length, showOrderReview]);

@@ -485,7 +485,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
   const shouldAutoPrint = config.autoPrint !== undefined ? config.autoPrint : true;
 
   // ── ESC/POS Thermal printing (USB / Bluetooth / Network / Relay) ────────────
-  // Try hardware printing FIRST. If successful, return without HTML popup.
+  // When a hardware mode is active, ONLY use thermal. Never fall back to browser popup.
   if (shouldAutoPrint) {
     try {
       const { loadPrinterSettings, buildEscPosReceipt, buildEscPosKitchenTicket, thermalPrint } = await import('./thermal-printer');
@@ -551,13 +551,29 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
             });
             await thermalPrint(kitchenEsc, '', printerSettings.paperWidth);
           }
-          return; // Hardware handled it — skip HTML printing
+          return; // Hardware handled it — skip HTML printing completely
         }
-        // Thermal failed — fall through to HTML/browser printing
-        console.warn('[PrintTaxInvoice] Thermal print failed:', result.error, '— falling back to browser');
+
+        // ── Thermal hardware mode is active but print FAILED ──
+        // Do NOT open a browser popup — the user chose hardware mode explicitly.
+        // Show a brief console error and stop. The cashier will see the toast error
+        // thrown by thermalPrint's caller if wired up, otherwise silent here.
+        const errMsg = result.error || 'فشلت الطباعة الحرارية';
+        console.error('[PrintTaxInvoice] Hardware print failed — mode:', printerSettings.mode, '— error:', errMsg);
+
+        // Show a non-blocking browser notification so the cashier knows
+        if (typeof window !== 'undefined' && (window as any).__qiroxPrintError !== undefined) {
+          // Hook exists — call it
+          (window as any).__qiroxPrintError(errMsg);
+        } else {
+          // Fallback: dispatch a custom event the POS can listen to
+          window.dispatchEvent(new CustomEvent('qirox:print-error', { detail: { error: errMsg, mode: printerSettings.mode } }));
+        }
+        return; // STOP — do not open browser print popup
       }
     } catch (e) {
-      console.warn('[PrintTaxInvoice] Thermal print error, falling back to browser:', e);
+      console.warn('[PrintTaxInvoice] Thermal print error:', e);
+      // If the thermal module itself threw (import error, etc.) fall through to browser
     }
   }
 

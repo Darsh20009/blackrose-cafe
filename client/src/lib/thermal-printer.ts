@@ -132,31 +132,59 @@ export async function requestUSBPrinter(): Promise<USBDevice | null> {
   }
 }
 
+// Last USB error — exposed so thermalPrint can include it in the failure message
+let _usbLastError: string | null = null;
+
+export function getUSBLastError(): string | null { return _usbLastError; }
+
 export async function reconnectSavedUSBPrinter(): Promise<USBDevice | null> {
   if (!isWebUSBSupported()) return null;
+  _usbLastError = null;
   try {
     const saved = localStorage.getItem(DEVICE_KEY);
     if (!saved) return null;
     const { vendorId, productId } = JSON.parse(saved);
     const devices = await (navigator as any).usb.getDevices();
     const device = devices.find((d: USBDevice) => d.vendorId === vendorId && d.productId === productId);
-    if (!device) return null;
-    await _openDevice(device);
+    if (!device) {
+      _usbLastError = 'الطابعة غير موجودة — تأكد من توصيل كابل USB وتشغيل الطابعة';
+      return null;
+    }
+    await _openDevice(device); // May throw if interface cannot be claimed
     _usbDevice = device;
     return device;
-  } catch {
+  } catch (e: any) {
+    _usbLastError = e?.message || 'فشل فتح الطابعة USB';
+    _usbDevice = null;
+    _claimedInterface = null;
     return null;
   }
 }
 
+// Tracks the interface number that was successfully claimed (per device)
+let _claimedInterface: number | null = null;
+
 async function _openDevice(device: USBDevice): Promise<void> {
   if (!device.opened) await device.open();
   if (device.configuration === null) await device.selectConfiguration(1);
-  // Find bulk-out endpoint
+
+  // Try to claim each interface — stop at the first success
+  _claimedInterface = null;
   for (const iface of device.configuration!.interfaces) {
     try {
       await device.claimInterface(iface.interfaceNumber);
-    } catch {}
+      _claimedInterface = iface.interfaceNumber;
+      break; // Claimed — no need to try others
+    } catch (_e) {
+      // Likely claimed by OS driver — continue trying other interfaces
+    }
+  }
+
+  if (_claimedInterface === null) {
+    // Could not claim ANY interface — likely Windows OS printer driver conflict
+    throw new Error(
+      'لا يمكن الاستئثار بالطابعة USB — على Windows استخدم Zadig لتثبيت درايفر WinUSB، أو استخدم وضع الشبكة (LAN) بدلاً من USB'
+    );
   }
 }
 
@@ -176,8 +204,32 @@ export function clearSavedDevice(): void {
 
 async function _sendToUSB(data: Uint8Array): Promise<boolean> {
   if (!_usbDevice) return false;
+
+  // If the interface was lost (e.g. device reopened), re-open
+  if (_claimedInterface === null) {
+    try {
+      await _openDevice(_usbDevice);
+    } catch (err) {
+      console.error('[Printer] USB re-open failed:', err);
+      _usbDevice = null;
+      return false;
+    }
+  }
+
   try {
-    // Find the bulk-out endpoint
+    // Only look at the claimed interface, not all interfaces
+    for (const iface of _usbDevice.configuration!.interfaces) {
+      if (_claimedInterface !== null && iface.interfaceNumber !== _claimedInterface) continue;
+      for (const alt of iface.alternates) {
+        for (const ep of alt.endpoints) {
+          if (ep.direction === 'out' && ep.type === 'bulk') {
+            await _usbDevice.transferOut(ep.endpointNumber, data);
+            return true;
+          }
+        }
+      }
+    }
+    // No bulk-out endpoint found in claimed interface — try all (older devices with alternate settings)
     for (const iface of _usbDevice.configuration!.interfaces) {
       for (const alt of iface.alternates) {
         for (const ep of alt.endpoints) {
@@ -192,6 +244,7 @@ async function _sendToUSB(data: Uint8Array): Promise<boolean> {
   } catch (err) {
     console.error('[Printer] USB transfer error:', err);
     _usbDevice = null;
+    _claimedInterface = null;
     return false;
   }
 }
@@ -1076,7 +1129,11 @@ export async function thermalPrint(escData: Uint8Array, fallbackHtml: string, fa
       if (ok) return { success: true, mode: 'webusb' };
       _usbDevice = null; // Device lost — clear cache
     }
-    return { success: false, mode: 'error', error: 'الطابعة USB غير متصلة — أعد التوصيل من إعدادات الطابعة' };
+    const usbErr = getUSBLastError();
+    const errMsg = usbErr
+      ? usbErr
+      : 'الطابعة USB غير متصلة — تأكد من توصيل الكابل وتشغيل الطابعة، ثم افتح إعدادات الطابعة وأعد التوصيل';
+    return { success: false, mode: 'error', error: errMsg };
   }
 
   // ── Browser mode ── HTML print via iframe (explicit opt-in only)

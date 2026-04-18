@@ -452,11 +452,11 @@ export default function PrinterSettingsPanel() {
 
           {/* USB device info */}
           {savedDevice && !isNetworkMode && !isBluetoothMode && (
-            <div className="flex items-center gap-2 text-sm bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-              <Usb className="w-4 h-4 text-green-600" />
-              <span className="flex-1 font-medium text-green-800">
+            <div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 border ${isUsbConnected ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+              <Usb className={`w-4 h-4 ${isUsbConnected ? 'text-green-600' : 'text-amber-500'}`} />
+              <span className={`flex-1 font-medium ${isUsbConnected ? 'text-green-800' : 'text-amber-700'}`}>
                 {savedDevice.productName || tc("طابعة حرارية", "Thermal Printer")}
-                <span className="text-green-600 mr-2 font-mono text-xs">
+                <span className="text-xs font-mono mr-1 opacity-60">
                   [{savedDevice.vendorId.toString(16).padStart(4,'0')}:{savedDevice.productId.toString(16).padStart(4,'0')}]
                 </span>
               </span>
@@ -465,6 +465,22 @@ export default function PrinterSettingsPanel() {
               ) : (
                 <AlertCircle className="w-4 h-4 text-amber-500" />
               )}
+            </div>
+          )}
+
+          {/* Windows USB driver warning — shown when device is saved but NOT usable */}
+          {savedDevice && !isNetworkMode && !isBluetoothMode && !isUsbConnected && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2 text-xs text-red-800">
+              <p className="font-bold text-sm">⚠️ {tc("الطابعة مُعرَّفة لكن لا تطبع — مشكلة درايفر Windows", "Printer detected but not printing — Windows driver conflict")}</p>
+              <p>{tc("ويندوز يحتجز المنفذ USB ويمنع المتصفح من التحكم في الطابعة مباشرة. الحل:", "Windows holds the USB port and blocks the browser from controlling the printer directly. Fix:")}</p>
+              <ol className="list-decimal list-inside space-y-1 mr-2">
+                <li>{tc("حمّل برنامج Zadig (zadig.akeo.ie) مجاناً", "Download Zadig (zadig.akeo.ie) — free")}</li>
+                <li>{tc("اختر طابعتك من القائمة → اضغط 'Replace Driver' → اختر WinUSB", "Select your printer → click 'Replace Driver' → choose WinUSB")}</li>
+                <li>{tc("أعد تشغيل المتصفح واضغط 'اختر الطابعة (USB)' مجدداً", "Restart browser and click 'Select Printer (USB)' again")}</li>
+              </ol>
+              <p className="font-semibold text-red-700">
+                {tc("أو بدلاً عن ذلك: بدّل وضع الطباعة إلى 'شبكة LAN' أو 'وكيل محلي' — أسهل وأكثر استقراراً.", "Or: Switch print mode to 'LAN Network' or 'Local Relay' — easier and more stable.")}
+              </p>
             </div>
           )}
 
