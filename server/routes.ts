@@ -7025,6 +7025,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk preview of addons per item — used by customer menu to show options on cards
+  // Returns: { [itemId]: { nameAr: string; category: string; price: number }[] }
+  app.get("/api/coffee-items/addons-preview", async (req: any, res) => {
+    try {
+      const { ProductAddonModel } = await import("@shared/schema");
+      const links = await CoffeeItemAddonModel.find({}).lean().exec();
+      if (links.length === 0) { res.set('Cache-Control', 'public, max-age=120'); return res.json({}); }
+      const addonIds = [...new Set(links.map((l: any) => l.addonId).filter(Boolean))];
+      const addons = await ProductAddonModel.find({ id: { $in: addonIds }, isAvailable: 1 }).select("id nameAr nameEn category price").lean().exec();
+      const addonMap: Record<string, any> = {};
+      addons.forEach((a: any) => { addonMap[a.id] = a; });
+      const result: Record<string, { nameAr: string; nameEn?: string; category: string; price: number }[]> = {};
+      links.forEach((link: any) => {
+        const addon = addonMap[link.addonId];
+        if (!addon) return;
+        if (!result[link.coffeeItemId]) result[link.coffeeItemId] = [];
+        result[link.coffeeItemId].push({ nameAr: addon.nameAr, nameEn: addon.nameEn, category: addon.category, price: addon.price || 0 });
+      });
+      res.set('Cache-Control', 'public, max-age=120');
+      res.json(result);
+    } catch (error) {
+      res.json({});
+    }
+  });
+
   app.get("/api/coffee-items/category/:category", async (req: any, res) => {
     try {
       res.set('Cache-Control', 'public, max-age=120');

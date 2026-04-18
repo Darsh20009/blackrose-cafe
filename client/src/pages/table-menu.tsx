@@ -13,6 +13,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import blackroseLogo from "@assets/blackrose-logo.png";
 import SarIcon from "@/components/sar-icon";
+import type { AddonPreview } from "@/components/menu-layouts";
+import { OptionPills } from "@/components/menu-layouts";
 
 interface ITable {
   id: string;
@@ -136,6 +138,11 @@ export default function TableMenuNew() {
     staleTime: 5 * 60 * 1000,
   });
   const itemsWithAddonsSet = useMemo(() => new Set(itemsWithAddonsList), [itemsWithAddonsList]);
+
+  const { data: itemAddonsMap = {} } = useQuery<Record<string, AddonPreview[]>>({
+    queryKey: ["/api/coffee-items/addons-preview"],
+    staleTime: 5 * 60 * 1000,
+  });
 
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -790,9 +797,10 @@ export default function TableMenuNew() {
                       />
                     </div>
                     <div className="flex-1 min-w-0 py-1">
-                      <h3 className="text-base font-semibold truncate text-foreground mb-1">{i18n.language === 'ar' ? item.nameAr : item.nameEn || item.nameAr}</h3>
-                      <p className="text-xs text-muted-foreground truncate mb-2">{item.description || t("menu.default_desc")}</p>
-                      <div className="flex items-center justify-between">
+                      <h3 className="text-base font-semibold truncate text-foreground mb-0.5">{i18n.language === 'ar' ? item.nameAr : item.nameEn || item.nameAr}</h3>
+                      <p className="text-xs text-muted-foreground truncate">{item.description || t("menu.default_desc")}</p>
+                      <OptionPills item={item as any} addons={itemAddonsMap[item.id]} lang={i18n.language} />
+                      <div className="flex items-center justify-between mt-2">
                         <span className="text-primary font-bold text-lg">{item.price} <small className="text-xs font-normal text-muted-foreground"><SarIcon /></small></span>
                         <Button
                           size="sm"

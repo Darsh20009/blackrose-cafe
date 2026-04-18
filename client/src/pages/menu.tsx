@@ -41,6 +41,7 @@ import { AddToCartModal } from "@/components/add-to-cart-modal";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { ClassicMenuLayout, CardsMenuLayout, ListMenuLayout } from "@/components/menu-layouts";
+import type { AddonPreview } from "@/components/menu-layouts";
 import SarIcon from "@/components/sar-icon";
 
 interface MenuCategory {
@@ -179,6 +180,11 @@ export default function MenuPage() {
     staleTime: 5 * 60 * 1000,
   });
   const itemsWithAddonsSet = useMemo(() => new Set(itemsWithAddonsList), [itemsWithAddonsList]);
+
+  const { data: itemAddonsMap = {} } = useQuery<Record<string, AddonPreview[]>>({
+    queryKey: ["/api/coffee-items/addons-preview"],
+    staleTime: 5 * 60 * 1000,
+  });
 
   const { data: promoOffers = [] } = useQuery<IPromoOffer[]>({
     queryKey: ["/api/promo-offers"],
@@ -1045,6 +1051,7 @@ export default function MenuPage() {
                 currency=<SarIcon />
                 favoriteIds={favoriteIds}
                 onToggleFavorite={isAuthenticated ? handleToggleFavorite : undefined}
+                itemAddonsMap={itemAddonsMap}
               />
             ) : businessConfig?.menuLayout === 'list' ? (
               <ListMenuLayout
@@ -1054,6 +1061,7 @@ export default function MenuPage() {
                 currency=<SarIcon />
                 favoriteIds={favoriteIds}
                 onToggleFavorite={isAuthenticated ? handleToggleFavorite : undefined}
+                itemAddonsMap={itemAddonsMap}
               />
             ) : (
               <ClassicMenuLayout
@@ -1063,6 +1071,7 @@ export default function MenuPage() {
                 currency=<SarIcon />
                 favoriteIds={favoriteIds}
                 onToggleFavorite={isAuthenticated ? handleToggleFavorite : undefined}
+                itemAddonsMap={itemAddonsMap}
               />
             )}
           </section>
