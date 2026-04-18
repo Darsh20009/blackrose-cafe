@@ -109,6 +109,7 @@ export default function PosSystem() {
   const [showReceiptDialog, setShowReceiptDialog] = useState(false);
   const [receiptCountdown, setReceiptCountdown] = useState(0);
   const [lastOrder, setLastOrder] = useState<any>(null);
+  const [lastPrintFailed, setLastPrintFailed] = useState(false);
   const [posTerminalConnected, setPosTerminalConnected] = useState(() => {
     return localStorage.getItem("pos-terminal-connected") === "true";
   });
@@ -245,9 +246,13 @@ export default function PosSystem() {
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as { error: string; mode: string } | undefined;
+      const isUsb = detail?.mode === 'webusb' || detail?.mode === 'usb';
+      setLastPrintFailed(true);
       toast({
         title: '🖨️ فشلت الطباعة',
-        description: detail?.error || 'تحقق من إعدادات الطابعة',
+        description: isUsb
+          ? 'افتح إعدادات الطابعة واضغط "اختر الطابعة (USB)" لإعادة الاتصال، ثم اضغط زر "طباعة" في الفاتورة'
+          : (detail?.error || 'تحقق من إعدادات الطابعة'),
         variant: 'destructive',
       });
     };
@@ -745,6 +750,7 @@ export default function PosSystem() {
         }
 
         // Show the receipt dialog
+        setLastPrintFailed(false);
         setShowReceiptDialog(true);
 
         // Clear cart
@@ -852,6 +858,7 @@ export default function PosSystem() {
         testSound('success', 0.85);
       }
 
+      setLastPrintFailed(false);
       setShowReceiptDialog(true);
 
       setOrderItems([]);
@@ -2154,6 +2161,15 @@ export default function PosSystem() {
                 )}
               </div>
 
+              {lastPrintFailed && (
+                <div className="flex items-start gap-2 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl px-3 py-2.5 text-right">
+                  <span className="text-lg mt-0.5">⚠️</span>
+                  <div className="flex-1 text-xs text-red-700 dark:text-red-400">
+                    <p className="font-bold mb-1">لم تتم الطباعة</p>
+                    <p>افتح إعدادات الطابعة ← اختر الطابعة (USB) ← ثم اضغط "طباعة" أدناه</p>
+                  </div>
+                </div>
+              )}
               <div className="flex flex-col gap-2 pt-2 sticky bottom-0 bg-background pb-1">
                 <Button
                   className="w-full gap-2 h-11 text-base font-bold"
@@ -2168,12 +2184,12 @@ export default function PosSystem() {
                 </Button>
                 <Button
                   variant="outline"
-                  className="w-full gap-2"
-                  onClick={() => { setReceiptCountdown(0); handlePrintReceipt(); }}
+                  className={`w-full gap-2 ${lastPrintFailed ? 'border-red-400 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30' : ''}`}
+                  onClick={() => { setLastPrintFailed(false); setReceiptCountdown(0); handlePrintReceipt(); }}
                   data-testid="button-print-receipt"
                 >
                   <Printer className="w-4 h-4" />
-                  {t('pos.print_invoice')}
+                  {lastPrintFailed ? tc('إعادة الطباعة', 'Retry Print') : t('pos.print_invoice')}
                 </Button>
               </div>
             </div>

@@ -168,23 +168,52 @@ async function _openDevice(device: USBDevice): Promise<void> {
   if (!device.opened) await device.open();
   if (device.configuration === null) await device.selectConfiguration(1);
 
-  // Try to claim each interface — stop at the first success
+  // Try to claim each interface — stop at the first success.
+  // "already claimed" by us is treated as success (device already open from this session).
   _claimedInterface = null;
-  for (const iface of device.configuration!.interfaces) {
+  const interfaces = device.configuration?.interfaces ?? [];
+
+  for (const iface of interfaces) {
     try {
       await device.claimInterface(iface.interfaceNumber);
       _claimedInterface = iface.interfaceNumber;
-      break; // Claimed — no need to try others
-    } catch (_e) {
-      // Likely claimed by OS driver — continue trying other interfaces
+      break; // Claimed successfully
+    } catch (e: any) {
+      const msg = (e?.message || '').toLowerCase();
+      if (msg.includes('already claimed') || msg.includes('already been claimed')) {
+        // Interface was already claimed in this browser session — treat as success
+        _claimedInterface = iface.interfaceNumber;
+        break;
+      }
+      // SecurityError / OS driver conflict — continue trying other interfaces
+    }
+  }
+
+  // If still null: try to find any claimed interface by testing transferOut feasibility
+  // (some browsers don't report interfaces as claimed even when they are)
+  if (_claimedInterface === null) {
+    for (const iface of interfaces) {
+      if (iface.claimed) {
+        _claimedInterface = iface.interfaceNumber;
+        break;
+      }
     }
   }
 
   if (_claimedInterface === null) {
-    // Could not claim ANY interface — likely Windows OS printer driver conflict
-    throw new Error(
-      'لا يمكن الاستئثار بالطابعة USB — على Windows استخدم Zadig لتثبيت درايفر WinUSB، أو استخدم وضع الشبكة (LAN) بدلاً من USB'
-    );
+    // On Windows: OS driver holds the interface → user must install Zadig/WinUSB
+    // On Android: OS may hold interface but transferOut can still work on some devices
+    // → DON'T throw on Android (navigator.userAgent contains "Android")
+    // → DO throw on Windows (non-Android desktop)
+    const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
+    if (!isAndroid) {
+      throw new Error(
+        'لا يمكن الاستئثار بالطابعة USB — على Windows استخدم Zadig لتثبيت درايفر WinUSB، أو استخدم وضع الشبكة (LAN) بدلاً من USB'
+      );
+    }
+    // Android fallback: attempt to use interface 0 (standard printer class)
+    console.warn('[Printer] Could not claim interface on Android — attempting fallback to interface 0');
+    _claimedInterface = 0;
   }
 }
 
