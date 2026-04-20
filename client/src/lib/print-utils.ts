@@ -562,16 +562,22 @@ export async function buildReceiptPreviewHtml(data: TaxInvoiceData): Promise<str
   let trackingQrUrl = '';
   try { trackingQrUrl = await QRCode.toDataURL(trackingUrl, { width: 160, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
 
+  // Logo — embed as base64 so print popups render it correctly (no cross-origin issues)
+  const logoB64 = await fetchLogoBase64().catch(() => '');
+  const logoSrc = logoB64 || '/black-rose-logo.png';
+
   const itemsHtml = data.items.map(item => {
     const up = parseNumber(item.coffeeItem.price);
+    const itemDisc = parseNumber(item.itemDiscount);
+    const lineTotal = item.quantity * up - itemDisc;
     const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
     return `
       <div style="padding:7px 0;border-bottom:1px dashed #ccc;">
-        <div style="font-weight:700;font-size:14px;">${item.coffeeItem.nameAr}</div>
+        <div style="font-weight:700;font-size:14px;">${item.coffeeItem.nameAr}${itemDisc > 0 ? ` <span style="font-size:10px;color:#16a34a;">(-${itemDisc.toFixed(2)})</span>` : ''}</div>
         ${addons ? `<div style="font-size:11px;color:#666;margin-top:2px;">+ ${addons}</div>` : ''}
         <table style="width:100%;margin-top:4px;border-collapse:collapse;"><tr>
           <td style="font-size:12px;color:#555;">${item.quantity} × ${up.toFixed(2)} ر.س</td>
-          <td style="text-align:left;font-size:12px;font-weight:600;">${(item.quantity * up).toFixed(2)} ر.س</td>
+          <td style="text-align:left;font-size:12px;font-weight:600;">${lineTotal.toFixed(2)} ر.س</td>
         </tr></table>
       </div>`;
   }).join('');
@@ -579,7 +585,8 @@ export async function buildReceiptPreviewHtml(data: TaxInvoiceData): Promise<str
   return `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e0;display:flex;justify-content:center;align-items:flex-start;padding:24px 10px;min-height:100vh;}
+body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e0;display:flex;justify-content:center;align-items:flex-start;padding:24px 10px;min-height:100vh;}
+@media print{body{background:#fff;padding:0;display:block;}  .paper{width:76mm;box-shadow:none;} .tape{display:none;} .body{padding:5px 4px 8px;}}
 .paper{background:#fff;width:290px;box-shadow:0 4px 20px rgba(0,0,0,.2);}
 .tape{height:14px;background:repeating-linear-gradient(90deg,#fff 0,#fff 12px,#e8e6e0 12px,#e8e6e0 24px);}
 .body{padding:14px 12px;}
@@ -595,7 +602,7 @@ body{font-family:Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e0;displa
 
   <!-- Header -->
   <div class="c" style="padding-bottom:8px;">
-    <img src="/black-rose-logo.png" style="width:70px;height:70px;object-fit:contain;display:block;margin:0 auto 5px;"
+    <img src="${logoSrc}" style="width:70px;height:70px;object-fit:contain;display:block;margin:0 auto 5px;"
       onerror="this.style.display='none'" />
     <div style="font-size:17px;font-weight:900;letter-spacing:1px;">${COMPANY_NAME}</div>
     ${data.branchName ? `<div style="font-size:11px;color:#555;margin-top:1px;">${data.branchName}</div>` : ''}
@@ -854,83 +861,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
   }
 
   const totalAmount = parseNumber(data.total);
-
-  const codeDiscountAmount = data.discount ? parseNumber(data.discount.amount) : 0;
-  const invDiscountAmount = parseNumber(data.invoiceDiscount);
-  const itemDiscountsTotal = data.items.reduce((sum, item) => sum + parseNumber(item.itemDiscount), 0);
-
-  const subtotalBeforeTax = totalAmount / (1 + VAT_RATE);
-  const vatAmount = totalAmount - subtotalBeforeTax;
-
-  const totalDiscounts = codeDiscountAmount + invDiscountAmount + itemDiscountsTotal;
-
   const displayInvoiceNumber = fmtOrderNum(data.orderNumber);
-  const { date: formattedDate, time: formattedTime } = formatDate(data.date);
-  const displayBranchName = data.branchName || DEFAULT_BRANCH;
-
-  const invoiceTimestamp = data.date ? new Date(data.date).toISOString() : new Date().toISOString();
-  const zatcaData = generateZATCAQRCode({
-    sellerName: COMPANY_NAME,
-    vatNumber: data.vatNumber || VAT_NUMBER,
-    timestamp: invoiceTimestamp,
-    totalWithVat: totalAmount.toFixed(2),
-    vatAmount: vatAmount.toFixed(2)
-  });
-
-  let zatcaQrUrl = "";
-  try {
-    zatcaQrUrl = await QRCode.toDataURL(zatcaData, {
-      width: 160,
-      margin: 1,
-      color: { dark: '#000000', light: '#FFFFFF' },
-      errorCorrectionLevel: 'M'
-    });
-  } catch (error) {
-    console.error("Error generating ZATCA QR:", error);
-  }
-
-  // Tracking QR — links to public order tracking page
-  const trackingUrl = `${window.location.origin}/track/${data.orderNumber}`;
-  let trackingQrUrl = "";
-  try {
-    trackingQrUrl = await QRCode.toDataURL(trackingUrl, {
-      width: 140,
-      margin: 1,
-      color: { dark: '#000000', light: '#FFFFFF' },
-      errorCorrectionLevel: 'M'
-    });
-  } catch (error) {
-    console.error("Error generating tracking QR:", error);
-  }
-
-  // Use base64-embedded logo so it renders instantly in the popup/iframe
-  // without waiting for a network request (fixes logo not showing on print).
-  // fetchLogoBase64 tries multiple paths (/black-rose-logo.png, /blackrose-logo.png, /logo.png, etc.)
-  const logoBase64 = await fetchLogoBase64();
-  const logoUrl = logoBase64 || `${window.location.origin}/black-rose-logo.png`;
-  const logoHtml = logoUrl
-    ? `<img class="logo-img" src="${logoUrl}" alt="Black Rose Cafe" onerror="this.style.display='none'" />`
-    : `<div style="font-size:20px;font-weight:800;letter-spacing:2px;margin-bottom:4px;">BLACK ROSE CAFE</div>`;
-
-  const itemsHtml = data.items.map(item => {
-    const unitPrice = parseNumber(item.coffeeItem.price);
-    const itemDiscount = parseNumber(item.itemDiscount);
-    const lineAfterDiscount = unitPrice * item.quantity - itemDiscount;
-    const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
-    return `
-      <tr>
-        <td style="padding:3px 2px;font-size:12px;">
-          <span style="font-weight:600;">${item.coffeeItem.nameAr}</span>
-          ${itemDiscount > 0 ? ` <span style="color:#16a34a;font-size:9px;">(-${itemDiscount.toFixed(2)})</span>` : ''}
-          ${addons ? `<div style="font-size:9px;color:#666;margin-top:1px;">+ ${addons}</div>` : ''}
-        </td>
-        <td style="text-align:center;font-size:12px;">${item.quantity}</td>
-        <td style="text-align:center;font-size:12px;">${unitPrice.toFixed(2)}</td>
-        <td style="text-align:left;font-size:12px;">${lineAfterDiscount.toFixed(2)}</td>
-      </tr>
-    `;
-  }).join('');
-
   const orderTypeLabel = data.orderTypeName || (
     (data.orderType as string) === 'dine_in' || (data.orderType as string) === 'dine-in' ? 'طاولة' :
     (data.orderType as string) === 'takeaway' || (data.orderType as string) === 'pickup' ? 'سفري' :
@@ -940,165 +871,11 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     (data.orderType as string) === 'drive_thru' ? 'درايف ثرو' : ''
   );
 
-  // ══════════════════════════════════════════════
-  //  فاتورة العميل  (Job 1)
-  // ══════════════════════════════════════════════
-  const customerHtml = `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <title>فاتورة العميل - ${displayInvoiceNumber}</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
-    @page { size: 80mm auto; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Cairo', Arial, sans-serif; background: #fff; color: #000; direction: rtl;
-           -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 13px; }
-    .wrap { width: 76mm; margin: 0 auto; padding: 5px 4px 8px; }
-
-    /* ── Header ── */
-    .hdr { text-align: center; padding-bottom: 7px; border-bottom: 2px solid #000; margin-bottom: 7px; }
-    .logo-img { width: 60mm; height: auto; display: block; margin: 0 auto 4px; object-fit: contain; }
-    .company { font-size: 16px; font-weight: 800; letter-spacing: 1px; }
-    .subtitle { font-size: 11px; color: #444; margin-top: 2px; }
-    .vat-line { font-size: 10px; font-family: monospace; direction: ltr; color: #333; margin-top: 2px; }
-    .branch { font-size: 10px; color: #555; margin-top: 2px; }
-
-    /* ── Invoice number ── */
-    .inv-block { text-align: center; margin: 6px 0; padding: 5px 8px; background: #f0f0f0;
-                 border-radius: 4px; border: 1.5px solid #ccc; }
-    .inv-lbl { font-size: 10px; color: #666; }
-    .inv-num { font-size: 22px; font-weight: 700; letter-spacing: 2px; font-family: monospace; direction: ltr; }
-
-    /* ── Info rows ── */
-    .info { font-size: 12px; margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px dashed #bbb; }
-    .irow { display: flex; justify-content: space-between; align-items: flex-start; padding: 2px 0; gap: 4px; }
-    .ilbl { color: #555; white-space: nowrap; flex-shrink: 0; }
-    .ival { font-weight: 600; text-align: left; word-break: break-word; overflow-wrap: break-word; }
-
-    /* ── Items table ── */
-    table { width: 100%; border-collapse: collapse; margin-bottom: 5px; table-layout: fixed; }
-    thead tr { border-bottom: 1.5px solid #000; }
-    th { padding: 3px 2px; font-size: 11px; font-weight: 700; word-break: break-word; }
-    th:first-child { text-align: right; width: auto; }
-    th:nth-child(2) { text-align: center; width: 24px; white-space: nowrap; }
-    th:nth-child(3) { text-align: center; width: 40px; white-space: nowrap; }
-    th:last-child { text-align: left; width: 44px; white-space: nowrap; }
-    td { padding: 3px 2px; vertical-align: top; word-break: break-word; overflow-wrap: break-word; }
-    td:first-child { text-align: right; }
-    td:nth-child(2) { text-align: center; white-space: nowrap; }
-    td:nth-child(3) { text-align: center; white-space: nowrap; }
-    td:last-child { text-align: left; white-space: nowrap; }
-    tr { border-bottom: 1px solid #eee; }
-
-    /* ── Totals ── */
-    .totals { border-top: 1.5px solid #000; padding-top: 5px; font-size: 12px; }
-    .trow { display: flex; justify-content: space-between; align-items: center; padding: 2px 0; gap: 4px; }
-    .trow span:first-child { white-space: nowrap; flex-shrink: 0; }
-    .trow span:last-child { white-space: nowrap; text-align: left; }
-    .trow.grand { font-size: 15px; font-weight: 700; background: #000; color: #fff;
-                  padding: 5px 8px; border-radius: 4px; margin-top: 4px; }
-    .trow.disc { color: #16a34a; }
-
-    /* ── Payment ── */
-    .pay { display: flex; justify-content: space-between; font-size: 12px;
-           background: #f5f5f5; padding: 4px 8px; border-radius: 4px; margin: 5px 0; }
-    .pay-val { font-weight: 700; }
-
-    /* ── Tracking QR ── */
-    .track-box { text-align: center; margin: 8px 0; border: 1.5px dashed #999;
-                 border-radius: 5px; padding: 6px 4px; }
-    .track-title { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
-    .track-img { width: 100px; height: 100px; display: block; margin: 0 auto; }
-    .track-site { font-size: 10px; color: #444; margin-top: 3px; direction: ltr; }
-
-    /* ── Quote ── */
-    .quote { text-align: center; margin: 7px 0; padding: 8px 6px;
-             border-top: 1px dashed #bbb; border-bottom: 1px dashed #bbb; background: #fafafa; }
-    .quote-text { font-size: 14px; font-weight: 700; color: #1a1a1a; font-style: normal;
-                  line-height: 1.7; letter-spacing: 0.5px; white-space: nowrap; }
-    .quote-brand { font-size: 11px; font-weight: 700; color: #555; margin-top: 3px; letter-spacing: 2px; }
-
-    /* ── ZATCA QR ── */
-    .zatca { text-align: center; margin-top: 6px; }
-    .zatca img { width: 110px; height: 110px; display: block; margin: 0 auto; }
-    .zatca-lbl { font-size: 9px; color: #777; margin-top: 2px; }
-    .vat-note { font-size: 10px; color: #555; margin-top: 2px; }
-
-    @media print { body { margin: 0; } .no-print { display: none !important; } }
-  </style>
-</head>
-<body>
-<div class="wrap">
-
-  <!-- ── HEADER ── -->
-  <div class="hdr">
-    ${logoHtml}
-    <div class="company">BLACK ROSE CAFE</div>
-    <div class="subtitle">فاتورة ضريبية مبسطة</div>
-    <div class="vat-line">VAT: ${data.vatNumber || VAT_NUMBER}</div>
-    <div class="branch">${displayBranchName}</div>
-  </div>
-
-  <!-- ── INVOICE NUMBER ── -->
-  <div class="inv-block">
-    <div class="inv-lbl">رقم الفاتورة</div>
-    <div class="inv-num">${displayInvoiceNumber}</div>
-  </div>
-
-  <!-- ── INFO ── -->
-  <div class="info">
-    <div class="irow"><span class="ilbl">التاريخ:</span><span class="ival">${formattedDate} ${formattedTime}</span></div>
-    ${data.customerName && data.customerName !== 'عميل نقدي' ? `<div class="irow"><span class="ilbl">العميل:</span><span class="ival">${data.customerName}</span></div>` : ''}
-    ${data.tableNumber ? `<div class="irow"><span class="ilbl">الطاولة:</span><span class="ival">${data.tableNumber}</span></div>` : ''}
-    ${orderTypeLabel ? `<div class="irow"><span class="ilbl">نوع الطلب:</span><span class="ival">${orderTypeLabel}</span></div>` : ''}
-  </div>
-
-  <!-- ── ITEMS ── -->
-  <table>
-    <thead><tr><th>الصنف</th><th>ك</th><th>سعر</th><th>المجموع</th></tr></thead>
-    <tbody>${itemsHtml}</tbody>
-  </table>
-
-  <!-- ── TOTALS ── -->
-  <div class="totals">
-    ${totalDiscounts > 0 ? `<div class="trow disc"><span>الخصومات:</span><span>-${(totalDiscounts / (1 + VAT_RATE)).toFixed(2)} ر.س</span></div>` : ''}
-    <div class="trow"><span>قبل الضريبة:</span><span>${subtotalBeforeTax.toFixed(2)} ر.س</span></div>
-    <div class="trow"><span>ضريبة 15%:</span><span>${vatAmount.toFixed(2)} ر.س</span></div>
-    <div class="trow grand"><span>الإجمالي:</span><span>${totalAmount.toFixed(2)} ر.س</span></div>
-  </div>
-
-  <!-- ── PAYMENT ── -->
-  <div class="pay"><span>طريقة الدفع:</span><span class="pay-val">${data.paymentMethod}</span></div>
-  ${data.splitPayment ? `
-  <div class="pay" style="font-size:11px;padding:2px 10px;"><span>نقدي:</span><span>${data.splitPayment.cash.toFixed(2)} ر.س</span></div>
-  <div class="pay" style="font-size:11px;padding:2px 10px;"><span>شبكة:</span><span>${data.splitPayment.card.toFixed(2)} ر.س</span></div>` : ''}
-
-  <!-- ── TRACKING QR ── -->
-  ${trackingQrUrl ? `
-  <div class="track-box">
-    <div class="track-title">باركود تتبع الطلب 📦</div>
-    <img class="track-img" src="${trackingQrUrl}" alt="tracking QR" />
-    <div class="track-site">${COMPANY_WEBSITE}</div>
-  </div>` : ''}
-
-  <!-- ── QUOTE ── -->
-  <div class="quote">
-    <div class="quote-text">"قَهْوَةٌ تُقَالُ وَوَرْدٌ يُهْدَى"</div>
-    <div class="quote-brand">BLACK ROSE</div>
-  </div>
-
-  <!-- ── ZATCA QR (الباركود الضريبي) ── -->
-  ${zatcaQrUrl ? `
-  <div class="zatca">
-    <img src="${zatcaQrUrl}" alt="ZATCA QR" />
-    <div class="zatca-lbl">رمز الضريبة · ZATCA Verified</div>
-    <div class="vat-note">الأسعار شاملة ضريبة القيمة المضافة 15%</div>
-  </div>` : ''}
-
-</div>
-</body>
-</html>`;
+  // ══════════════════════════════════════════════════════════════
+  //  فاتورة العميل (Job 1) — مطابقة للمعاينة تماماً
+  //  يستخدم نفس buildReceiptPreviewHtml لضمان التطابق الكامل
+  // ══════════════════════════════════════════════════════════════
+  const customerHtml = await buildReceiptPreviewHtml(data);
 
   // ══════════════════════════════════════════════
   //  فاتورة الموظف / المطبخ  (Job 2)
