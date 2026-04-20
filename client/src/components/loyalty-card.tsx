@@ -56,7 +56,7 @@ export default function LoyaltyCardComponent({ card, showActions = true, compact
   useEffect(() => {
     if (qrCanvasRef.current && card.qrToken) {
       const qrSize = compact ? 100 : 160;
-      const cardUrl = `https://blackrose.com.sa/loyalty-verify?token=${card.qrToken}`;
+      const cardUrl = `${window.location.origin}/loyalty-verify?token=${card.qrToken}`;
       QRCode.toCanvas(
         qrCanvasRef.current,
         cardUrl,

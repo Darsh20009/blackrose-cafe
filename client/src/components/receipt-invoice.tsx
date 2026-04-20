@@ -48,7 +48,7 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
     const generateTrackingQR = async () => {
       if (!order || !order.orderNumber) return;
       try {
-        const trackingUrl = `https://www.blackrose.com.sa/tracking?order=${order.orderNumber}`;
+        const trackingUrl = `${window.location.origin}/track/${order.orderNumber}`;
         const qrDataUrl = await QRCode.toDataURL(trackingUrl, {
           width: 150,
           margin: 1,

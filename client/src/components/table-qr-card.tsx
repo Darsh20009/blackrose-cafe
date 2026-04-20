@@ -292,7 +292,7 @@ export function TableQRCard({ tableNumber, qrToken, branchName, tableUrl }: Tabl
       branchName: string
     ) => {
       try {
-        const finalUrl = tableUrl.replace(/https?:\/\/[^\/]+/, "https://www.blackrose.com.sa");
+        const finalUrl = tableUrl.replace(/https?:\/\/[^\/]+/, window.location.origin);
 
         const qrDataUrl = await QRCode.toDataURL(finalUrl, {
           width: 380,

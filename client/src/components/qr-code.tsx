@@ -25,7 +25,7 @@ export default function QRCodeComponent({
 
  const generateQRDataURL = (text: string) => {
   // Enhanced QR code with coffee theme colors
-  const finalUrl = text.includes('http') ? text.replace('http://localhost:5000', 'https://www.blackrose.com.sa') : `https://www.blackrose.com.sa${text}`;
+  const finalUrl = text.includes('http') ? text.replace(/https?:\/\/localhost:\d+/, window.location.origin) : `${window.location.origin}${text}`;
   return `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(finalUrl)}&bgcolor=FFFBEB&color=92400E&qzone=3&format=png&ecc=M`;
  };
 
