@@ -33,6 +33,7 @@ import type { CoffeeItem, Order, Table, Employee } from "@shared/schema";
 import { 
   printTaxInvoice, 
   buildReceiptPreviewHtml,
+  buildEmployeeReceiptPreviewHtml,
   printKitchenOrder,
   fmtOrderNum
 } from "@/lib/print-utils";
@@ -115,6 +116,8 @@ export default function PosSystem() {
   const [lastOrder, setLastOrder] = useState<any>(null);
   const [lastPrintFailed, setLastPrintFailed] = useState(false);
   const [receiptPreviewHtml, setReceiptPreviewHtml] = useState('');
+  const [employeeReceiptPreviewHtml, setEmployeeReceiptPreviewHtml] = useState('');
+  const [previewTab, setPreviewTab] = useState<'customer' | 'employee'>('customer');
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   const [posTerminalConnected, setPosTerminalConnected] = useState(() => {
     return localStorage.getItem("pos-terminal-connected") === "true";
@@ -2259,7 +2262,7 @@ export default function PosSystem() {
                     data-testid="button-preview-receipt"
                     onClick={async () => {
                       if (!lastOrder) return;
-                      const html = await buildReceiptPreviewHtml({
+                      const previewData = {
                         orderNumber: lastOrder.orderNumber,
                         customerName: lastOrder.customerName,
                         customerPhone: lastOrder.customerPhone,
@@ -2272,8 +2275,14 @@ export default function PosSystem() {
                         orderType: lastOrder.orderType,
                         date: lastOrder.date,
                         splitPayment: lastOrder.splitPayment,
-                      });
-                      setReceiptPreviewHtml(html);
+                      };
+                      const [custHtml, empHtml] = await Promise.all([
+                        buildReceiptPreviewHtml(previewData),
+                        Promise.resolve(buildEmployeeReceiptPreviewHtml(previewData)),
+                      ]);
+                      setReceiptPreviewHtml(custHtml);
+                      setEmployeeReceiptPreviewHtml(empHtml);
+                      setPreviewTab('customer');
                       setShowReceiptPreview(true);
                     }}
                   >
@@ -2296,11 +2305,33 @@ export default function PosSystem() {
               معاينة الفاتورة
             </DialogTitle>
           </DialogHeader>
+          {/* Tab switcher */}
+          <div className="shrink-0 flex border-b bg-muted/40">
+            <button
+              className={`flex-1 py-2 text-sm font-semibold transition-colors ${previewTab === 'customer' ? 'bg-background border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              onClick={() => setPreviewTab('customer')}
+              data-testid="tab-preview-customer"
+            >نسخة العميل</button>
+            <button
+              className={`flex-1 py-2 text-sm font-semibold transition-colors ${previewTab === 'employee' ? 'bg-background border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              onClick={() => setPreviewTab('employee')}
+              data-testid="tab-preview-employee"
+            >نسخة الموظف</button>
+          </div>
           <div className="flex-1 overflow-y-auto bg-[#f5f5f0]">
-            {receiptPreviewHtml && (
+            {previewTab === 'customer' && receiptPreviewHtml && (
               <iframe
                 srcDoc={receiptPreviewHtml}
-                title="receipt-preview"
+                title="receipt-preview-customer"
+                className="w-full border-0"
+                style={{ height: '700px', minHeight: '500px' }}
+                sandbox="allow-same-origin"
+              />
+            )}
+            {previewTab === 'employee' && employeeReceiptPreviewHtml && (
+              <iframe
+                srcDoc={employeeReceiptPreviewHtml}
+                title="receipt-preview-employee"
                 className="w-full border-0"
                 style={{ height: '700px', minHeight: '500px' }}
                 sandbox="allow-same-origin"

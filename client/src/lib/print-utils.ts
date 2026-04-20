@@ -535,7 +535,7 @@ export async function buildReceiptPreviewHtml(data: TaxInvoiceData): Promise<str
   const disc = data.invoiceDiscount ? parseNumber(data.invoiceDiscount) : 0;
   const { date: fmtDate, time: fmtTime } = formatDate(data.date);
   const orderNumDisplay = String(data.orderNumber).replace(/\D/g, '').padStart(4, '0') || data.orderNumber;
-  const TAGLINE = 'قهوة تقال و ورد يهدى';
+  const TAGLINE = 'قَهْوَةٌ تُقَالُ وَوَرْدٌ يُهْدَى';
 
   const orderTypeStr = (data.orderTypeName || (data.orderType as string) || '');
   const orderTypeLabel =
@@ -682,6 +682,66 @@ body{font-family:Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e0;displa
 </div></body></html>`;
 }
 
+/** Build a visual HTML preview for the employee/kitchen copy — to be shown alongside the customer preview */
+export function buildEmployeeReceiptPreviewHtml(data: TaxInvoiceData): string {
+  const { date: fmtDate, time: fmtTime } = formatDate(data.date);
+  const orderNumDisplay = String(data.orderNumber).replace(/\D/g, '').padStart(4, '0') || data.orderNumber;
+
+  const orderTypeStr = (data.orderTypeName || (data.orderType as string) || '');
+  const orderTypeLabel =
+    orderTypeStr === 'dine_in' || orderTypeStr === 'dine-in' ? 'طاولة' :
+    orderTypeStr === 'takeaway' || orderTypeStr === 'pickup' ? 'سفري' :
+    orderTypeStr === 'delivery' ? 'توصيل' :
+    orderTypeStr === 'car_pickup' || orderTypeStr === 'car-pickup' ? 'سيارة' :
+    orderTypeStr;
+
+  const itemsHtml = data.items.map(item => {
+    const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
+    return `
+      <div style="padding:10px 0;border-bottom:1px dashed #ccc;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div style="flex:1;">
+          <div style="font-size:16px;font-weight:800;line-height:1.3;">${item.coffeeItem.nameAr}</div>
+          ${addons ? `<div style="font-size:11px;color:#666;margin-top:3px;">+ ${addons}</div>` : ''}
+        </div>
+        <div style="font-size:24px;font-weight:900;background:#000;color:#fff;padding:4px 14px;border-radius:6px;white-space:nowrap;min-width:50px;text-align:center;">×${item.quantity}</div>
+      </div>`;
+  }).join('');
+
+  return `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e0;display:flex;justify-content:center;align-items:flex-start;padding:24px 10px;min-height:100vh;}
+.paper{background:#fff;width:290px;box-shadow:0 4px 20px rgba(0,0,0,.2);}
+.tape{height:14px;background:repeating-linear-gradient(90deg,#fff 0,#fff 12px,#e8e6e0 12px,#e8e6e0 24px);}
+.body{padding:14px 12px;}
+.header{text-align:center;background:#000;color:#fff;padding:10px 8px;margin-bottom:10px;border-radius:4px;}
+.header-title{font-size:13px;font-weight:700;letter-spacing:1px;}
+.order-num{font-size:42px;font-weight:900;letter-spacing:4px;border:3px solid #000;border-radius:6px;padding:6px 0;text-align:center;margin:8px 0;font-family:monospace;color:#000;}
+.badge{display:inline-block;background:#b45309;color:#fff;font-size:13px;font-weight:700;padding:4px 14px;border-radius:20px;margin:0 auto 6px;display:block;text-align:center;width:fit-content;margin:0 auto;}
+.type-badge{display:block;text-align:center;font-size:13px;font-weight:700;color:#1e40af;background:#dbeafe;padding:3px 10px;border-radius:4px;margin:4px 0;}
+.meta{font-size:11px;color:#666;text-align:center;margin-bottom:8px;}
+.sep{border:none;border-top:2px solid #000;margin:8px 0;}
+.dsep{border:none;border-top:1px dashed #aaa;margin:5px 0;}
+.footer{font-size:10px;color:#888;text-align:center;margin-top:10px;padding-top:8px;border-top:1px dashed #ccc;}
+</style></head><body><div class="paper">
+<div class="tape"></div>
+<div class="body">
+  <div class="header">
+    <div class="header-title">ورقة التحضير — نسخة الموظف</div>
+  </div>
+  <div class="order-num">#${orderNumDisplay}</div>
+  ${data.tableNumber ? `<div class="badge">طاولة ${data.tableNumber}</div>` : ''}
+  ${orderTypeLabel ? `<div class="type-badge">${orderTypeLabel}</div>` : ''}
+  <div class="meta">${fmtTime} — ${fmtDate} | الكاشير: ${data.employeeName || '—'}</div>
+  <hr class="sep"/>
+  ${itemsHtml}
+  <hr class="sep"/>
+  <div class="footer">العميل: ${data.customerName || 'نقدي'} | الإجمالي: ${parseNumber(data.total).toFixed(2)} ر.س</div>
+</div>
+<div class="tape"></div>
+</div></body></html>`;
+}
+
 export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig = {}): Promise<void> {
   const shouldAutoPrint = config.autoPrint !== undefined ? config.autoPrint : true;
 
@@ -730,7 +790,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
           shopName: COMPANY_NAME,
           vatNumber: data.vatNumber || VAT_NUMBER,
           branchName: data.branchName,
-          tagline: 'قهوة تقال و ورد يهدى',
+          tagline: 'قَهْوَةٌ تُقَالُ وَوَرْدٌ يُهْدَى',
           orderNumber: data.orderNumber,
           orderDate: `${fmtDate} ${fmtTime}`,
           cashierName: data.employeeName || '—',
@@ -912,26 +972,30 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 
     /* ── Info rows ── */
     .info { font-size: 12px; margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px dashed #bbb; }
-    .irow { display: flex; justify-content: space-between; padding: 2px 0; }
-    .ilbl { color: #555; }
-    .ival { font-weight: 600; }
+    .irow { display: flex; justify-content: space-between; align-items: flex-start; padding: 2px 0; gap: 4px; }
+    .ilbl { color: #555; white-space: nowrap; flex-shrink: 0; }
+    .ival { font-weight: 600; text-align: left; word-break: break-word; overflow-wrap: break-word; }
 
     /* ── Items table ── */
-    table { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 5px; table-layout: fixed; }
     thead tr { border-bottom: 1.5px solid #000; }
-    th { padding: 3px 2px; font-size: 11px; font-weight: 700; }
-    th:first-child { text-align: right; }
-    th:nth-child(2), th:nth-child(3) { text-align: center; width: 28px; }
-    th:last-child { text-align: left; width: 50px; }
-    td { padding: 3px 2px; }
+    th { padding: 3px 2px; font-size: 11px; font-weight: 700; word-break: break-word; }
+    th:first-child { text-align: right; width: auto; }
+    th:nth-child(2) { text-align: center; width: 24px; white-space: nowrap; }
+    th:nth-child(3) { text-align: center; width: 40px; white-space: nowrap; }
+    th:last-child { text-align: left; width: 44px; white-space: nowrap; }
+    td { padding: 3px 2px; vertical-align: top; word-break: break-word; overflow-wrap: break-word; }
     td:first-child { text-align: right; }
-    td:nth-child(2), td:nth-child(3) { text-align: center; }
-    td:last-child { text-align: left; }
+    td:nth-child(2) { text-align: center; white-space: nowrap; }
+    td:nth-child(3) { text-align: center; white-space: nowrap; }
+    td:last-child { text-align: left; white-space: nowrap; }
     tr { border-bottom: 1px solid #eee; }
 
     /* ── Totals ── */
     .totals { border-top: 1.5px solid #000; padding-top: 5px; font-size: 12px; }
-    .trow { display: flex; justify-content: space-between; padding: 2px 0; }
+    .trow { display: flex; justify-content: space-between; align-items: center; padding: 2px 0; gap: 4px; }
+    .trow span:first-child { white-space: nowrap; flex-shrink: 0; }
+    .trow span:last-child { white-space: nowrap; text-align: left; }
     .trow.grand { font-size: 15px; font-weight: 700; background: #000; color: #fff;
                   padding: 5px 8px; border-radius: 4px; margin-top: 4px; }
     .trow.disc { color: #16a34a; }
@@ -949,10 +1013,11 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     .track-site { font-size: 10px; color: #444; margin-top: 3px; direction: ltr; }
 
     /* ── Quote ── */
-    .quote { text-align: center; margin: 6px 0; padding: 6px 4px;
-             border-top: 1px dashed #bbb; border-bottom: 1px dashed #bbb; }
-    .quote-text { font-size: 13px; font-weight: 600; color: #1a1a1a; font-style: italic; }
-    .quote-brand { font-size: 12px; font-weight: 700; color: #000; margin-top: 2px; letter-spacing: 1px; }
+    .quote { text-align: center; margin: 7px 0; padding: 8px 6px;
+             border-top: 1px dashed #bbb; border-bottom: 1px dashed #bbb; background: #fafafa; }
+    .quote-text { font-size: 14px; font-weight: 700; color: #1a1a1a; font-style: normal;
+                  line-height: 1.7; letter-spacing: 0.5px; white-space: nowrap; }
+    .quote-brand { font-size: 11px; font-weight: 700; color: #555; margin-top: 3px; letter-spacing: 2px; }
 
     /* ── ZATCA QR ── */
     .zatca { text-align: center; margin-top: 6px; }
@@ -1019,7 +1084,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 
   <!-- ── QUOTE ── -->
   <div class="quote">
-    <div class="quote-text">"قهوة تُقال وورد يُهدى"</div>
+    <div class="quote-text">"قَهْوَةٌ تُقَالُ وَوَرْدٌ يُهْدَى"</div>
     <div class="quote-brand">BLACK ROSE</div>
   </div>
 
@@ -1104,49 +1169,18 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 </html>`;
 
   // ══════════════════════════════════════════════════════════════
-  //  طباعة موحدة: العميل (ص١) + الموظف (ص٢) — مهمة واحدة بلا popups
-  //  يحل مشكلة حجب النوافذ المنبثقة ومشكلة ظهور نسخة واحدة فقط
+  //  طباعة منفصلة: العميل (مهمة ١) + الموظف (مهمة ٢) — بدون تعارض CSS
+  //  كل نسخة مستند HTML مستقل → لا تداخل، لا رموز، لا تعارض أنماط
   // ══════════════════════════════════════════════════════════════
 
-  // مساعدتان لاستخلاص محتوى <body> و <style> من مستند HTML كامل
-  const _extractBody = (html: string): string => {
-    const m = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    return m ? m[1].trim() : html;
-  };
-  const _extractStyles = (html: string): string => {
-    const out: string[] = [];
-    const re = /<style[^>]*>([\s\S]*?)<\/style>/gi;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(html)) !== null) out.push(m[1]);
-    return out.join('\n');
-  };
-
-  // مستند موحد: فاتورة العميل ثم نسخة الموظف مع فاصل صفحة بينهما
-  const _buildCombined = (): string => `<!DOCTYPE html>
-<html lang="ar" dir="rtl"><head>
-  <meta charset="UTF-8">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
-    @page { size: 80mm auto; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { direction: rtl; font-family: 'Cairo', Arial, sans-serif; color: #000; background: #fff;
-           -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    ${_extractStyles(customerHtml)}
-    ${_extractStyles(empHtml)}
-    .pb { display: block; page-break-after: always; break-after: page; }
-  </style>
-</head>
-<body>
-  <div class="pb">${_extractBody(customerHtml)}</div>
-  <div>${_extractBody(empHtml)}</div>
-</body></html>`;
-
   if (shouldAutoPrint) {
-    _printQueue.push({ html: _buildCombined(), paperWidth: '80mm', isFullDoc: true });
+    // طباعة نسخة العميل أولاً ثم نسخة الموظف بعد 900ms (وقت كافٍ للطابعة الحرارية)
+    _printQueue.push({ html: customerHtml, paperWidth: '80mm', isFullDoc: true });
+    _printQueue.push({ html: empHtml, paperWidth: '80mm', isFullDoc: true });
     _drainPrintQueue();
   } else {
-    // وضع المعاينة اليدوية — نافذة واحدة مع زر طباعة موحد
-    const combined = _buildCombined();
+    // ── وضع المعاينة: نافذة منبثقة تُظهر النسختين جنباً إلى جنب ──
+    // نستخدم Blob URLs لضمان عرض كل نسخة في إطارها بشكل مستقل وصحيح
     const previewHtml = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -1155,62 +1189,87 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Cairo', sans-serif; background: #f0f0f0; padding: 16px; direction: rtl; }
+    body { font-family: 'Cairo', sans-serif; background: #e8e8e8; padding: 16px; direction: rtl; min-height: 100vh; }
     .toolbar { display: flex; gap: 10px; margin-bottom: 16px; justify-content: center; flex-wrap: wrap; }
     .btn { padding: 10px 24px; font-size: 14px; font-family: 'Cairo', sans-serif; border: none;
            border-radius: 8px; cursor: pointer; font-weight: 700; transition: opacity .2s; }
-    .btn:hover { opacity: 0.85; }
-    .btn-print { background: #1a1a1a; color: #fff; font-size: 16px; }
+    .btn:hover { opacity: 0.82; }
+    .btn-print { background: #1a1a1a; color: #fff; font-size: 15px; }
+    .btn-customer { background: #1e40af; color: #fff; }
+    .btn-employee { background: #b45309; color: #fff; }
     .btn-close  { background: #6b7280; color: #fff; }
-    .frames { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
-    iframe { border: 1px solid #ccc; background: #fff; border-radius: 4px; box-shadow: 0 2px 8px #0002; }
-    h3 { text-align: center; font-size: 11px; color: #555; margin-bottom: 6px; }
+    .frames { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
     .col { display: flex; flex-direction: column; align-items: center; }
+    h3 { text-align: center; font-size: 12px; font-weight: 700; color: #333; margin-bottom: 8px;
+         background: #fff; padding: 4px 14px; border-radius: 20px; border: 1px solid #ccc; }
+    iframe { border: 2px solid #ccc; background: #fff; border-radius: 6px;
+             box-shadow: 0 4px 16px rgba(0,0,0,.15); display: block; }
     @media print { body { display: none; } }
   </style>
 </head>
 <body>
   <div class="toolbar">
-    <button class="btn btn-print" onclick="printBoth()">🖨 طباعة النسختين معاً</button>
+    <button class="btn btn-print" onclick="printBoth()">🖨️ طباعة النسختين</button>
+    <button class="btn btn-customer" onclick="printOne('customer')">🧾 طباعة نسخة العميل</button>
+    <button class="btn btn-employee" onclick="printOne('employee')">📋 طباعة نسخة الموظف</button>
     <button class="btn btn-close" onclick="window.close()">✕ إغلاق</button>
   </div>
   <div class="frames">
     <div class="col">
-      <h3>فاتورة العميل</h3>
-      <iframe id="f-customer" width="320" height="600" srcdoc=""></iframe>
+      <h3>🧾 فاتورة العميل</h3>
+      <iframe id="f-customer" width="320" height="620"></iframe>
     </div>
     <div class="col">
-      <h3>نسخة الموظف</h3>
-      <iframe id="f-employee" width="320" height="420" srcdoc=""></iframe>
+      <h3>📋 نسخة الموظف</h3>
+      <iframe id="f-employee" width="320" height="460"></iframe>
     </div>
   </div>
   <script>
-    var _combined = ${JSON.stringify(combined)};
-    function printBoth() {
-      var f = document.createElement('iframe');
-      f.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;';
-      document.body.appendChild(f);
-      f.contentDocument.open();
-      f.contentDocument.write(_combined);
-      f.contentDocument.close();
-      setTimeout(function() {
-        f.contentWindow.focus();
-        f.contentWindow.print();
-        f.addEventListener('afterprint', function() { setTimeout(function(){ f.remove(); }, 300); });
-        setTimeout(function(){ try{ f.remove(); }catch{} }, 8000);
-      }, 250);
+    var customerHtml = ${JSON.stringify(customerHtml)};
+    var empHtml = ${JSON.stringify(empHtml)};
+
+    function makeBlobUrl(html) {
+      var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      return URL.createObjectURL(blob);
     }
-    window.addEventListener('load', function() {
-      var fc = document.getElementById('f-customer');
-      var fe = document.getElementById('f-employee');
-      if (fc) { fc.contentDocument.open(); fc.contentDocument.write(${JSON.stringify(customerHtml)}); fc.contentDocument.close(); }
-      if (fe) { fe.contentDocument.open(); fe.contentDocument.write(${JSON.stringify(empHtml)}); fe.contentDocument.close(); }
-    });
+
+    // تحميل كل إطار من blob URL مستقل — يضمن عزل CSS تاماً وعرض صحيح
+    var custUrl = makeBlobUrl(customerHtml);
+    var empUrl  = makeBlobUrl(empHtml);
+
+    document.getElementById('f-customer').src = custUrl;
+    document.getElementById('f-employee').src = empUrl;
+
+    function _printViaHiddenIframe(html) {
+      var f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;';
+      document.body.appendChild(f);
+      var url = makeBlobUrl(html);
+      f.src = url;
+      f.onload = function() {
+        setTimeout(function() {
+          try { f.contentWindow.focus(); f.contentWindow.print(); } catch(e) {}
+          f.addEventListener('afterprint', function() { setTimeout(function(){ try{ f.remove(); URL.revokeObjectURL(url); }catch(e){} }, 300); }, { once: true });
+          setTimeout(function(){ try{ f.remove(); URL.revokeObjectURL(url); }catch(e){} }, 9000);
+        }, 400);
+      };
+    }
+
+    function printBoth() {
+      _printViaHiddenIframe(customerHtml);
+      // نسخة الموظف بعد 1.2 ثانية لإعطاء الطابعة وقتاً للقطع والتهيؤ
+      setTimeout(function() { _printViaHiddenIframe(empHtml); }, 1200);
+    }
+
+    function printOne(which) {
+      _printViaHiddenIframe(which === 'customer' ? customerHtml : empHtml);
+    }
   </script>
 </body>
 </html>`;
-    const win = window.open('', '_blank', 'width=780,height=720,scrollbars=yes,resizable=yes');
+    const win = window.open('', '_blank', 'width=820,height=760,scrollbars=yes,resizable=yes');
     if (win) {
+      win.document.open();
       win.document.write(previewHtml);
       win.document.close();
       win.document.title = `فواتير الطلب - ${displayInvoiceNumber}`;
