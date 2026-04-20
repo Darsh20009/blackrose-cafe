@@ -601,7 +601,7 @@ export async function buildReceiptBitmapEscPos(opts: {
   addGap(8);
 
   // Logo
-  addImg(logoImg, Math.round(DW * 0.45));
+  addImg(logoImg, Math.round(DW * 0.25));
   addGap(4);
 
   // Shop name

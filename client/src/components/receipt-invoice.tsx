@@ -149,7 +149,7 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
     const customerPage = `
       <div style="page-break-after:always;break-after:page;font-family:'Cairo',Arial,sans-serif;direction:rtl;width:80mm;max-width:80mm;margin:0 auto;padding:10px;color:#000;font-size:12px;">
         <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:8px;">
-          <img src="${logoImage}" alt="BLACK ROSE CAFE" style="width:80px;height:80px;object-fit:contain;display:block;margin:0 auto 4px;" />
+          <img src="${logoImage}" alt="BLACK ROSE CAFE" style="width:50px;height:50px;object-fit:contain;display:block;margin:0 auto 4px;" />
           <div style="font-size:16px;font-weight:bold;">${brand.nameAr}</div>
           <div style="font-size:10px;color:#555;">فاتورة ضريبية — نسخة العميل</div>
           <div style="font-size:11px;margin-top:4px;">رقم الطلب: <strong>#${order.orderNumber || ''}</strong></div>

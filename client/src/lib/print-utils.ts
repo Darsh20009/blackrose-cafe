@@ -709,7 +709,7 @@ body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e
 
   <!-- Header -->
   <div class="c" style="padding-bottom:8px;">
-    <img src="${logoSrc}" style="width:100px;height:100px;object-fit:contain;display:block;margin:0 auto 6px;"
+    <img src="${logoSrc}" style="width:60px;height:60px;object-fit:contain;display:block;margin:0 auto 6px;"
       onerror="this.style.display='none'" />
     <div style="font-size:17px;font-weight:900;letter-spacing:1px;">${COMPANY_NAME}</div>
     ${data.branchName ? `<div style="font-size:11px;color:#555;margin-top:1px;">${data.branchName}</div>` : ''}
