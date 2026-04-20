@@ -87,6 +87,7 @@ interface TaxInvoiceData {
   invoiceDiscount?: number | string;
   total: string;
   paymentMethod: string;
+  splitPayment?: { cash: number; card: number };
   employeeName: string;
   tableNumber?: string;
   orderType?: 'dine_in' | 'takeaway' | 'delivery';
@@ -601,6 +602,9 @@ body{font-family:Tahoma,Arial,sans-serif;direction:rtl;color:#000;background:#ff
   <div class="c" style="font-size:20px;font-weight:700;border:2px solid #000;padding:5px 0;margin:4px 0;">الإجمالي: ${totalAmountThermal.toFixed(2)} ر.س</div>
   <div class="sep"></div>
   <div class="row"><span>طريقة الدفع:</span><span>${data.paymentMethod}</span></div>
+  ${data.splitPayment ? `
+  <div class="row" style="font-size:11px;padding-right:8px;"><span>نقدي:</span><span>${data.splitPayment.cash.toFixed(2)} ر.س</span></div>
+  <div class="row" style="font-size:11px;padding-right:8px;"><span>شبكة:</span><span>${data.splitPayment.card.toFixed(2)} ر.س</span></div>` : ''}
   <div class="sep"></div>
   <div class="c" style="font-weight:700;margin:4px 0;">** شكراً لزيارتكم **</div>
   <div class="c" style="font-size:10px;">الأسعار شاملة ضريبة القيمة المضافة 15%</div>
@@ -877,6 +881,9 @@ body{font-family:Tahoma,Arial,sans-serif;direction:rtl;color:#000;background:#ff
 
   <!-- ── PAYMENT ── -->
   <div class="pay"><span>طريقة الدفع:</span><span class="pay-val">${data.paymentMethod}</span></div>
+  ${data.splitPayment ? `
+  <div class="pay" style="font-size:11px;padding:2px 10px;"><span>نقدي:</span><span>${data.splitPayment.cash.toFixed(2)} ر.س</span></div>
+  <div class="pay" style="font-size:11px;padding:2px 10px;"><span>شبكة:</span><span>${data.splitPayment.card.toFixed(2)} ر.س</span></div>` : ''}
 
   <!-- ── TRACKING QR ── -->
   ${trackingQrUrl ? `
@@ -1276,6 +1283,9 @@ export async function printCashierReceipt(data: TaxInvoiceData & { deliveryType?
       ${data.discount ? `<div class="total-row" style="color: green;"><span>الخصم (${data.discount.percentage}%):</span><span>-${data.discount.amount} ر.س</span></div>` : ''}
       <div class="total-row total-grand"><span>الإجمالي:</span><span>${totalAmount.toFixed(2)} ر.س</span></div>
       <div class="total-row"><span>طريقة الدفع:</span><span>${data.paymentMethod}</span></div>
+      ${data.splitPayment ? `
+      <div class="total-row" style="font-size:11px;"><span>نقدي:</span><span>${data.splitPayment.cash.toFixed(2)} ر.س</span></div>
+      <div class="total-row" style="font-size:11px;"><span>شبكة:</span><span>${data.splitPayment.card.toFixed(2)} ر.س</span></div>` : ''}
     </div>
 
     <div class="signature">

@@ -910,6 +910,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'pos': 'pos',
         'pos-network': 'pos-network',
         'mada': 'mada',
+        'split': 'split',
       };
 
       const tenantId = body.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
@@ -917,7 +918,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const mappedPaymentMethod = paymentMethodMap[body.paymentMethod] || body.paymentMethod || 'cash';
 
       // Auto-confirm orders from POS channel with immediate payment methods
-      const autoConfirmMethods = ['cash', 'pos', 'pos-network', 'mada', 'apple_pay', 'stc-pay', 'qahwa-card'];
+      const autoConfirmMethods = ['cash', 'pos', 'pos-network', 'mada', 'apple_pay', 'stc-pay', 'qahwa-card', 'split'];
       const isPosChannel = body.channel === 'pos';
       const shouldAutoConfirm = isPosChannel && autoConfirmMethods.includes(mappedPaymentMethod);
 

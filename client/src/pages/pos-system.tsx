@@ -44,7 +44,7 @@ import PrinterSettingsPanel from "@/components/printer-settings-panel";
 import { loadPrinterSettings } from "@/lib/thermal-printer";
 
 type OrderType = "dine_in" | "takeaway" | "delivery" | "car_pickup";
-type PaymentMethod = "cash" | "card" | "qahwa-card";
+type PaymentMethod = "cash" | "card" | "qahwa-card" | "split";
 
 const ORDER_TYPES = [
   { id: "dine_in", name: "محلي", nameEn: "Dine-in", icon: Coffee },
@@ -57,6 +57,7 @@ const PAYMENT_METHODS = [
   { id: "cash", icon: Banknote, tKey: "pos.payment_cash" },
   { id: "card", icon: CreditCard, tKey: "pos.payment_card" },
   { id: "qahwa-card", icon: Wallet, tKey: "pos.payment_loyalty" },
+  { id: "split", icon: SplitSquareVertical, tKey: "pos.payment_split" },
 ];
 
 export default function PosSystem() {
@@ -67,6 +68,7 @@ export default function PosSystem() {
     cash: tc("نقدي","Cash"),
     card: tc("شبكة","Network"),
     "qahwa-card": tc("بطاقة بلاك روز","BLACK ROSE Card"),
+    split: tc("نقدي + شبكة","Cash + Network"),
   };
   const dir = i18n.language === 'ar' ? 'rtl' : 'ltr';
   const employee = useMemo(() => {
@@ -89,6 +91,7 @@ export default function PosSystem() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [orderType, setOrderType] = useState<OrderType>("dine_in");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [splitCashAmount, setSplitCashAmount] = useState("");
   const [tableNumber, setTableNumber] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -617,6 +620,16 @@ export default function PosSystem() {
 
   const handleCheckout = async () => {
     if (orderItems.length === 0) return;
+
+    // Validate split payment: ensure cash amount is entered and doesn't exceed total
+    if (paymentMethod === "split") {
+      const cashVal = parseFloat(splitCashAmount) || 0;
+      const total0 = Math.max(0, calculateTotal - (usePoints && customerPoints >= 100 ? pointsDiscount : 0));
+      if (cashVal <= 0 || cashVal >= total0) {
+        alert(tc("الرجاء إدخال مبلغ الكاش بشكل صحيح (أقل من الإجمالي وأكبر من صفر)", "Please enter a valid cash amount (less than total and greater than 0)"));
+        return;
+      }
+    }
     
     try {
       setSyncing(true);
@@ -625,6 +638,9 @@ export default function PosSystem() {
       const total = Math.max(0, rawTotal - discount);
       const subtotal = calculateSubtotal;
       const tax = rawTotal - subtotal;
+      const splitPaymentData = paymentMethod === "split"
+        ? { cash: parseFloat(splitCashAmount) || 0, card: Math.max(0, total - (parseFloat(splitCashAmount) || 0)) }
+        : undefined;
       const pointsUsed = discount > 0 ? Math.round(discount * 50) : 0;
 
       broadcastToDisplay("payment_processing", {
@@ -664,6 +680,7 @@ export default function PosSystem() {
         employeeId: employee?.id,
         channel: "pos",
         notes: orderNote || undefined,
+        ...(splitPaymentData ? { splitPayment: splitPaymentData } : {}),
         ...(pointsUsed > 0 ? {
           pointsRedeemed: pointsUsed,
           pointsValue: discount,
@@ -735,6 +752,7 @@ export default function PosSystem() {
             subtotal: subtotal.toFixed(2),
             total: total.toFixed(2),
             paymentMethod: PAYMENT_METHOD_LABELS[paymentMethod] || paymentMethod,
+            splitPayment: splitPaymentData,
             employeeName: employee?.fullName || t('pos.employee_fallback'),
             tableNumber: orderType === "dine_in" ? tableNumber : undefined,
             orderType: orderType as any,
@@ -755,6 +773,7 @@ export default function PosSystem() {
 
         // Clear cart
         setOrderItems([]);
+        setSplitCashAmount("");
         setCustomerName("");
         setCustomerPhone("");
         setOrderNote("");
@@ -839,6 +858,7 @@ export default function PosSystem() {
           date: new Date().toISOString(),
           crNumber: businessConfig?.commercialRegistration,
           vatNumber: businessConfig?.vatNumber,
+          splitPayment: splitPaymentData,
         };
         // Delay print by 200ms so UI updates (clear cart, show receipt) render first
         setTimeout(() => {
@@ -862,6 +882,7 @@ export default function PosSystem() {
       setShowReceiptDialog(true);
 
       setOrderItems([]);
+      setSplitCashAmount("");
       setOrderNote("");
       setTableNumber("");
       setCustomerName("");
@@ -1299,7 +1320,7 @@ export default function PosSystem() {
                 <Columns2 className="w-4 h-4" />
               </Button>
               {orderItems.length > 0 && (
-                <Button variant="ghost" size="icon" onClick={() => { setOrderItems([]); broadcastToDisplay("order_cancelled", { items: [], subtotal: 0, tax: 0, total: 0 }); }} className="text-destructive h-8 w-8" data-testid="button-clear-order">
+                <Button variant="ghost" size="icon" onClick={() => { setOrderItems([]); setSplitCashAmount(""); broadcastToDisplay("order_cancelled", { items: [], subtotal: 0, tax: 0, total: 0 }); }} className="text-destructive h-8 w-8" data-testid="button-clear-order">
                   <Trash2 className="w-4 h-4" />
                 </Button>
               )}
@@ -1453,16 +1474,14 @@ export default function PosSystem() {
 
           <div className="px-2 sm:px-4 py-2 border-t">
             <p className="text-xs sm:text-sm font-bold text-muted-foreground mb-2">{t('pos.payment_method')}</p>
-            <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+            <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
               {PAYMENT_METHODS.map((method) => (
                 <Button
                   key={method.id}
                   variant={paymentMethod === method.id ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setPaymentMethod(method.id as PaymentMethod)}
-                  className={`flex flex-col gap-0.5 h-auto py-2 text-[10px] sm:text-xs ${
-                    paymentMethod === method.id ? '' : ''
-                  }`}
+                  onClick={() => { setPaymentMethod(method.id as PaymentMethod); setSplitCashAmount(""); }}
+                  className="flex flex-col gap-0.5 h-auto py-2 text-[10px] sm:text-xs"
                   data-testid={`button-payment-${method.id}`}
                 >
                   <method.icon className="w-4 h-4" />
@@ -1488,6 +1507,45 @@ export default function PosSystem() {
                 )}
               </div>
             )}
+            {paymentMethod === "split" && (() => {
+              const splitTotal = usePoints && pointsDiscount > 0 ? calculateTotalAfterPoints : calculateTotal;
+              const cashVal = parseFloat(splitCashAmount) || 0;
+              const cardVal = Math.max(0, splitTotal - cashVal);
+              const isValid = cashVal >= 0 && cashVal <= splitTotal;
+              return (
+                <div className="mt-2 space-y-2 rounded-xl border-2 border-primary/30 bg-primary/5 p-3">
+                  <p className="text-[10px] font-bold text-primary text-center">{tc("أدخل المبلغ النقدي — الباقي يُسدَّد شبكة","Enter cash amount — rest goes to card")}</p>
+                  <div className="flex items-center gap-2">
+                    <Banknote className="w-4 h-4 text-green-600 shrink-0" />
+                    <Input
+                      type="number"
+                      min={0}
+                      max={splitTotal}
+                      step={0.01}
+                      placeholder={tc("مبلغ الكاش","Cash amount")}
+                      value={splitCashAmount}
+                      onChange={(e) => setSplitCashAmount(e.target.value)}
+                      className="h-8 text-sm font-bold"
+                      data-testid="input-split-cash"
+                    />
+                    <span className="text-xs font-bold shrink-0">{tc("ر.س","SAR")}</span>
+                  </div>
+                  <div className={`flex items-center justify-between rounded-lg px-3 py-2 text-xs font-bold ${isValid ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700' : 'bg-red-50 dark:bg-red-950/30 text-red-600 border border-red-200'}`}>
+                    <div className="flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5" />
+                      <span>{tc("الشبكة:","Card:")}</span>
+                    </div>
+                    <span>{isValid ? cardVal.toFixed(2) : "—"} {tc("ر.س","SAR")}</span>
+                  </div>
+                  {cashVal > 0 && isValid && (
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>{tc("كاش","Cash")} {cashVal.toFixed(2)} + {tc("شبكة","Card")} {cardVal.toFixed(2)}</span>
+                      <span className="font-bold text-primary">= {splitTotal.toFixed(2)} {tc("ر.س","SAR")}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           <div className="p-2 sm:p-4 pb-[72px] md:pb-4 border-t bg-muted/10 gap-2 sm:gap-3 flex flex-col">
