@@ -527,7 +527,7 @@ function formatDate(dateStr: string): { date: string; time: string } {
   }
 }
 
-/** Build a visual HTML receipt for preview (no ESC/POS — pure browser rendering) */
+/** Build a visual HTML receipt for preview — matches Canvas 2D printer output exactly */
 export async function buildReceiptPreviewHtml(data: TaxInvoiceData): Promise<string> {
   const totalAmount = parseNumber(data.total);
   const subtotal = totalAmount / (1 + VAT_RATE);
@@ -535,6 +535,7 @@ export async function buildReceiptPreviewHtml(data: TaxInvoiceData): Promise<str
   const disc = data.invoiceDiscount ? parseNumber(data.invoiceDiscount) : 0;
   const { date: fmtDate, time: fmtTime } = formatDate(data.date);
   const orderNumDisplay = String(data.orderNumber).replace(/\D/g, '').padStart(4, '0') || data.orderNumber;
+  const TAGLINE = 'قهوة تقال و ورد يهدى';
 
   const orderTypeStr = (data.orderTypeName || (data.orderType as string) || '');
   const orderTypeLabel =
@@ -553,19 +554,24 @@ export async function buildReceiptPreviewHtml(data: TaxInvoiceData): Promise<str
     totalWithVat: totalAmount.toFixed(2),
     vatAmount: vat.toFixed(2),
   });
-  let qrDataUrl = '';
-  try { qrDataUrl = await QRCode.toDataURL(zatcaPayload, { width: 180, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
+  let zatcaQrUrl = '';
+  try { zatcaQrUrl = await QRCode.toDataURL(zatcaPayload, { width: 220, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
+
+  // Tracking QR
+  const trackingUrl = `${window.location.origin}/track/${data.orderNumber}`;
+  let trackingQrUrl = '';
+  try { trackingQrUrl = await QRCode.toDataURL(trackingUrl, { width: 160, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
 
   const itemsHtml = data.items.map(item => {
     const up = parseNumber(item.coffeeItem.price);
     const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
     return `
       <div style="padding:7px 0;border-bottom:1px dashed #ccc;">
-        <div style="font-weight:700;font-size:15px;">${item.coffeeItem.nameAr}</div>
-        ${addons ? `<div style="font-size:12px;color:#666;margin-top:2px;">+ ${addons}</div>` : ''}
-        <table style="width:100%;margin-top:4px;"><tr>
-          <td style="font-size:13px;color:#555;">${item.quantity} × ${up.toFixed(2)} ر.س</td>
-          <td style="text-align:left;font-size:13px;font-weight:700;">${(item.quantity * up).toFixed(2)} ر.س</td>
+        <div style="font-weight:700;font-size:14px;">${item.coffeeItem.nameAr}</div>
+        ${addons ? `<div style="font-size:11px;color:#666;margin-top:2px;">+ ${addons}</div>` : ''}
+        <table style="width:100%;margin-top:4px;border-collapse:collapse;"><tr>
+          <td style="font-size:12px;color:#555;">${item.quantity} × ${up.toFixed(2)} ر.س</td>
+          <td style="text-align:left;font-size:12px;font-weight:600;">${(item.quantity * up).toFixed(2)} ر.س</td>
         </tr></table>
       </div>`;
   }).join('');
@@ -573,29 +579,40 @@ export async function buildReceiptPreviewHtml(data: TaxInvoiceData): Promise<str
   return `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:Tahoma,Arial,sans-serif;direction:rtl;background:#f5f5f0;display:flex;justify-content:center;padding:20px 10px;}
-.receipt{background:#fff;width:300px;padding:16px 14px;box-shadow:0 2px 12px rgba(0,0,0,.15);border-radius:2px;position:relative;}
-.receipt::before,.receipt::after{content:'';display:block;height:12px;background:repeating-linear-gradient(90deg,#fff 0,#fff 10px,#f5f5f0 10px,#f5f5f0 20px);}
-.receipt::before{margin:-16px -14px 12px;}
-.receipt::after{margin:12px -14px -16px;}
+body{font-family:Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e0;display:flex;justify-content:center;align-items:flex-start;padding:24px 10px;min-height:100vh;}
+.paper{background:#fff;width:290px;box-shadow:0 4px 20px rgba(0,0,0,.2);}
+.tape{height:14px;background:repeating-linear-gradient(90deg,#fff 0,#fff 12px,#e8e6e0 12px,#e8e6e0 24px);}
+.body{padding:14px 12px;}
 .c{text-align:center;}
-.sep{border-top:2px solid #222;margin:8px 0;}
-.dsep{border-top:1px dashed #aaa;margin:6px 0;}
+.sep{border:none;border-top:2px solid #111;margin:8px 0;}
+.dsep{border:none;border-top:1px dashed #aaa;margin:5px 0;}
 .tbl{width:100%;border-collapse:collapse;}
-.tbl td{padding:3px 0;font-size:13px;vertical-align:middle;}
-.tbl td:last-child{text-align:left;font-weight:700;}
-</style></head><body><div class="receipt">
-  <div class="c" style="margin-bottom:10px;">
-    <img src="/black-rose-logo.png" style="width:80px;height:80px;object-fit:contain;display:block;margin:0 auto 6px;"
+.tbl td{padding:2.5px 0;font-size:12px;vertical-align:middle;}
+.tbl td:last-child{text-align:left;}
+</style></head><body><div class="paper">
+<div class="tape"></div>
+<div class="body">
+
+  <!-- Header -->
+  <div class="c" style="padding-bottom:8px;">
+    <img src="/black-rose-logo.png" style="width:70px;height:70px;object-fit:contain;display:block;margin:0 auto 5px;"
       onerror="this.style.display='none'" />
-    <div style="font-size:18px;font-weight:900;letter-spacing:1px;">${COMPANY_NAME}</div>
-    ${data.branchName ? `<div style="font-size:12px;color:#555;margin-top:2px;">${data.branchName}</div>` : ''}
-    <div style="font-size:11px;color:#666;margin-top:3px;">رقم الضريبة: ${data.vatNumber || VAT_NUMBER}</div>
+    <div style="font-size:17px;font-weight:900;letter-spacing:1px;">${COMPANY_NAME}</div>
+    ${data.branchName ? `<div style="font-size:11px;color:#555;margin-top:1px;">${data.branchName}</div>` : ''}
+    <div style="font-size:10px;color:#888;margin-top:2px;font-style:italic;">${TAGLINE}</div>
+    <div style="font-size:10px;color:#777;margin-top:2px;">VAT: ${data.vatNumber || VAT_NUMBER}</div>
   </div>
-  <div class="sep"></div>
-  <div class="c" style="font-size:13px;font-weight:700;margin-bottom:6px;">فاتورة ضريبية مبسطة</div>
-  <div class="c" style="font-size:36px;font-weight:900;letter-spacing:4px;border:2.5px solid #222;padding:6px 0;margin-bottom:8px;">#${orderNumDisplay}</div>
-  <div class="dsep"></div>
+
+  <hr class="sep"/>
+
+  <!-- Invoice label + Order number -->
+  <div class="c" style="font-size:12px;font-weight:700;margin-bottom:4px;">فاتورة ضريبية مبسطة</div>
+  <div class="c" style="font-size:11px;color:#555;margin-bottom:2px;">رقم الطلب</div>
+  <div class="c" style="font-size:38px;font-weight:900;letter-spacing:5px;line-height:1.1;margin-bottom:6px;">#${orderNumDisplay}</div>
+
+  <hr class="dsep"/>
+
+  <!-- Info rows -->
   <table class="tbl">
     <tr><td>التاريخ:</td><td>${fmtDate} ${fmtTime}</td></tr>
     <tr><td>الكاشير:</td><td>${data.employeeName || '—'}</td></tr>
@@ -603,43 +620,75 @@ body{font-family:Tahoma,Arial,sans-serif;direction:rtl;background:#f5f5f0;displa
     ${data.tableNumber ? `<tr><td>الطاولة:</td><td>${data.tableNumber}</td></tr>` : ''}
     ${orderTypeLabel ? `<tr><td>نوع الطلب:</td><td>${orderTypeLabel}</td></tr>` : ''}
   </table>
-  <div class="sep"></div>
+
+  <hr class="sep"/>
+
+  <!-- Items -->
   ${itemsHtml}
-  <div class="sep"></div>
+
+  <hr class="sep"/>
+
+  <!-- Totals -->
   <table class="tbl">
     <tr><td>قبل الضريبة:</td><td>${subtotal.toFixed(2)} ر.س</td></tr>
     <tr><td>ضريبة القيمة المضافة 15%:</td><td>${vat.toFixed(2)} ر.س</td></tr>
     ${disc > 0 ? `<tr><td style="color:#16a34a;">الخصم:</td><td style="color:#16a34a;">-${disc.toFixed(2)} ر.س</td></tr>` : ''}
   </table>
-  <div class="sep"></div>
-  <div class="c" style="font-size:20px;font-weight:900;border:2.5px solid #222;padding:8px 0;margin:6px 0;">
-    *** الإجمالي: ${totalAmount.toFixed(2)} ر.س ***
-  </div>
-  <div class="sep"></div>
+
+  <hr class="sep"/>
+
+  <!-- Total — NOT bold, normal weight per design -->
+  <table class="tbl">
+    <tr>
+      <td style="font-size:15px;">الإجمالي:</td>
+      <td style="font-size:15px;text-align:left;">${totalAmount.toFixed(2)} ر.س</td>
+    </tr>
+  </table>
+
+  <hr class="dsep"/>
+
+  <!-- Payment -->
   <table class="tbl">
     <tr><td>طريقة الدفع:</td><td>${data.paymentMethod}</td></tr>
-    ${data.splitPayment ? `<tr><td style="padding-right:8px;font-size:12px;">نقدي:</td><td style="font-size:12px;">${data.splitPayment.cash.toFixed(2)} ر.س</td></tr><tr><td style="padding-right:8px;font-size:12px;">شبكة:</td><td style="font-size:12px;">${data.splitPayment.card.toFixed(2)} ر.س</td></tr>` : ''}
+    ${data.splitPayment ? `
+    <tr><td style="padding-right:6px;font-size:11px;">نقدي:</td><td style="font-size:11px;">${data.splitPayment.cash.toFixed(2)} ر.س</td></tr>
+    <tr><td style="padding-right:6px;font-size:11px;">شبكة:</td><td style="font-size:11px;">${data.splitPayment.card.toFixed(2)} ر.س</td></tr>` : ''}
   </table>
-  ${qrDataUrl ? `
-  <div class="dsep"></div>
+
+  ${trackingQrUrl ? `
+  <hr class="sep"/>
   <div class="c" style="padding:6px 0;">
-    <img src="${qrDataUrl}" style="width:140px;height:140px;display:block;margin:0 auto;" />
+    <img src="${trackingQrUrl}" style="width:120px;height:120px;display:block;margin:0 auto;" />
+    <div style="font-size:10px;color:#666;margin-top:3px;">امسح للتتبع وتسجيل النقاط</div>
+  </div>` : ''}
+
+  <hr class="sep"/>
+
+  <!-- Footer -->
+  <div class="c" style="font-size:14px;font-weight:700;margin:5px 0;">** شكراً لزيارتكم **</div>
+  <div class="c" style="font-size:10px;color:#666;">الأسعار شاملة ضريبة القيمة المضافة 15%</div>
+  <div class="c" style="font-size:10px;color:#888;font-style:italic;margin-top:2px;">${TAGLINE}</div>
+  <div class="c" style="font-size:12px;font-weight:700;margin-top:3px;">${COMPANY_NAME}</div>
+
+  ${zatcaQrUrl ? `
+  <hr class="dsep"/>
+  <div class="c" style="padding:8px 0;">
+    <img src="${zatcaQrUrl}" style="width:160px;height:160px;display:block;margin:0 auto;" />
     <div style="font-size:10px;color:#888;margin-top:3px;">ZATCA · باركود الضريبة</div>
   </div>` : ''}
-  <div class="sep"></div>
-  <div class="c" style="font-size:15px;font-weight:700;margin:6px 0;">** شكراً لزيارتكم **</div>
-  <div class="c" style="font-size:11px;color:#666;">الأسعار شاملة ضريبة القيمة المضافة 15%</div>
-  <div class="c" style="font-size:12px;font-weight:700;margin-top:4px;">${COMPANY_NAME}</div>
+
+</div>
+<div class="tape"></div>
 </div></body></html>`;
 }
 
 export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig = {}): Promise<void> {
   const shouldAutoPrint = config.autoPrint !== undefined ? config.autoPrint : true;
 
-  // ── ESC/POS Thermal printing — Direct text mode (fast, no html2canvas) ────────
+  // ── ESC/POS Thermal printing — Canvas 2D bitmap (Arabic-safe, matches preview) ──
   if (shouldAutoPrint) {
     try {
-      const { loadPrinterSettings, buildEscPosReceipt, buildEscPosKitchenTicket, dataUrlToEscPosRaster, thermalPrint } = await import('./thermal-printer');
+      const { loadPrinterSettings, buildReceiptBitmapEscPos, buildEscPosKitchenTicket, thermalPrint } = await import('./thermal-printer');
       const printerSettings = loadPrinterSettings();
 
       if (printerSettings.enabled && printerSettings.mode !== 'browser') {
@@ -656,7 +705,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
           orderTypeStr;
         const discThermal = data.invoiceDiscount ? parseNumber(data.invoiceDiscount) : 0;
 
-        // ── Generate ZATCA QR ────────────────────────────────────────────────────
+        // ── Generate ZATCA QR ──────────────────────────────────────────────────
         const invoiceTs = data.date ? new Date(data.date).toISOString() : new Date().toISOString();
         const zatcaPayload = generateZATCAQRCode({
           sellerName: COMPANY_NAME,
@@ -666,17 +715,24 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
           vatAmount: vatThermal.toFixed(2),
         });
         let zatcaQrDataUrl = '';
-        try {
-          zatcaQrDataUrl = await QRCode.toDataURL(zatcaPayload, { width: 200, margin: 1, errorCorrectionLevel: 'M' });
-        } catch { /* skip QR if fails */ }
+        try { zatcaQrDataUrl = await QRCode.toDataURL(zatcaPayload, { width: 250, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
 
-        // ── Build ESC/POS text receipt (instant — no html2canvas) ───────────────
-        const textReceiptBytes = buildEscPosReceipt({
+        // ── Generate tracking QR (public /track/:orderNumber URL) ─────────────
+        const trackingUrl = `${window.location.origin}/track/${data.orderNumber}`;
+        let trackingQrDataUrl = '';
+        try { trackingQrDataUrl = await QRCode.toDataURL(trackingUrl, { width: 200, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
+
+        // ── Logo (cached base64) ───────────────────────────────────────────────
+        const logoDataUrl = await fetchLogoBase64().catch(() => '');
+
+        // ── Build raster receipt via Canvas 2D ────────────────────────────────
+        const escData = await buildReceiptBitmapEscPos({
           shopName: COMPANY_NAME,
           vatNumber: data.vatNumber || VAT_NUMBER,
           branchName: data.branchName,
+          tagline: 'قهوة تقال و ورد يهدى',
           orderNumber: data.orderNumber,
-          date: `${fmtDate} ${fmtTime}`,
+          orderDate: `${fmtDate} ${fmtTime}`,
           cashierName: data.employeeName || '—',
           customerName: data.customerName,
           tableNumber: data.tableNumber,
@@ -693,39 +749,18 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
           discount: discThermal,
           splitPayment: data.splitPayment,
           paymentMethod: data.paymentMethod,
+          logoDataUrl: logoDataUrl || undefined,
+          trackingQrDataUrl: trackingQrDataUrl || undefined,
+          zatcaQrDataUrl: zatcaQrDataUrl || undefined,
           paperWidth: printerSettings.paperWidth,
-          skipCut: !!zatcaQrDataUrl, // skip cut if we will append QR
+          feedLines: printerSettings.feedLines ?? 4,
         });
-
-        // ── Append ZATCA QR raster + cut ────────────────────────────────────────
-        let escData: Uint8Array;
-        if (zatcaQrDataUrl) {
-          const ESC = 0x1b; const GS = 0x1d;
-          const qrRaster = await dataUrlToEscPosRaster(zatcaQrDataUrl, printerSettings.paperWidth, 200);
-          // Add ZATCA label before QR
-          const label = new TextEncoder().encode('ZATCA\n');
-          const alignCenter = new Uint8Array([ESC, 0x61, 0x01]);
-          const feedCut = new Uint8Array([ESC, 0x64, 4, GS, 0x56, 0x41, 0x03]);
-          const combined = new Uint8Array(
-            textReceiptBytes.length + alignCenter.length + label.length + qrRaster.length + feedCut.length
-          );
-          let off = 0;
-          combined.set(textReceiptBytes, off); off += textReceiptBytes.length;
-          combined.set(alignCenter, off); off += alignCenter.length;
-          combined.set(label, off); off += label.length;
-          combined.set(qrRaster, off); off += qrRaster.length;
-          combined.set(feedCut, off);
-          escData = combined;
-        } else {
-          escData = textReceiptBytes;
-        }
 
         const result = await thermalPrint(escData, '', printerSettings.paperWidth);
 
         if (result.success) {
           if (printerSettings.autoKitchenCopy) {
             await new Promise(r => setTimeout(r, 1400));
-            // ── Kitchen copy — also direct ESC/POS ──────────────────────────────
             const kitchenEsc = buildEscPosKitchenTicket({
               orderNumber: data.orderNumber,
               tableNumber: data.tableNumber,

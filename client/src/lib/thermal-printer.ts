@@ -526,6 +526,275 @@ export async function dataUrlToEscPosRaster(
   return new Uint8Array(buf);
 }
 
+/**
+ * Canvas 2D receipt renderer → ESC/POS raster bytes.
+ * Draws the complete receipt using the browser's own text engine (Arabic works perfectly).
+ * Output is pixel-for-pixel identical to the HTML preview.
+ */
+export async function buildReceiptBitmapEscPos(opts: {
+  shopName: string;
+  vatNumber: string;
+  branchName?: string;
+  tagline?: string;
+  orderNumber: string;
+  orderDate: string;
+  cashierName: string;
+  customerName?: string;
+  tableNumber?: string;
+  orderType?: string;
+  items: Array<{ name: string; qty: number; price: number; addons?: string[] }>;
+  subtotal: number;
+  vat: number;
+  total: number;
+  discount?: number;
+  splitPayment?: { cash: number; card: number };
+  paymentMethod: string;
+  logoDataUrl?: string;
+  trackingQrDataUrl?: string;
+  zatcaQrDataUrl?: string;
+  paperWidth: '58mm' | '80mm';
+  feedLines?: number;
+}): Promise<Uint8Array> {
+  const DW = opts.paperWidth === '58mm' ? 384 : 576;
+  const PAD = Math.round(DW * 0.04);   // ~4% side padding
+  const CONTENT_W = DW - PAD * 2;
+  const FS = opts.paperWidth === '58mm' ? 13 : 16;  // base font size
+
+  // ── Helper: load an image from dataUrl ───────────────────────────────────
+  const loadImg = (src: string): Promise<HTMLImageElement> =>
+    new Promise(res => {
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = () => res(img);
+      setTimeout(() => res(img), 4000);
+      img.src = src;
+    });
+
+  // ── Pre-load images ───────────────────────────────────────────────────────
+  const [logoImg, trackImg, zatcaImg] = await Promise.all([
+    opts.logoDataUrl ? loadImg(opts.logoDataUrl) : Promise.resolve(null),
+    opts.trackingQrDataUrl ? loadImg(opts.trackingQrDataUrl) : Promise.resolve(null),
+    opts.zatcaQrDataUrl ? loadImg(opts.zatcaQrDataUrl) : Promise.resolve(null),
+  ]);
+
+  // ── Build drawing queue (y-position auto-managed) ────────────────────────
+  type DrawOp =
+    | { type: 'img'; img: HTMLImageElement; size: number; }
+    | { type: 'text'; text: string; align: 'center' | 'left' | 'right'; fs: number; bold: boolean; color?: string; }
+    | { type: 'row'; label: string; value: string; fs: number; boldLabel?: boolean; boldValue?: boolean; color?: string; }
+    | { type: 'line'; thick?: boolean; dashed?: boolean; }
+    | { type: 'gap'; h: number; };
+
+  const ops: DrawOp[] = [];
+
+  const addGap   = (h = 6) => ops.push({ type: 'gap', h });
+  const addLine  = (thick = false, dashed = false) => ops.push({ type: 'line', thick, dashed });
+  const addText  = (text: string, align: 'center'|'left'|'right' = 'center', fs = FS, bold = false, color?: string) =>
+    ops.push({ type: 'text', text, align, fs, bold, color });
+  const addRow   = (label: string, value: string, fs = FS, boldLabel = false, boldValue = false, color?: string) =>
+    ops.push({ type: 'row', label, value, fs, boldLabel, boldValue, color });
+  const addImg   = (img: HTMLImageElement | null, size: number) => {
+    if (img && img.naturalWidth > 0) ops.push({ type: 'img', img, size });
+  };
+
+  // ── RECEIPT LAYOUT ────────────────────────────────────────────────────────
+  addGap(8);
+
+  // Logo
+  addImg(logoImg, Math.round(DW * 0.45));
+  addGap(4);
+
+  // Shop name
+  addText(opts.shopName, 'center', Math.round(FS * 1.5), true);
+  if (opts.branchName) addText(opts.branchName, 'center', FS);
+  if (opts.tagline)    addText(opts.tagline, 'center', Math.round(FS * 0.9), false, '#444');
+  addText(`VAT: ${opts.vatNumber}`, 'center', Math.round(FS * 0.85), false, '#555');
+
+  addLine(true);
+
+  addText('فاتورة ضريبية مبسطة', 'center', FS, true);
+  addGap(4);
+
+  // Order number — label + number (not bold total)
+  const orderNumFmt = String(opts.orderNumber).replace(/\D/g, '').padStart(4, '0') || opts.orderNumber;
+  addText('رقم الطلب', 'center', FS);
+  addText(`#${orderNumFmt}`, 'center', Math.round(FS * 2.8), true);
+
+  addLine(false, true);
+
+  // Info block
+  addRow('التاريخ:', opts.orderDate, FS);
+  addRow('الكاشير:', opts.cashierName, FS);
+  if (opts.customerName && opts.customerName !== 'عميل نقدي') addRow('العميل:', opts.customerName, FS);
+  if (opts.tableNumber) addRow('الطاولة:', opts.tableNumber, FS);
+  if (opts.orderType)   addRow('نوع الطلب:', opts.orderType, FS);
+
+  addLine(true);
+
+  // Items
+  for (const item of opts.items) {
+    addText(item.name, 'right', FS, true);
+    addRow(`${item.qty} × ${item.price.toFixed(2)} ر.س`, `${(item.qty * item.price).toFixed(2)} ر.س`, Math.round(FS * 0.9));
+    if (item.addons?.length) {
+      for (const a of item.addons) addText(`+ ${a}`, 'right', Math.round(FS * 0.82), false, '#555');
+    }
+    addLine(false, true);
+  }
+
+  addLine(false, true);
+
+  // Totals
+  addRow('قبل الضريبة:', `${opts.subtotal.toFixed(2)} ر.س`, FS);
+  addRow('ضريبة القيمة المضافة 15%:', `${opts.vat.toFixed(2)} ر.س`, FS);
+  if (opts.discount && opts.discount > 0)
+    addRow('الخصم:', `-${opts.discount.toFixed(2)} ر.س`, FS, false, false, '#16a34a');
+
+  addLine(true);
+
+  // Total — normal weight per user request
+  addRow('الإجمالي:', `${opts.total.toFixed(2)} ر.س`, Math.round(FS * 1.2));
+
+  addLine(false, true);
+
+  // Payment
+  addRow('طريقة الدفع:', opts.paymentMethod, FS);
+  if (opts.splitPayment) {
+    addRow('  نقدي:', `${opts.splitPayment.cash.toFixed(2)} ر.س`, Math.round(FS * 0.9));
+    addRow('  شبكة:', `${opts.splitPayment.card.toFixed(2)} ر.س`, Math.round(FS * 0.9));
+  }
+
+  // Tracking QR
+  if (trackImg && trackImg.naturalWidth > 0) {
+    addLine(true);
+    addGap(4);
+    addImg(trackImg, Math.round(DW * 0.35));
+    addText('امسح للتتبع وتسجيل النقاط', 'center', Math.round(FS * 0.82), false, '#555');
+    addGap(4);
+  }
+
+  addLine(true);
+
+  // Footer
+  addText('** شكراً لزيارتكم **', 'center', Math.round(FS * 1.1), true);
+  addText('الأسعار شاملة ضريبة القيمة المضافة 15%', 'center', Math.round(FS * 0.82), false, '#444');
+  if (opts.tagline) addText(opts.tagline, 'center', Math.round(FS * 0.9), false, '#444');
+  addText(opts.shopName, 'center', FS, true);
+
+  // ZATCA QR — large and regular (not bold)
+  if (zatcaImg && zatcaImg.naturalWidth > 0) {
+    addLine(false, true);
+    addGap(6);
+    addImg(zatcaImg, Math.round(DW * 0.55));   // large
+    addText('ZATCA · باركود الضريبة', 'center', Math.round(FS * 0.8), false, '#555');
+    addGap(6);
+  }
+
+  addGap(opts.feedLines ? opts.feedLines * 8 : 24);
+
+  // ── Render to canvas ─────────────────────────────────────────────────────
+  const canvas = document.createElement('canvas');
+  canvas.width = DW;
+  canvas.height = 5000;  // will be trimmed
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, DW, 5000);
+
+  let y = 0;
+
+  const measureTextH = (fs: number) => Math.ceil(fs * 1.45);
+
+  for (const op of ops) {
+    if (op.type === 'gap') {
+      y += op.h;
+    } else if (op.type === 'line') {
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = op.thick ? 2.5 : 1;
+      ctx.setLineDash(op.dashed ? [6, 5] : []);
+      ctx.beginPath();
+      ctx.moveTo(PAD, y + 4);
+      ctx.lineTo(DW - PAD, y + 4);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      y += 10;
+    } else if (op.type === 'text') {
+      const lh = measureTextH(op.fs);
+      ctx.font = `${op.bold ? '700' : '400'} ${op.fs}px Tahoma, Arial, sans-serif`;
+      ctx.fillStyle = op.color || '#000';
+      ctx.direction = 'rtl';
+      if (op.align === 'center') {
+        ctx.textAlign = 'center';
+        ctx.fillText(op.text, DW / 2, y);
+      } else if (op.align === 'right') {
+        ctx.textAlign = 'right';
+        ctx.fillText(op.text, DW - PAD, y);
+      } else {
+        ctx.textAlign = 'left';
+        ctx.fillText(op.text, PAD, y);
+      }
+      y += lh;
+    } else if (op.type === 'row') {
+      const lh = measureTextH(op.fs);
+      // Label (right side)
+      ctx.font = `${op.boldLabel ? '700' : '400'} ${op.fs}px Tahoma, Arial, sans-serif`;
+      ctx.fillStyle = op.color || '#000';
+      ctx.direction = 'rtl';
+      ctx.textAlign = 'right';
+      ctx.fillText(op.label, DW - PAD, y);
+      // Value (left side)
+      ctx.font = `${op.boldValue ? '700' : '400'} ${op.fs}px Tahoma, Arial, sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.direction = 'ltr';
+      ctx.fillText(op.value, PAD, y);
+      y += lh;
+    } else if (op.type === 'img') {
+      const size = Math.min(op.size, CONTENT_W);
+      const x = Math.floor((DW - size) / 2);
+      ctx.drawImage(op.img, x, y, size, size);
+      y += size + 4;
+    }
+  }
+
+  // Trim canvas to actual content height
+  const finalH = Math.min(y + 10, 5000);
+  const trimmed = document.createElement('canvas');
+  trimmed.width = DW;
+  trimmed.height = finalH;
+  const tctx = trimmed.getContext('2d')!;
+  tctx.drawImage(canvas, 0, 0);
+
+  // ── Convert to ESC/POS GS v 0 raster bytes ───────────────────────────────
+  const imgData = tctx.getImageData(0, 0, DW, finalH);
+  const bpl = Math.ceil(DW / 8);
+  const raster: number[] = [];
+
+  // Init + GS v 0 header
+  raster.push(0x1b, 0x40);  // ESC @ init
+  raster.push(0x1d, 0x76, 0x30, 0x00);
+  raster.push(bpl & 0xff, (bpl >> 8) & 0xff);
+  raster.push(finalH & 0xff, (finalH >> 8) & 0xff);
+
+  for (let row = 0; row < finalH; row++) {
+    for (let bx = 0; bx < bpl; bx++) {
+      let byte = 0;
+      for (let bit = 0; bit < 8; bit++) {
+        const px = bx * 8 + bit;
+        if (px < DW) {
+          const i = (row * DW + px) * 4;
+          const lum = 0.299 * imgData.data[i] + 0.587 * imgData.data[i + 1] + 0.114 * imgData.data[i + 2];
+          if (lum < 128) byte |= 1 << (7 - bit);
+        }
+      }
+      raster.push(byte);
+    }
+  }
+
+  // Feed + full cut
+  raster.push(0x1b, 0x64, 4);    // ESC d 4 — feed 4 lines
+  raster.push(0x1d, 0x56, 0x41, 0x03);  // GS V A 3 — full cut
+
+  return new Uint8Array(raster);
+}
+
 export function buildEscPosKitchenTicket(data: {
   orderNumber: string;
   tableNumber?: string;
