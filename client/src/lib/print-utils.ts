@@ -145,7 +145,113 @@ function _buildFullDoc(html: string, paperWidth: string): string {
 </html>`;
 }
 
-function _printViaIframe(html: string, paperWidth: string, isFullDoc: boolean): void {
+/**
+ * Render HTML to an image using html2canvas, then print the image.
+ * This fixes Arabic text encoding issues on thermal printers — the image
+ * is pixel-perfect regardless of printer code page or font support.
+ */
+async function _printViaImageAsync(html: string, paperWidth: string, isFullDoc: boolean): Promise<void> {
+  // Paper widths in pixels at 96 DPI: 58mm ≈ 220px, 80mm ≈ 302px
+  const renderWidth = paperWidth === '58mm' ? 220 : 302;
+  const fullHtml = isFullDoc ? html : _buildFullDoc(html, paperWidth);
+
+  // ── Step 1: Render HTML in a hidden iframe ────────────────────────────────
+  const renderFrame = document.createElement('iframe');
+  renderFrame.setAttribute('aria-hidden', 'true');
+  renderFrame.style.cssText = `position:fixed;top:-99999px;left:-99999px;width:${renderWidth}px;height:3000px;border:none;opacity:0;pointer-events:none;`;
+  document.body.appendChild(renderFrame);
+
+  const iframeDoc = renderFrame.contentDocument || renderFrame.contentWindow?.document;
+  if (!iframeDoc) {
+    renderFrame.remove();
+    _isPrinting = false;
+    setTimeout(_drainPrintQueue, 500);
+    return;
+  }
+
+  iframeDoc.open();
+  iframeDoc.write(fullHtml);
+  iframeDoc.close();
+
+  // Wait for fonts and QR images to load
+  await new Promise(r => setTimeout(r, 900));
+  try { await (iframeDoc as any).fonts?.ready; } catch {}
+
+  let imgDataUrl = '';
+  try {
+    const html2canvas = (await import('html2canvas')).default;
+    const captureEl = iframeDoc.body;
+    const canvas = await html2canvas(captureEl, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      width: renderWidth,
+      windowWidth: renderWidth,
+      logging: false,
+    });
+    imgDataUrl = canvas.toDataURL('image/png');
+  } catch (err) {
+    console.warn('[Print] html2canvas failed, falling back to direct HTML print:', err);
+    renderFrame.remove();
+    // Fallback: direct HTML print (original method)
+    _printDirectHtml(fullHtml, paperWidth);
+    return;
+  }
+
+  renderFrame.remove();
+
+  // ── Step 2: Print the captured image ─────────────────────────────────────
+  const printFrame = document.createElement('iframe');
+  printFrame.setAttribute('aria-hidden', 'true');
+  printFrame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;pointer-events:none;';
+  document.body.appendChild(printFrame);
+
+  const printDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
+  if (!printDoc) {
+    printFrame.remove();
+    _isPrinting = false;
+    setTimeout(_drainPrintQueue, 500);
+    return;
+  }
+
+  printDoc.open();
+  printDoc.write(`<!DOCTYPE html><html><head><style>
+    @page { size: ${paperWidth} auto; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { margin: 0; padding: 0; background: #fff; }
+    img { width: 100%; display: block; }
+  </style></head><body><img src="${imgDataUrl}" /></body></html>`);
+  printDoc.close();
+
+  await new Promise(r => setTimeout(r, 300));
+
+  const printWin = printFrame.contentWindow;
+  if (!printWin) {
+    printFrame.remove();
+    _isPrinting = false;
+    setTimeout(_drainPrintQueue, 500);
+    return;
+  }
+
+  let cleanupDone = false;
+  const cleanup = () => {
+    if (cleanupDone) return;
+    cleanupDone = true;
+    setTimeout(() => {
+      try { printFrame.remove(); } catch {}
+      _isPrinting = false;
+      setTimeout(_drainPrintQueue, 800);
+    }, 150);
+  };
+
+  printWin.addEventListener('afterprint', cleanup, { once: true });
+  try { printWin.print(); } catch {}
+  setTimeout(cleanup, 8000);
+}
+
+/** Original direct-HTML iframe print — used as fallback when html2canvas fails */
+function _printDirectHtml(fullHtml: string, paperWidth: string): void {
   const iframe = document.createElement('iframe');
   iframe.setAttribute('aria-hidden', 'true');
   iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;pointer-events:none;';
@@ -158,8 +264,6 @@ function _printViaIframe(html: string, paperWidth: string, isFullDoc: boolean): 
     setTimeout(_drainPrintQueue, 500);
     return;
   }
-
-  const fullHtml = isFullDoc ? html : _buildFullDoc(html, paperWidth);
 
   iframeDoc.open();
   iframeDoc.write(fullHtml);
@@ -180,23 +284,13 @@ function _printViaIframe(html: string, paperWidth: string, isFullDoc: boolean): 
     setTimeout(() => {
       try { iframe.remove(); } catch {}
       _isPrinting = false;
-      // 800 ms between jobs — enough for thermal cutter
       setTimeout(_drainPrintQueue, 800);
     }, 150);
   };
 
   iframeWin.addEventListener('afterprint', cleanup, { once: true });
-
-  // 500 ms — gives enough time for CSS, images, and QR codes to render
-  // Note: do NOT call iframeWin.focus() — it steals focus from the main window
-  //       and can cause the page to appear blank/white while the dialog opens.
   setTimeout(() => {
-    try {
-      iframeWin.print();
-    } catch {
-      // Silently ignored — some sandboxed environments block print()
-    }
-    // Fallback: if afterprint never fires, clean up after 6 s
+    try { iframeWin.print(); } catch {}
     setTimeout(cleanup, 6000);
   }, 500);
 }
@@ -205,7 +299,10 @@ function _drainPrintQueue() {
   if (_isPrinting || _printQueue.length === 0) return;
   _isPrinting = true;
   const { html, paperWidth, isFullDoc } = _printQueue.shift()!;
-  _printViaIframe(html, paperWidth, isFullDoc);
+  _printViaImageAsync(html, paperWidth, isFullDoc).catch(() => {
+    _isPrinting = false;
+    setTimeout(_drainPrintQueue, 500);
+  });
 }
 
 /**
@@ -973,6 +1070,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 <head>
   <meta charset="UTF-8">
   <title>فواتير الطلب - ${displayInvoiceNumber}</title>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"><\/script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1027,9 +1125,48 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     document.getElementById('f-customer').src = custUrl;
     document.getElementById('f-employee').src = empUrl;
 
-    function _printViaHiddenIframe(html) {
+    // html2canvas — capture rendered HTML as image before printing (fixes Arabic encoding)
+    function _printAsImage(html, paperWidthPx) {
+      paperWidthPx = paperWidthPx || 302;
+      var renderFrame = document.createElement('iframe');
+      renderFrame.style.cssText = 'position:fixed;top:-99999px;left:-99999px;width:' + paperWidthPx + 'px;height:3000px;border:none;opacity:0;pointer-events:none;';
+      document.body.appendChild(renderFrame);
+      var rDoc = renderFrame.contentDocument || renderFrame.contentWindow.document;
+      rDoc.open(); rDoc.write(html); rDoc.close();
+      setTimeout(function() {
+        var h2c = window.html2canvas;
+        if (!h2c) {
+          // html2canvas not loaded yet — fall back to direct print
+          renderFrame.remove();
+          _printDirectHtml(html);
+          return;
+        }
+        h2c(rDoc.body, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', width: paperWidthPx, windowWidth: paperWidthPx, logging: false })
+          .then(function(canvas) {
+            renderFrame.remove();
+            var imgData = canvas.toDataURL('image/png');
+            var pf = document.createElement('iframe');
+            pf.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;';
+            document.body.appendChild(pf);
+            var pd = pf.contentDocument || pf.contentWindow.document;
+            pd.open();
+            pd.write('<!DOCTYPE html><html><head><style>@page{size:80mm auto;margin:0;}*{margin:0;padding:0;}body{background:#fff;}img{width:100%;display:block;}</style></head><body><img src="' + imgData + '"/></body></html>');
+            pd.close();
+            setTimeout(function() {
+              try { pf.contentWindow.print(); } catch(e) {}
+              pf.addEventListener('afterprint', function() { setTimeout(function(){ try{pf.remove();}catch(e){} }, 300); }, { once: true });
+              setTimeout(function(){ try{pf.remove();}catch(e){} }, 8000);
+            }, 300);
+          })
+          .catch(function() {
+            renderFrame.remove();
+            _printDirectHtml(html);
+          });
+      }, 900);
+    }
+
+    function _printDirectHtml(html) {
       var f = document.createElement('iframe');
-      // Use proper paper width so content lays out correctly before printing
       f.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:340px;height:1400px;border:none;opacity:0;visibility:hidden;';
       document.body.appendChild(f);
       var url = makeBlobUrl(html);
@@ -1044,13 +1181,12 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     }
 
     function printBoth() {
-      _printViaHiddenIframe(customerHtml);
-      // نسخة الموظف بعد 1.2 ثانية لإعطاء الطابعة وقتاً للقطع والتهيؤ
-      setTimeout(function() { _printViaHiddenIframe(empHtml); }, 1200);
+      _printAsImage(customerHtml);
+      setTimeout(function() { _printAsImage(empHtml); }, 1800);
     }
 
     function printOne(which) {
-      _printViaHiddenIframe(which === 'customer' ? customerHtml : empHtml);
+      _printAsImage(which === 'customer' ? customerHtml : empHtml);
     }
   </script>
 </body>
