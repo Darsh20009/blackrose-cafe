@@ -545,7 +545,6 @@ export async function buildEscPosImageReceipt(
 ): Promise<Uint8Array> {
   // Printer dot widths at 203 dpi: 58mm → 384 dots, 80mm → 576 dots
   const dotWidth = paperWidth === '58mm' ? 384 : 576;
-  const bytesPerLine = dotWidth / 8; // 48 or 72
 
   // Strip Google Fonts @import — use only system Arabic fonts (Tahoma/Arial)
   // so rendering works even without internet access
