@@ -6,24 +6,40 @@ import { VAT_RATE } from "@/lib/constants";
 // popup/iframe without waiting for a network request (fixes missing logo issue).
 let _cachedLogoBase64: string = '';
 
+// Candidate logo paths — tries each in order until one succeeds
+const LOGO_PATHS = [
+  '/black-rose-logo.png',
+  '/blackrose-logo.png',
+  '/logo.png',
+  '/logo-192.png',
+];
+
+async function _fetchImageAsBase64(url: string): Promise<string> {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('FileReader failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 async function fetchLogoBase64(): Promise<string> {
   if (_cachedLogoBase64) return _cachedLogoBase64;
-  try {
-    const res = await fetch('/black-rose-logo.png');
-    if (!res.ok) return '';
-    const blob = await res.blob();
-    return new Promise(resolve => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        _cachedLogoBase64 = reader.result as string;
-        resolve(_cachedLogoBase64);
-      };
-      reader.onerror = () => resolve('');
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return '';
+  for (const path of LOGO_PATHS) {
+    try {
+      const b64 = await _fetchImageAsBase64(path);
+      if (b64 && b64.startsWith('data:image')) {
+        _cachedLogoBase64 = b64;
+        return _cachedLogoBase64;
+      }
+    } catch {
+      // try next path
+    }
   }
+  return '';
 }
 // Pre-warm the cache on module load so it's ready by the time a receipt is printed
 if (typeof window !== 'undefined') {
@@ -658,7 +674,12 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 
   // Use base64-embedded logo so it renders instantly in the popup/iframe
   // without waiting for a network request (fixes logo not showing on print).
-  const logoUrl = await fetchLogoBase64() || `${window.location.origin}/black-rose-logo.png`;
+  // fetchLogoBase64 tries multiple paths (/black-rose-logo.png, /blackrose-logo.png, /logo.png, etc.)
+  const logoBase64 = await fetchLogoBase64();
+  const logoUrl = logoBase64 || `${window.location.origin}/black-rose-logo.png`;
+  const logoHtml = logoUrl
+    ? `<img class="logo-img" src="${logoUrl}" alt="Black Rose Cafe" onerror="this.style.display='none'" />`
+    : `<div style="font-size:20px;font-weight:800;letter-spacing:2px;margin-bottom:4px;">BLACK ROSE CAFE</div>`;
 
   const itemsHtml = data.items.map(item => {
     const unitPrice = parseNumber(item.coffeeItem.price);
@@ -776,7 +797,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 
   <!-- ── HEADER ── -->
   <div class="hdr">
-    <img class="logo-img" src="${logoUrl}" alt="Black Rose Cafe" onerror="this.style.display='none'" />
+    ${logoHtml}
     <div class="company">BLACK ROSE CAFE</div>
     <div class="subtitle">فاتورة ضريبية مبسطة</div>
     <div class="vat-line">VAT: ${data.vatNumber || VAT_NUMBER}</div>

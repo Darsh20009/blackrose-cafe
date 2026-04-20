@@ -35,7 +35,7 @@ const CMD = {
   UNDERLINE_ON:  [ESC, 0x2d, 0x01],
   UNDERLINE_OFF: [ESC, 0x2d, 0x00],
   CHARSET_PC864: [ESC, 0x74, 0x1b],  // Arabic PC864
-  CHARSET_UTF8:  [ESC, 0x74, 0x00],  // Latin
+  CHARSET_UTF8:  [ESC, 0x74, 0x1a],  // UTF-8 (code page 26 — Xprinter/Epson modern)
   SET_WIDTH_58:  [GS,  0x57, 0xd2, 0x00], // 58mm = 210 dots
   SET_WIDTH_80:  [GS,  0x57, 0x50, 0x01], // 80mm = 576 dots
 };
@@ -372,6 +372,11 @@ export function buildEscPosReceipt(data: EscPosReceiptData): Uint8Array {
 
   // ── Init printer ──────────────────────────────────────────────────────────
   buf.push(...CMD.INIT);
+  // Enable UTF-8 code page (0x1A = page 26) — supported by Xprinter NW series & modern Epson clones
+  // This allows Arabic Unicode characters to print correctly instead of showing garbage symbols
+  buf.push(...CMD.CHARSET_UTF8);
+  // Also set Arabic international charset via ESC R 40 (for printers that use this instead)
+  buf.push(ESC, 0x52, 0x28);
 
   // ── Shop header (centered) ────────────────────────────────────────────────
   buf.push(...CMD.ALIGN_CENTER);
@@ -470,6 +475,8 @@ export function buildEscPosKitchenTicket(data: {
 
   // ── Init ───────────────────────────────────────────────────────────────────
   buf.push(...CMD.INIT);
+  buf.push(...CMD.CHARSET_UTF8);
+  buf.push(ESC, 0x52, 0x28);
 
   // ── Kitchen header ─────────────────────────────────────────────────────────
   buf.push(...CMD.ALIGN_CENTER, ...CMD.BOLD_ON, ...CMD.DOUBLE_SIZE);
