@@ -3,12 +3,11 @@ import html2canvas from "html2canvas";
 import { Button } from "@/components/ui/button";
 import { Download, Printer } from "lucide-react";
 import type { Order } from "@shared/schema";
-import logoImage from "../assets/blackrose-logo.png";
 import { brand } from "@/lib/brand";
 import { useRef, useState, useEffect } from "react";
 import QRCode from "qrcode";
 import SarIcon from "@/components/sar-icon";
-import { printHtmlInPage, fmtOrderNum } from "@/lib/print-utils";
+import { fmtOrderNum } from "@/lib/print-utils";
 
 interface ReceiptInvoiceProps {
   order: Order;
@@ -100,147 +99,37 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
     }
   };
 
-  const printReceipt = () => {
-    const totalAmount = Number(order.totalAmount) || 0;
-    const subtotal = (totalAmount / 1.15).toFixed(2);
-    const vatAmount = (totalAmount - totalAmount / 1.15).toFixed(2);
-    const dateStr = order.createdAt
-      ? new Date(order.createdAt).toLocaleDateString('ar-SA')
-      : '';
-    const timeStr = order.createdAt
-      ? new Date(order.createdAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })
-      : '';
-
-    const paymentLabels: Record<string, string> = {
-      cash: 'نقداً', pos: 'نقاط البيع', stc: 'STC Pay',
-      alinma: 'الإنماء', ur: 'يور باي', barq: 'برق',
-      rajhi: 'الراجحي', 'qahwa-card': 'بطاقة قهوة', delivery: 'الدفع عند التوصيل',
-    };
-    const payMethod = paymentLabels[order.paymentMethod as string] || order.paymentMethod || '';
-
-    const itemsHtml = items.map((item: any) => {
-      const nameAr = item.nameAr || item.coffeeItem?.nameAr || item.name || '';
-      const nameEn = item.nameEn || item.coffeeItem?.nameEn || '';
-      const qty = item.quantity || 1;
-      const price = Number(item.price || item.unitPrice || item.coffeeItem?.price || 0);
-      const lineTotal = (price * qty).toFixed(2);
-      const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
-      return `
-        <tr>
-          <td style="padding:4px 2px;border-bottom:1px solid #eee;text-align:right;">
-            <div style="font-weight:600;">${nameAr}</div>
-            ${nameEn && nameEn !== nameAr ? `<div style="font-size:10px;color:#777;direction:ltr;">${nameEn}</div>` : ''}
-            ${addons ? `<div style="font-size:10px;color:#999;">+ ${addons}</div>` : ''}
-          </td>
-          <td style="padding:4px 2px;text-align:center;border-bottom:1px solid #eee;">${qty}</td>
-          <td style="padding:4px 2px;text-align:left;border-bottom:1px solid #eee;">${lineTotal}</td>
-        </tr>`;
-    }).join('');
-
-    const isCarPickup = (order as any).deliveryType === 'curbside' ||
-      (order as any).deliveryType === 'car_pickup' ||
-      (order as any).deliveryType === 'car-pickup' ||
-      (order as any).carPickup;
-    const carType    = (order as any).carType    || (order as any).carInfo?.carType    || '';
-    const carColor   = (order as any).carColor   || (order as any).carInfo?.carColor   || '';
-    const plateNumber = (order as any).plateNumber || (order as any).carPlate || (order as any).carInfo?.plateNumber || '';
-
-    // ── صفحة العميل (Page 1) — بدون بيانات السيارة ──
-    const customerPage = `
-      <div style="page-break-after:always;break-after:page;font-family:'Cairo',Arial,sans-serif;direction:rtl;width:80mm;max-width:80mm;margin:0 auto;padding:10px;color:#000;font-size:12px;">
-        <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:8px;">
-          <img src="${logoImage}" alt="BLACK ROSE CAFE" style="width:50px;height:50px;object-fit:contain;display:block;margin:0 auto 4px;" />
-          <div style="font-size:16px;font-weight:bold;">${brand.nameAr}</div>
-          <div style="font-size:10px;color:#555;">فاتورة ضريبية — نسخة العميل</div>
-          <div style="font-size:11px;margin-top:4px;">رقم الطلب: <strong>#${order.orderNumber || ''}</strong></div>
-          <div style="font-size:10px;">${dateStr} ${timeStr}</div>
-          ${(order as any).tableNumber ? `<div style="font-size:11px;">طاولة: <strong>${(order as any).tableNumber}</strong></div>` : ''}
-          ${(order as any).scheduledPickupTime ? `<div style="font-size:11px;color:#d97706;font-weight:bold;">🕐 موعد الاستلام: ${(order as any).scheduledPickupTime}</div>` : ''}
-        </div>
-        <div style="margin-bottom:6px;font-size:11px;">
-          <div>العميل: ${(order as any).customerName || 'عميل نقدي'}</div>
-          ${(order as any).customerPhone ? `<div>الجوال: ${(order as any).customerPhone}</div>` : ''}
-          ${(order as any).employeeName ? `<div>الكاشير: ${(order as any).employeeName}</div>` : ''}
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:11px;">
-          <thead>
-            <tr style="border-bottom:1px solid #000;">
-              <th style="text-align:right;padding:4px 2px;">المنتج</th>
-              <th style="text-align:center;padding:4px 2px;">ك</th>
-              <th style="text-align:left;padding:4px 2px;">المجموع</th>
-            </tr>
-          </thead>
-          <tbody>${itemsHtml}</tbody>
-        </table>
-        <div style="margin-top:8px;border-top:1px solid #000;padding-top:6px;font-size:11px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
-            <span>المجموع (غير شامل الضريبة):</span><span>${subtotal} ر.س</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
-            <span>ضريبة القيمة المضافة (15%):</span><span>${vatAmount} ر.س</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:bold;border-top:1px solid #000;padding-top:4px;margin-top:4px;">
-            <span>الإجمالي:</span><span>${totalAmount.toFixed(2)} ر.س</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;">
-            <span>طريقة الدفع:</span><span>${payMethod}</span>
-          </div>
-        </div>
-        ${trackingQrUrl ? `
-        <div style="text-align:center;margin-top:10px;">
-          <img src="${trackingQrUrl}" style="width:100px;height:100px;" />
-          <div style="font-size:9px;color:#555;">امسح لتتبع طلبك</div>
-        </div>` : ''}
-        <div style="text-align:center;margin-top:10px;border-top:1px solid #000;padding-top:6px;font-size:10px;color:#555;">
-          <div style="font-weight:bold;">شكراً لزيارتكم!</div>
-          <div>www.blackrose.com.sa</div>
-        </div>
-      </div>`;
-
-    // ── صفحة الموظف / المطبخ (Page 2) — مع بيانات السيارة ──
-    const employeeItemsHtml = items.map((item: any) => {
-      const nameAr = item.nameAr || item.coffeeItem?.nameAr || item.name || '';
-      const nameEn = item.nameEn || item.coffeeItem?.nameEn || '';
-      const qty = item.quantity || 1;
-      const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
-      return `
-        <div style="margin-bottom:8px;padding-bottom:6px;border-bottom:1px dashed #ccc;">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-            <div>
-              <div style="font-size:15px;font-weight:bold;">${nameAr}</div>
-              ${nameEn && nameEn !== nameAr ? `<div style="font-size:11px;color:#666;direction:ltr;">${nameEn}</div>` : ''}
-              ${addons ? `<div style="font-size:11px;color:#555;margin-top:2px;">+ ${addons}</div>` : ''}
-            </div>
-            <div style="font-size:20px;font-weight:bold;border:2px solid #000;padding:2px 10px;border-radius:4px;white-space:nowrap;">×${qty}</div>
-          </div>
-        </div>`;
-    }).join('');
-
-    const employeePage = `
-      <div style="font-family:'Cairo',Arial,sans-serif;direction:rtl;width:80mm;max-width:80mm;margin:0 auto;padding:10px;color:#000;">
-        <div style="text-align:center;border-bottom:3px solid #000;padding-bottom:10px;margin-bottom:10px;">
-          <div style="font-size:13px;font-weight:bold;color:#555;">ورقة التحضير — نسخة الموظف</div>
-          <div style="font-size:30px;font-weight:bold;margin:8px 0;letter-spacing:2px;">#${order.orderNumber || ''}</div>
-          <div style="font-size:11px;">${timeStr} — ${dateStr}</div>
-          ${(order as any).tableNumber ? `<div style="font-size:13px;font-weight:bold;margin-top:4px;">طاولة رقم: ${(order as any).tableNumber}</div>` : ''}
-          ${(order as any).scheduledPickupTime ? `<div style="font-size:12px;font-weight:bold;color:#d97706;">🕐 موعد الاستلام: ${(order as any).scheduledPickupTime}</div>` : ''}
-          ${isCarPickup ? `<div style="font-size:13px;font-weight:bold;color:#6b21a8;border:2px solid #6b21a8;padding:3px 6px;margin-top:4px;border-radius:4px;">🚗 استلام من السيارة</div>` : ''}
-          ${carType ? `<div style="font-size:12px;color:#6b21a8;font-weight:bold;margin-top:4px;background:#f3e8ff;padding:4px 8px;border-radius:4px;">نوع: ${carType} | لون: ${carColor} | لوحة: ${plateNumber}</div>` : ''}
-          ${(order as any).orderType ? `<div style="font-size:11px;color:#555;margin-top:4px;">${(order as any).orderType}</div>` : ''}
-        </div>
-        <div style="margin-bottom:10px;">
-          ${employeeItemsHtml}
-        </div>
-        ${(order as any).customerNotes ? `
-        <div style="margin-top:8px;border:2px solid #000;padding:6px;font-size:12px;">
-          <strong>ملاحظات:</strong> ${(order as any).customerNotes}
-        </div>` : ''}
-        <div style="text-align:center;margin-top:12px;font-size:11px;color:#888;">
-          الكاشير: ${(order as any).employeeName || ''} — العميل: ${(order as any).customerName || 'نقدي'}
-        </div>
-      </div>`;
-
-    printHtmlInPage(customerPage + employeePage, '80mm');
+  const printReceipt = async () => {
+    if (!invoiceRef.current) return;
+    try {
+      const canvas = await html2canvas(invoiceRef.current, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;';
+      document.body.appendChild(iframe);
+      const doc = iframe.contentDocument!;
+      doc.open();
+      doc.write(`<!DOCTYPE html><html><head><style>
+        @page { size: 80mm auto; margin: 0; }
+        * { margin: 0; padding: 0; }
+        body { background: #fff; }
+        img { width: 100%; display: block; }
+      </style></head><body><img src="${imgData}" /></body></html>`);
+      doc.close();
+      setTimeout(() => {
+        try { iframe.contentWindow!.print(); } catch {}
+        const cleanup = () => { try { iframe.remove(); } catch {} };
+        iframe.contentWindow!.addEventListener('afterprint', cleanup, { once: true });
+        setTimeout(cleanup, 8000);
+      }, 400);
+    } catch (err) {
+      console.error('Print failed:', err);
+    }
   };
 
   useEffect(() => {
