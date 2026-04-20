@@ -530,12 +530,10 @@ function formatDate(dateStr: string): { date: string; time: string } {
 export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig = {}): Promise<void> {
   const shouldAutoPrint = config.autoPrint !== undefined ? config.autoPrint : true;
 
-  // ── ESC/POS Thermal printing — Full-quality image (Arabic-safe) ──────────────
-  // Renders the full receipt HTML (logo + ZATCA QR + proper fonts) as a bitmap
-  // and sends pixel data to the printer. No character-encoding issues whatsoever.
+  // ── ESC/POS Thermal printing — Direct text mode (fast, no html2canvas) ────────
   if (shouldAutoPrint) {
     try {
-      const { loadPrinterSettings, buildEscPosImageReceipt, thermalPrint } = await import('./thermal-printer');
+      const { loadPrinterSettings, buildEscPosReceipt, buildEscPosKitchenTicket, dataUrlToEscPosRaster, thermalPrint } = await import('./thermal-printer');
       const printerSettings = loadPrinterSettings();
 
       if (printerSettings.enabled && printerSettings.mode !== 'browser') {
@@ -551,12 +549,8 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
           orderTypeStr === 'car_pickup' || orderTypeStr === 'car-pickup' ? 'سيارة' :
           orderTypeStr;
         const discThermal = data.invoiceDiscount ? parseNumber(data.invoiceDiscount) : 0;
-        const orderNumDisplay = String(data.orderNumber).replace(/\D/g, '').padStart(4, '0') || data.orderNumber;
 
-        // ── Fetch logo as base64 (cached) ──────────────────────────────────────
-        const thermalLogo = await fetchLogoBase64().catch(() => '');
-
-        // ── Generate ZATCA QR (tax compliance barcode) ─────────────────────────
+        // ── Generate ZATCA QR ────────────────────────────────────────────────────
         const invoiceTs = data.date ? new Date(data.date).toISOString() : new Date().toISOString();
         const zatcaPayload = generateZATCAQRCode({
           sellerName: COMPANY_NAME,
@@ -565,138 +559,80 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
           totalWithVat: totalAmountThermal.toFixed(2),
           vatAmount: vatThermal.toFixed(2),
         });
-        let thermalZatcaQr = '';
+        let zatcaQrDataUrl = '';
         try {
-          thermalZatcaQr = await QRCode.toDataURL(zatcaPayload, { width: 160, margin: 1, errorCorrectionLevel: 'M' });
-        } catch { /* no QR — still print */ }
+          zatcaQrDataUrl = await QRCode.toDataURL(zatcaPayload, { width: 200, margin: 1, errorCorrectionLevel: 'M' });
+        } catch { /* skip QR if fails */ }
 
-        // ── Build items rows — table layout for html2canvas compatibility ────────
-        const itemsRowsThermal = data.items.map(item => {
-          const up = parseNumber(item.coffeeItem.price);
-          const addons = (item.customization?.selectedItemAddons || [])
-            .map((a: any) => a.nameAr).join('، ');
-          return `
-            <div style="padding:6px 0;border-bottom:1.5px dashed #bbb;">
-              <div style="font-weight:700;font-size:17px;line-height:1.3;">${item.coffeeItem.nameAr}</div>
-              ${addons ? `<div style="font-size:13px;color:#555;margin-top:2px;">+ ${addons}</div>` : ''}
-              <table style="width:100%;border-collapse:collapse;margin-top:3px;">
-                <tr>
-                  <td style="font-size:15px;color:#555;">${item.quantity} × ${up.toFixed(2)}</td>
-                  <td style="font-size:15px;font-weight:700;text-align:left;">${(item.quantity * up).toFixed(2)} ر.س</td>
-                </tr>
-              </table>
-            </div>`;
-        }).join('');
+        // ── Build ESC/POS text receipt (instant — no html2canvas) ───────────────
+        const textReceiptBytes = buildEscPosReceipt({
+          shopName: COMPANY_NAME,
+          vatNumber: data.vatNumber || VAT_NUMBER,
+          branchName: data.branchName,
+          orderNumber: data.orderNumber,
+          date: `${fmtDate} ${fmtTime}`,
+          cashierName: data.employeeName || '—',
+          customerName: data.customerName,
+          tableNumber: data.tableNumber,
+          orderType: orderTypeThermal,
+          items: data.items.map(item => ({
+            name: item.coffeeItem.nameAr,
+            qty: item.quantity,
+            price: parseNumber(item.coffeeItem.price),
+            addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
+          })),
+          subtotal: subtotalThermal,
+          vat: vatThermal,
+          total: totalAmountThermal,
+          discount: discThermal,
+          splitPayment: data.splitPayment,
+          paymentMethod: data.paymentMethod,
+          paperWidth: printerSettings.paperWidth,
+          skipCut: !!zatcaQrDataUrl, // skip cut if we will append QR
+        });
 
-        // ── Full-quality receipt HTML ───────────────────────────────────────────
-        const receiptHtml = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-<style>
-*{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:Tahoma,Arial,sans-serif;direction:rtl;color:#000;background:#fff;width:100%;}
-.sep{border-top:2.5px solid #000;margin:7px 0;}
-.dsep{border-top:1.5px dashed #aaa;margin:5px 0;}
-.c{text-align:center;}
-.tbl{width:100%;border-collapse:collapse;}
-.tbl td{padding:3px 0;font-size:15px;vertical-align:middle;}
-.tbl td:last-child{text-align:left;font-weight:700;}
-</style></head><body>
-<div style="padding:8px 10px;">
+        // ── Append ZATCA QR raster + cut ────────────────────────────────────────
+        let escData: Uint8Array;
+        if (zatcaQrDataUrl) {
+          const ESC = 0x1b; const GS = 0x1d;
+          const qrRaster = await dataUrlToEscPosRaster(zatcaQrDataUrl, printerSettings.paperWidth, 200);
+          // Add ZATCA label before QR
+          const label = new TextEncoder().encode('ZATCA\n');
+          const alignCenter = new Uint8Array([ESC, 0x61, 0x01]);
+          const feedCut = new Uint8Array([ESC, 0x64, 4, GS, 0x56, 0x41, 0x03]);
+          const combined = new Uint8Array(
+            textReceiptBytes.length + alignCenter.length + label.length + qrRaster.length + feedCut.length
+          );
+          let off = 0;
+          combined.set(textReceiptBytes, off); off += textReceiptBytes.length;
+          combined.set(alignCenter, off); off += alignCenter.length;
+          combined.set(label, off); off += label.length;
+          combined.set(qrRaster, off); off += qrRaster.length;
+          combined.set(feedCut, off);
+          escData = combined;
+        } else {
+          escData = textReceiptBytes;
+        }
 
-  <!-- ── Logo / Name ── -->
-  ${thermalLogo
-    ? `<img src="${thermalLogo}" style="display:block;width:85%;max-height:80px;object-fit:contain;margin:0 auto 6px;" />`
-    : `<div class="c" style="font-size:22px;font-weight:700;letter-spacing:2px;">${COMPANY_NAME}</div>`
-  }
-  ${data.branchName ? `<div class="c" style="font-size:14px;margin-top:3px;">${data.branchName}</div>` : ''}
-  <div class="c" style="font-size:13px;color:#444;margin-top:2px;">رقم الضريبة: ${data.vatNumber || VAT_NUMBER}</div>
-  <div class="sep"></div>
-
-  <!-- ── Invoice type + number ── -->
-  <div class="c" style="font-size:16px;font-weight:700;">فاتورة ضريبية مبسطة</div>
-  <div class="c" style="font-size:34px;font-weight:700;letter-spacing:3px;border:2.5px solid #000;margin:5px 0;padding:5px 0;">#${orderNumDisplay}</div>
-  <div class="dsep"></div>
-
-  <!-- ── Info rows (table layout — html2canvas safe) ── -->
-  <table class="tbl">
-    <tr><td>التاريخ:</td><td>${fmtDate} ${fmtTime}</td></tr>
-    <tr><td>الكاشير:</td><td>${data.employeeName || '—'}</td></tr>
-    ${data.customerName && data.customerName !== 'عميل نقدي' ? `<tr><td>العميل:</td><td>${data.customerName}</td></tr>` : ''}
-    ${data.tableNumber ? `<tr><td>الطاولة:</td><td>${data.tableNumber}</td></tr>` : ''}
-    ${orderTypeThermal ? `<tr><td>نوع الطلب:</td><td>${orderTypeThermal}</td></tr>` : ''}
-  </table>
-  <div class="sep"></div>
-
-  <!-- ── Items ── -->
-  ${itemsRowsThermal}
-  <div class="sep"></div>
-
-  <!-- ── Totals ── -->
-  <table class="tbl">
-    <tr><td>قبل الضريبة:</td><td>${subtotalThermal.toFixed(2)} ر.س</td></tr>
-    <tr><td>ضريبة القيمة المضافة 15%:</td><td>${vatThermal.toFixed(2)} ر.س</td></tr>
-    ${discThermal > 0 ? `<tr><td style="color:#16a34a;">الخصم:</td><td style="color:#16a34a;">-${discThermal.toFixed(2)} ر.س</td></tr>` : ''}
-  </table>
-  <div class="sep"></div>
-  <div class="c" style="font-size:24px;font-weight:700;border:3px solid #000;padding:7px 0;margin:5px 0;">*** الإجمالي: ${totalAmountThermal.toFixed(2)} ر.س ***</div>
-
-  <!-- ── Payment ── -->
-  <div class="sep"></div>
-  <table class="tbl">
-    <tr><td>طريقة الدفع:</td><td>${data.paymentMethod}</td></tr>
-    ${data.splitPayment ? `<tr><td style="padding-right:10px;">نقدي:</td><td>${data.splitPayment.cash.toFixed(2)} ر.س</td></tr><tr><td style="padding-right:10px;">شبكة:</td><td>${data.splitPayment.card.toFixed(2)} ر.س</td></tr>` : ''}
-  </table>
-
-  <!-- ── ZATCA QR ── -->
-  ${thermalZatcaQr ? `
-  <div class="sep"></div>
-  <div class="c" style="margin:6px 0;">
-    <img src="${thermalZatcaQr}" style="width:130px;height:130px;display:block;margin:0 auto;" />
-    <div style="font-size:12px;color:#555;margin-top:3px;">ZATCA · باركود الضريبة</div>
-  </div>` : ''}
-
-  <!-- ── Footer ── -->
-  <div class="sep"></div>
-  <div class="c" style="font-weight:700;font-size:18px;margin:4px 0;">** شكراً لزيارتكم **</div>
-  <div class="c" style="font-size:13px;color:#444;">الأسعار شاملة ضريبة القيمة المضافة 15%</div>
-  <div class="c" style="font-size:14px;font-weight:700;margin-top:4px;">${COMPANY_NAME}</div>
-
-</div></body></html>`;
-
-        // ── Kitchen copy ───────────────────────────────────────────────────────
-        const kitchenItemsHtml = data.items.map(item => {
-          const addons = (item.customization?.selectedItemAddons || [])
-            .map((a: any) => a.nameAr).join('، ');
-          return `
-            <div style="padding:10px 0;border-bottom:2px dashed #000;">
-              <table style="width:100%;border-collapse:collapse;">
-                <tr>
-                  <td style="font-size:20px;font-weight:700;line-height:1.4;">${item.coffeeItem.nameAr}${addons ? `<div style="font-size:14px;font-weight:400;margin-top:3px;">+ ${addons}</div>` : ''}</td>
-                  <td style="text-align:left;font-size:32px;font-weight:700;border:3px solid #000;padding:2px 10px;white-space:nowrap;width:1%;">x${item.quantity}</td>
-                </tr>
-              </table>
-            </div>`;
-        }).join('');
-
-        const kitchenHtml = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Tahoma,Arial,sans-serif;direction:rtl;color:#000;background:#fff;width:100%;}</style>
-</head><body>
-<div style="padding:8px 10px;">
-  <div style="text-align:center;font-size:18px;font-weight:700;border:3px solid #000;padding:8px;letter-spacing:2px;margin-bottom:6px;">*** نسخة المطبخ ***</div>
-  <div style="text-align:center;font-size:40px;font-weight:700;border:3px solid #000;margin:8px 0;padding:6px;letter-spacing:4px;">#${orderNumDisplay}</div>
-  ${data.tableNumber ? `<div style="text-align:center;font-size:22px;font-weight:700;border:2px solid #000;padding:5px;margin-bottom:8px;">طاولة ${data.tableNumber}</div>` : ''}
-  ${orderTypeThermal ? `<div style="text-align:center;font-size:18px;font-weight:700;border:1.5px solid #000;padding:4px;margin-bottom:8px;">${orderTypeThermal}</div>` : ''}
-  <div style="border-top:3px solid #000;padding-top:5px;">${kitchenItemsHtml}</div>
-  <div style="text-align:center;font-size:13px;color:#555;margin-top:10px;border-top:1px dashed #000;padding-top:5px;">الكاشير: ${data.employeeName || '—'} · ${fmtDate} ${fmtTime}</div>
-</div></body></html>`;
-
-        const feedLinesCount = printerSettings.feedLines ?? 4;
-        const escData = await buildEscPosImageReceipt(receiptHtml, printerSettings.paperWidth, feedLinesCount);
         const result = await thermalPrint(escData, '', printerSettings.paperWidth);
 
         if (result.success) {
           if (printerSettings.autoKitchenCopy) {
             await new Promise(r => setTimeout(r, 1400));
-            const kitchenEsc = await buildEscPosImageReceipt(kitchenHtml, printerSettings.paperWidth, feedLinesCount);
+            // ── Kitchen copy — also direct ESC/POS ──────────────────────────────
+            const kitchenEsc = buildEscPosKitchenTicket({
+              orderNumber: data.orderNumber,
+              tableNumber: data.tableNumber,
+              orderType: orderTypeThermal,
+              cashierName: data.employeeName || '—',
+              items: data.items.map(item => ({
+                name: item.coffeeItem.nameAr,
+                qty: item.quantity,
+                addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
+              })),
+              notes: undefined,
+              paperWidth: printerSettings.paperWidth,
+            });
             await thermalPrint(kitchenEsc, '', printerSettings.paperWidth);
           }
           return;

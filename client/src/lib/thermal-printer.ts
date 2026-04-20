@@ -358,9 +358,11 @@ export interface EscPosReceiptData {
   vat: number;
   total: number;
   discount?: number;
+  splitPayment?: { cash: number; card: number };
   paymentMethod: string;
   paperWidth: '58mm' | '80mm';
   feedLines?: number;
+  skipCut?: boolean; // if true, skip feed+cut at end (so caller can append more data)
 }
 
 export function buildEscPosReceipt(data: EscPosReceiptData): Uint8Array {
@@ -443,6 +445,10 @@ export function buildEscPosReceipt(data: EscPosReceiptData): Uint8Array {
 
   buf.push(...CMD.ALIGN_LEFT);
   buf.push(...line(`طريقة الدفع : ${data.paymentMethod}`));
+  if (data.splitPayment) {
+    buf.push(...line(`  نقدي  : ${data.splitPayment.cash.toFixed(2)} ر.س`));
+    buf.push(...line(`  شبكة  : ${data.splitPayment.card.toFixed(2)} ر.س`));
+  }
 
   // ── Footer ────────────────────────────────────────────────────────────────
   buf.push(...CMD.ALIGN_CENTER);
@@ -452,12 +458,71 @@ export function buildEscPosReceipt(data: EscPosReceiptData): Uint8Array {
   buf.push(...textBytes('الاسعار شاملة ضريبة القيمة المضافة'), 0x0a);
   buf.push(...textBytes('BLACK ROSE CAFE'), 0x0a);
 
-  // ── Feed then FULL CUT ────────────────────────────────────────────────────
-  // GS V 0x41 n = feed n × (print_head_dots) lines then cut
-  // This is the most compatible cut command across Xprinter / Epson / clones
-  buf.push(ESC, 0x64, 4);      // Feed 4 lines before cut
-  buf.push(...CMD.CUT_PAPER);  // GS V 65 3 — full cut
+  if (data.skipCut) {
+    // Caller will append more data (e.g. QR raster) before cutting
+    return new Uint8Array(buf);
+  }
 
+  // ── Feed then FULL CUT ────────────────────────────────────────────────────
+  buf.push(ESC, 0x64, 4);
+  buf.push(...CMD.CUT_PAPER);
+
+  return new Uint8Array(buf);
+}
+
+/**
+ * Convert a QR/image data URL to ESC/POS GS v 0 raster bytes.
+ * Draws the image centered on paper, returns ESC/POS bytes (no init, no cut).
+ */
+export async function dataUrlToEscPosRaster(
+  dataUrl: string,
+  paperWidth: '58mm' | '80mm',
+  targetPx: number = 200,
+): Promise<Uint8Array> {
+  const dotWidth = paperWidth === '58mm' ? 384 : 576;
+  const img = new Image();
+  img.src = dataUrl;
+  await new Promise<void>(res => {
+    if (img.complete && img.naturalWidth > 0) { res(); return; }
+    img.onload = () => res();
+    img.onerror = () => res();
+    setTimeout(res, 3000);
+  });
+
+  const size = Math.min(targetPx, dotWidth);
+  const canvas = document.createElement('canvas');
+  canvas.width = dotWidth;
+  canvas.height = size + 10;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const x = Math.floor((dotWidth - size) / 2);
+  ctx.drawImage(img, x, 5, size, size);
+
+  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const w = canvas.width;
+  const h = canvas.height;
+  const bpl = Math.ceil(w / 8);
+  const buf: number[] = [];
+
+  buf.push(0x1d, 0x76, 0x30, 0x00);
+  buf.push(bpl & 0xff, (bpl >> 8) & 0xff);
+  buf.push(h & 0xff, (h >> 8) & 0xff);
+
+  for (let y = 0; y < h; y++) {
+    for (let bx = 0; bx < bpl; bx++) {
+      let byte = 0;
+      for (let bit = 0; bit < 8; bit++) {
+        const px = bx * 8 + bit;
+        if (px < w) {
+          const i = (y * w + px) * 4;
+          const lum = 0.299 * imgData.data[i] + 0.587 * imgData.data[i + 1] + 0.114 * imgData.data[i + 2];
+          if (lum < 128) byte |= 1 << (7 - bit);
+        }
+      }
+      buf.push(byte);
+    }
+  }
   return new Uint8Array(buf);
 }
 
