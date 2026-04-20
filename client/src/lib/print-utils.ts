@@ -527,6 +527,112 @@ function formatDate(dateStr: string): { date: string; time: string } {
   }
 }
 
+/** Build a visual HTML receipt for preview (no ESC/POS — pure browser rendering) */
+export async function buildReceiptPreviewHtml(data: TaxInvoiceData): Promise<string> {
+  const totalAmount = parseNumber(data.total);
+  const subtotal = totalAmount / (1 + VAT_RATE);
+  const vat = totalAmount - subtotal;
+  const disc = data.invoiceDiscount ? parseNumber(data.invoiceDiscount) : 0;
+  const { date: fmtDate, time: fmtTime } = formatDate(data.date);
+  const orderNumDisplay = String(data.orderNumber).replace(/\D/g, '').padStart(4, '0') || data.orderNumber;
+
+  const orderTypeStr = (data.orderTypeName || (data.orderType as string) || '');
+  const orderTypeLabel =
+    orderTypeStr === 'dine_in' || orderTypeStr === 'dine-in' ? 'طاولة' :
+    orderTypeStr === 'takeaway' || orderTypeStr === 'pickup' ? 'سفري' :
+    orderTypeStr === 'delivery' ? 'توصيل' :
+    orderTypeStr === 'car_pickup' || orderTypeStr === 'car-pickup' ? 'سيارة' :
+    orderTypeStr;
+
+  // ZATCA QR
+  const invoiceTs = data.date ? new Date(data.date).toISOString() : new Date().toISOString();
+  const zatcaPayload = generateZATCAQRCode({
+    sellerName: COMPANY_NAME,
+    vatNumber: data.vatNumber || VAT_NUMBER,
+    timestamp: invoiceTs,
+    totalWithVat: totalAmount.toFixed(2),
+    vatAmount: vat.toFixed(2),
+  });
+  let qrDataUrl = '';
+  try { qrDataUrl = await QRCode.toDataURL(zatcaPayload, { width: 180, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
+
+  const itemsHtml = data.items.map(item => {
+    const up = parseNumber(item.coffeeItem.price);
+    const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
+    return `
+      <div style="padding:7px 0;border-bottom:1px dashed #ccc;">
+        <div style="font-weight:700;font-size:15px;">${item.coffeeItem.nameAr}</div>
+        ${addons ? `<div style="font-size:12px;color:#666;margin-top:2px;">+ ${addons}</div>` : ''}
+        <table style="width:100%;margin-top:4px;"><tr>
+          <td style="font-size:13px;color:#555;">${item.quantity} × ${up.toFixed(2)} ر.س</td>
+          <td style="text-align:left;font-size:13px;font-weight:700;">${(item.quantity * up).toFixed(2)} ر.س</td>
+        </tr></table>
+      </div>`;
+  }).join('');
+
+  return `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:Tahoma,Arial,sans-serif;direction:rtl;background:#f5f5f0;display:flex;justify-content:center;padding:20px 10px;}
+.receipt{background:#fff;width:300px;padding:16px 14px;box-shadow:0 2px 12px rgba(0,0,0,.15);border-radius:2px;position:relative;}
+.receipt::before,.receipt::after{content:'';display:block;height:12px;background:repeating-linear-gradient(90deg,#fff 0,#fff 10px,#f5f5f0 10px,#f5f5f0 20px);}
+.receipt::before{margin:-16px -14px 12px;}
+.receipt::after{margin:12px -14px -16px;}
+.c{text-align:center;}
+.sep{border-top:2px solid #222;margin:8px 0;}
+.dsep{border-top:1px dashed #aaa;margin:6px 0;}
+.tbl{width:100%;border-collapse:collapse;}
+.tbl td{padding:3px 0;font-size:13px;vertical-align:middle;}
+.tbl td:last-child{text-align:left;font-weight:700;}
+</style></head><body><div class="receipt">
+  <div class="c" style="margin-bottom:10px;">
+    <img src="/black-rose-logo.png" style="width:80px;height:80px;object-fit:contain;display:block;margin:0 auto 6px;"
+      onerror="this.style.display='none'" />
+    <div style="font-size:18px;font-weight:900;letter-spacing:1px;">${COMPANY_NAME}</div>
+    ${data.branchName ? `<div style="font-size:12px;color:#555;margin-top:2px;">${data.branchName}</div>` : ''}
+    <div style="font-size:11px;color:#666;margin-top:3px;">رقم الضريبة: ${data.vatNumber || VAT_NUMBER}</div>
+  </div>
+  <div class="sep"></div>
+  <div class="c" style="font-size:13px;font-weight:700;margin-bottom:6px;">فاتورة ضريبية مبسطة</div>
+  <div class="c" style="font-size:36px;font-weight:900;letter-spacing:4px;border:2.5px solid #222;padding:6px 0;margin-bottom:8px;">#${orderNumDisplay}</div>
+  <div class="dsep"></div>
+  <table class="tbl">
+    <tr><td>التاريخ:</td><td>${fmtDate} ${fmtTime}</td></tr>
+    <tr><td>الكاشير:</td><td>${data.employeeName || '—'}</td></tr>
+    ${data.customerName && data.customerName !== 'عميل نقدي' ? `<tr><td>العميل:</td><td>${data.customerName}</td></tr>` : ''}
+    ${data.tableNumber ? `<tr><td>الطاولة:</td><td>${data.tableNumber}</td></tr>` : ''}
+    ${orderTypeLabel ? `<tr><td>نوع الطلب:</td><td>${orderTypeLabel}</td></tr>` : ''}
+  </table>
+  <div class="sep"></div>
+  ${itemsHtml}
+  <div class="sep"></div>
+  <table class="tbl">
+    <tr><td>قبل الضريبة:</td><td>${subtotal.toFixed(2)} ر.س</td></tr>
+    <tr><td>ضريبة القيمة المضافة 15%:</td><td>${vat.toFixed(2)} ر.س</td></tr>
+    ${disc > 0 ? `<tr><td style="color:#16a34a;">الخصم:</td><td style="color:#16a34a;">-${disc.toFixed(2)} ر.س</td></tr>` : ''}
+  </table>
+  <div class="sep"></div>
+  <div class="c" style="font-size:20px;font-weight:900;border:2.5px solid #222;padding:8px 0;margin:6px 0;">
+    *** الإجمالي: ${totalAmount.toFixed(2)} ر.س ***
+  </div>
+  <div class="sep"></div>
+  <table class="tbl">
+    <tr><td>طريقة الدفع:</td><td>${data.paymentMethod}</td></tr>
+    ${data.splitPayment ? `<tr><td style="padding-right:8px;font-size:12px;">نقدي:</td><td style="font-size:12px;">${data.splitPayment.cash.toFixed(2)} ر.س</td></tr><tr><td style="padding-right:8px;font-size:12px;">شبكة:</td><td style="font-size:12px;">${data.splitPayment.card.toFixed(2)} ر.س</td></tr>` : ''}
+  </table>
+  ${qrDataUrl ? `
+  <div class="dsep"></div>
+  <div class="c" style="padding:6px 0;">
+    <img src="${qrDataUrl}" style="width:140px;height:140px;display:block;margin:0 auto;" />
+    <div style="font-size:10px;color:#888;margin-top:3px;">ZATCA · باركود الضريبة</div>
+  </div>` : ''}
+  <div class="sep"></div>
+  <div class="c" style="font-size:15px;font-weight:700;margin:6px 0;">** شكراً لزيارتكم **</div>
+  <div class="c" style="font-size:11px;color:#666;">الأسعار شاملة ضريبة القيمة المضافة 15%</div>
+  <div class="c" style="font-size:12px;font-weight:700;margin-top:4px;">${COMPANY_NAME}</div>
+</div></body></html>`;
+}
+
 export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig = {}): Promise<void> {
   const shouldAutoPrint = config.autoPrint !== undefined ? config.autoPrint : true;
 

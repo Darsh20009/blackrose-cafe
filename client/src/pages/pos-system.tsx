@@ -32,6 +32,7 @@ import { queueOfflineOrder, syncOfflineOrders, countPendingOrders } from "@/lib/
 import type { CoffeeItem, Order, Table, Employee } from "@shared/schema";
 import { 
   printTaxInvoice, 
+  buildReceiptPreviewHtml,
   printKitchenOrder,
   fmtOrderNum
 } from "@/lib/print-utils";
@@ -113,6 +114,8 @@ export default function PosSystem() {
   const [receiptCountdown, setReceiptCountdown] = useState(0);
   const [lastOrder, setLastOrder] = useState<any>(null);
   const [lastPrintFailed, setLastPrintFailed] = useState(false);
+  const [receiptPreviewHtml, setReceiptPreviewHtml] = useState('');
+  const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   const [posTerminalConnected, setPosTerminalConnected] = useState(() => {
     return localStorage.getItem("pos-terminal-connected") === "true";
   });
@@ -2240,18 +2243,92 @@ export default function PosSystem() {
                     <span className="mr-1 text-xs opacity-70">({receiptCountdown})</span>
                   )}
                 </Button>
-                <Button
-                  variant="outline"
-                  className={`w-full gap-2 ${lastPrintFailed ? 'border-red-400 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30' : ''}`}
-                  onClick={() => { setLastPrintFailed(false); setReceiptCountdown(0); handlePrintReceipt(); }}
-                  data-testid="button-print-receipt"
-                >
-                  <Printer className="w-4 h-4" />
-                  {lastPrintFailed ? tc('إعادة الطباعة', 'Retry Print') : t('pos.print_invoice')}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className={`flex-1 gap-2 ${lastPrintFailed ? 'border-red-400 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30' : ''}`}
+                    onClick={() => { setLastPrintFailed(false); setReceiptCountdown(0); handlePrintReceipt(); }}
+                    data-testid="button-print-receipt"
+                  >
+                    <Printer className="w-4 h-4" />
+                    {lastPrintFailed ? tc('إعادة الطباعة', 'Retry Print') : t('pos.print_invoice')}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="flex-1 gap-2"
+                    data-testid="button-preview-receipt"
+                    onClick={async () => {
+                      if (!lastOrder) return;
+                      const html = await buildReceiptPreviewHtml({
+                        orderNumber: lastOrder.orderNumber,
+                        customerName: lastOrder.customerName,
+                        customerPhone: lastOrder.customerPhone,
+                        items: lastOrder.items,
+                        subtotal: lastOrder.subtotal.toFixed(2),
+                        total: lastOrder.total.toFixed(2),
+                        paymentMethod: lastOrder.paymentMethod,
+                        employeeName: lastOrder.employeeName,
+                        tableNumber: lastOrder.tableNumber,
+                        orderType: lastOrder.orderType,
+                        date: lastOrder.date,
+                        splitPayment: lastOrder.splitPayment,
+                      });
+                      setReceiptPreviewHtml(html);
+                      setShowReceiptPreview(true);
+                    }}
+                  >
+                    <Receipt className="w-4 h-4" />
+                    {tc('معاينة', 'Preview')}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Receipt visual preview modal ──────────────────────────────────── */}
+      <Dialog open={showReceiptPreview} onOpenChange={setShowReceiptPreview}>
+        <DialogContent className="max-w-md max-h-[96vh] p-0 overflow-hidden flex flex-col" dir="rtl">
+          <DialogHeader className="px-4 pt-4 pb-2 border-b shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Receipt className="w-4 h-4 text-primary" />
+              معاينة الفاتورة
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto bg-[#f5f5f0]">
+            {receiptPreviewHtml && (
+              <iframe
+                srcDoc={receiptPreviewHtml}
+                title="receipt-preview"
+                className="w-full border-0"
+                style={{ height: '700px', minHeight: '500px' }}
+                sandbox="allow-same-origin"
+              />
+            )}
+          </div>
+          <div className="shrink-0 flex gap-2 p-3 border-t bg-background">
+            <Button
+              className="flex-1 gap-2"
+              onClick={() => {
+                setShowReceiptPreview(false);
+                setLastPrintFailed(false);
+                handlePrintReceipt();
+              }}
+              data-testid="button-preview-print"
+            >
+              <Printer className="w-4 h-4" />
+              طباعة
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowReceiptPreview(false)}
+              data-testid="button-preview-close"
+            >
+              إغلاق
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
