@@ -570,7 +570,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
           thermalZatcaQr = await QRCode.toDataURL(zatcaPayload, { width: 160, margin: 1, errorCorrectionLevel: 'M' });
         } catch { /* no QR — still print */ }
 
-        // ── Build items rows (font sizes doubled vs before) ────────────────────
+        // ── Build items rows — table layout for html2canvas compatibility ────────
         const itemsRowsThermal = data.items.map(item => {
           const up = parseNumber(item.coffeeItem.price);
           const addons = (item.customization?.selectedItemAddons || [])
@@ -579,10 +579,12 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
             <div style="padding:6px 0;border-bottom:1.5px dashed #bbb;">
               <div style="font-weight:700;font-size:17px;line-height:1.3;">${item.coffeeItem.nameAr}</div>
               ${addons ? `<div style="font-size:13px;color:#555;margin-top:2px;">+ ${addons}</div>` : ''}
-              <div style="display:flex;justify-content:space-between;font-size:15px;margin-top:3px;">
-                <span style="color:#555;">${item.quantity} × ${up.toFixed(2)}</span>
-                <span style="font-weight:700;">${(item.quantity * up).toFixed(2)} ر.س</span>
-              </div>
+              <table style="width:100%;border-collapse:collapse;margin-top:3px;">
+                <tr>
+                  <td style="font-size:15px;color:#555;">${item.quantity} × ${up.toFixed(2)}</td>
+                  <td style="font-size:15px;font-weight:700;text-align:left;">${(item.quantity * up).toFixed(2)} ر.س</td>
+                </tr>
+              </table>
             </div>`;
         }).join('');
 
@@ -594,13 +596,15 @@ body{font-family:Tahoma,Arial,sans-serif;direction:rtl;color:#000;background:#ff
 .sep{border-top:2.5px solid #000;margin:7px 0;}
 .dsep{border-top:1.5px dashed #aaa;margin:5px 0;}
 .c{text-align:center;}
-.row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:15px;}
+.tbl{width:100%;border-collapse:collapse;}
+.tbl td{padding:3px 0;font-size:15px;vertical-align:middle;}
+.tbl td:last-child{text-align:left;font-weight:700;}
 </style></head><body>
 <div style="padding:8px 10px;">
 
   <!-- ── Logo / Name ── -->
   ${thermalLogo
-    ? `<img src="${thermalLogo}" style="display:block;width:90%;max-height:90px;object-fit:contain;margin:0 auto 6px;" />`
+    ? `<img src="${thermalLogo}" style="display:block;width:85%;max-height:80px;object-fit:contain;margin:0 auto 6px;" />`
     : `<div class="c" style="font-size:22px;font-weight:700;letter-spacing:2px;">${COMPANY_NAME}</div>`
   }
   ${data.branchName ? `<div class="c" style="font-size:14px;margin-top:3px;">${data.branchName}</div>` : ''}
@@ -612,12 +616,14 @@ body{font-family:Tahoma,Arial,sans-serif;direction:rtl;color:#000;background:#ff
   <div class="c" style="font-size:34px;font-weight:700;letter-spacing:3px;border:2.5px solid #000;margin:5px 0;padding:5px 0;">#${orderNumDisplay}</div>
   <div class="dsep"></div>
 
-  <!-- ── Info rows ── -->
-  <div class="row"><span>التاريخ:</span><span style="font-weight:700;">${fmtDate} ${fmtTime}</span></div>
-  <div class="row"><span>الكاشير:</span><span style="font-weight:700;">${data.employeeName || '—'}</span></div>
-  ${data.customerName && data.customerName !== 'عميل نقدي' ? `<div class="row"><span>العميل:</span><span style="font-weight:700;">${data.customerName}</span></div>` : ''}
-  ${data.tableNumber ? `<div class="row"><span>الطاولة:</span><span style="font-weight:700;">${data.tableNumber}</span></div>` : ''}
-  ${orderTypeThermal ? `<div class="row"><span>نوع الطلب:</span><span style="font-weight:700;">${orderTypeThermal}</span></div>` : ''}
+  <!-- ── Info rows (table layout — html2canvas safe) ── -->
+  <table class="tbl">
+    <tr><td>التاريخ:</td><td>${fmtDate} ${fmtTime}</td></tr>
+    <tr><td>الكاشير:</td><td>${data.employeeName || '—'}</td></tr>
+    ${data.customerName && data.customerName !== 'عميل نقدي' ? `<tr><td>العميل:</td><td>${data.customerName}</td></tr>` : ''}
+    ${data.tableNumber ? `<tr><td>الطاولة:</td><td>${data.tableNumber}</td></tr>` : ''}
+    ${orderTypeThermal ? `<tr><td>نوع الطلب:</td><td>${orderTypeThermal}</td></tr>` : ''}
+  </table>
   <div class="sep"></div>
 
   <!-- ── Items ── -->
@@ -625,18 +631,20 @@ body{font-family:Tahoma,Arial,sans-serif;direction:rtl;color:#000;background:#ff
   <div class="sep"></div>
 
   <!-- ── Totals ── -->
-  <div class="row"><span>قبل الضريبة:</span><span>${subtotalThermal.toFixed(2)} ر.س</span></div>
-  <div class="row"><span>ضريبة القيمة المضافة 15%:</span><span>${vatThermal.toFixed(2)} ر.س</span></div>
-  ${discThermal > 0 ? `<div class="row" style="color:#16a34a;font-size:15px;"><span>الخصم:</span><span>-${discThermal.toFixed(2)} ر.س</span></div>` : ''}
+  <table class="tbl">
+    <tr><td>قبل الضريبة:</td><td>${subtotalThermal.toFixed(2)} ر.س</td></tr>
+    <tr><td>ضريبة القيمة المضافة 15%:</td><td>${vatThermal.toFixed(2)} ر.س</td></tr>
+    ${discThermal > 0 ? `<tr><td style="color:#16a34a;">الخصم:</td><td style="color:#16a34a;">-${discThermal.toFixed(2)} ر.س</td></tr>` : ''}
+  </table>
   <div class="sep"></div>
-  <div class="c" style="font-size:24px;font-weight:700;border:2.5px solid #000;padding:7px 0;margin:5px 0;background:#000;color:#fff;">الإجمالي: ${totalAmountThermal.toFixed(2)} ر.س</div>
+  <div class="c" style="font-size:24px;font-weight:700;border:3px solid #000;padding:7px 0;margin:5px 0;">*** الإجمالي: ${totalAmountThermal.toFixed(2)} ر.س ***</div>
 
   <!-- ── Payment ── -->
   <div class="sep"></div>
-  <div class="row"><span>طريقة الدفع:</span><span style="font-weight:700;">${data.paymentMethod}</span></div>
-  ${data.splitPayment ? `
-  <div class="row" style="font-size:14px;padding-right:10px;"><span>نقدي:</span><span>${data.splitPayment.cash.toFixed(2)} ر.س</span></div>
-  <div class="row" style="font-size:14px;padding-right:10px;"><span>شبكة:</span><span>${data.splitPayment.card.toFixed(2)} ر.س</span></div>` : ''}
+  <table class="tbl">
+    <tr><td>طريقة الدفع:</td><td>${data.paymentMethod}</td></tr>
+    ${data.splitPayment ? `<tr><td style="padding-right:10px;">نقدي:</td><td>${data.splitPayment.cash.toFixed(2)} ر.س</td></tr><tr><td style="padding-right:10px;">شبكة:</td><td>${data.splitPayment.card.toFixed(2)} ر.س</td></tr>` : ''}
+  </table>
 
   <!-- ── ZATCA QR ── -->
   ${thermalZatcaQr ? `
@@ -659,12 +667,13 @@ body{font-family:Tahoma,Arial,sans-serif;direction:rtl;color:#000;background:#ff
           const addons = (item.customization?.selectedItemAddons || [])
             .map((a: any) => a.nameAr).join('، ');
           return `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:2px dashed #bbb;">
-              <div style="flex:1;padding-left:8px;">
-                <div style="font-size:20px;font-weight:700;line-height:1.3;">${item.coffeeItem.nameAr}</div>
-                ${addons ? `<div style="font-size:14px;color:#666;margin-top:3px;">+ ${addons}</div>` : ''}
-              </div>
-              <div style="font-size:32px;font-weight:700;background:#000;color:#fff;padding:4px 16px;border-radius:6px;white-space:nowrap;">×${item.quantity}</div>
+            <div style="padding:10px 0;border-bottom:2px dashed #000;">
+              <table style="width:100%;border-collapse:collapse;">
+                <tr>
+                  <td style="font-size:20px;font-weight:700;line-height:1.4;">${item.coffeeItem.nameAr}${addons ? `<div style="font-size:14px;font-weight:400;margin-top:3px;">+ ${addons}</div>` : ''}</td>
+                  <td style="text-align:left;font-size:32px;font-weight:700;border:3px solid #000;padding:2px 10px;white-space:nowrap;width:1%;">x${item.quantity}</td>
+                </tr>
+              </table>
             </div>`;
         }).join('');
 
@@ -672,12 +681,12 @@ body{font-family:Tahoma,Arial,sans-serif;direction:rtl;color:#000;background:#ff
 <style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Tahoma,Arial,sans-serif;direction:rtl;color:#000;background:#fff;width:100%;}</style>
 </head><body>
 <div style="padding:8px 10px;">
-  <div style="text-align:center;font-size:18px;font-weight:700;background:#000;color:#fff;padding:8px;letter-spacing:2px;">🍳 نسخة المطبخ</div>
+  <div style="text-align:center;font-size:18px;font-weight:700;border:3px solid #000;padding:8px;letter-spacing:2px;margin-bottom:6px;">*** نسخة المطبخ ***</div>
   <div style="text-align:center;font-size:40px;font-weight:700;border:3px solid #000;margin:8px 0;padding:6px;letter-spacing:4px;">#${orderNumDisplay}</div>
-  ${data.tableNumber ? `<div style="text-align:center;font-size:22px;font-weight:700;border:2px solid #000;background:#000;color:#fff;padding:5px;margin-bottom:8px;">🪑 طاولة ${data.tableNumber}</div>` : ''}
-  ${orderTypeThermal ? `<div style="text-align:center;font-size:18px;font-weight:700;background:#f0f0f0;border:1.5px solid #000;padding:4px;margin-bottom:8px;">${orderTypeThermal}</div>` : ''}
+  ${data.tableNumber ? `<div style="text-align:center;font-size:22px;font-weight:700;border:2px solid #000;padding:5px;margin-bottom:8px;">طاولة ${data.tableNumber}</div>` : ''}
+  ${orderTypeThermal ? `<div style="text-align:center;font-size:18px;font-weight:700;border:1.5px solid #000;padding:4px;margin-bottom:8px;">${orderTypeThermal}</div>` : ''}
   <div style="border-top:3px solid #000;padding-top:5px;">${kitchenItemsHtml}</div>
-  <div style="text-align:center;font-size:13px;color:#555;margin-top:10px;border-top:1px dashed #aaa;padding-top:5px;">الكاشير: ${data.employeeName || '—'} · ${fmtDate} ${fmtTime}</div>
+  <div style="text-align:center;font-size:13px;color:#555;margin-top:10px;border-top:1px dashed #000;padding-top:5px;">الكاشير: ${data.employeeName || '—'} · ${fmtDate} ${fmtTime}</div>
 </div></body></html>`;
 
         const feedLinesCount = printerSettings.feedLines ?? 4;

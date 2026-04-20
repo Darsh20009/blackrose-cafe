@@ -552,31 +552,46 @@ export async function buildEscPosImageReceipt(
     .replace(/@import\s+url\([^)]*fonts\.googleapis[^)]*\)[^;]*;/gi, '')
     .replace(/font-family\s*:\s*['"]?Cairo['"]?\s*,?/gi, 'font-family: Tahoma, Arial,');
 
-  // Create an off-screen container at exact paper width
+  // Use position:absolute (NOT fixed) — fixed breaks scrollHeight/offsetHeight calculation
+  // Place far off-screen horizontally but at top:0 so the full height is measurable
   const wrapper = document.createElement('div');
   wrapper.style.cssText = [
     `width:${dotWidth}px`,
-    'position:fixed',
-    'left:-9999px',
-    'top:-9999px',
+    'position:absolute',
+    'left:-99999px',
+    'top:0',
     'background:#fff',
     'color:#000',
     'visibility:visible',
     'pointer-events:none',
-    'z-index:-9999',
+    'overflow:visible',
   ].join(';');
 
   // Insert a scoped <style> block that resets page width
   const scopeStyle = `<style>
-    html,body{margin:0;padding:0;width:${dotWidth}px;background:#fff;color:#000;}
+    html,body{margin:0;padding:0;background:#fff;color:#000;}
     *{box-sizing:border-box;}
   </style>`;
   wrapper.innerHTML = scopeStyle + safeHtml;
   document.body.appendChild(wrapper);
 
-  // Give browser time to layout fonts/images
-  await new Promise(r => setTimeout(r, 700));
-  const contentHeight = wrapper.scrollHeight || 800;
+  // Wait for ALL images to finish loading before measuring or capturing
+  const images = Array.from(wrapper.querySelectorAll('img'));
+  await Promise.all(images.map(img => {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+    return new Promise<void>(res => {
+      const done = () => res();
+      img.addEventListener('load', done, { once: true });
+      img.addEventListener('error', done, { once: true });
+      setTimeout(done, 4000); // safety timeout per image
+    });
+  }));
+
+  // Brief extra delay to let flexbox / layout settle after images load
+  await new Promise(r => setTimeout(r, 200));
+
+  // Measure full rendered height — offsetHeight works correctly for absolute elements
+  const contentHeight = Math.max(wrapper.offsetHeight, wrapper.scrollHeight, 300);
 
   let canvas: HTMLCanvasElement;
   try {
@@ -589,8 +604,12 @@ export async function buildEscPosImageReceipt(
       useCORS: false,
       logging: false,
       allowTaint: true,
-      imageTimeout: 3000,
+      imageTimeout: 5000,
       removeContainer: false,
+      // Ensure background colors (black boxes etc.) are captured
+      onclone: (_doc: Document, el: HTMLElement) => {
+        el.style.overflow = 'visible';
+      },
     });
   } finally {
     wrapper.remove();
