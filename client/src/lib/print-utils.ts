@@ -529,92 +529,135 @@ function formatDate(dateStr: string): { date: string; time: string } {
 export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig = {}): Promise<void> {
   const shouldAutoPrint = config.autoPrint !== undefined ? config.autoPrint : true;
 
-  // ── ESC/POS Thermal printing (USB / Bluetooth / Network / Relay) ────────────
-  // When a hardware mode is active, ONLY use thermal. Never fall back to browser popup.
+  // ── ESC/POS Thermal printing — Image-based (Arabic-safe) ────────────────────
+  // We render the receipt as a bitmap image and send pixel data to the printer.
+  // This completely bypasses any character-encoding issues (no more garbled Arabic).
+  // Works with ALL thermal printer models regardless of code pages.
   if (shouldAutoPrint) {
     try {
-      const { loadPrinterSettings, buildEscPosReceipt, buildEscPosKitchenTicket, thermalPrint } = await import('./thermal-printer');
+      const { loadPrinterSettings, buildEscPosImageReceipt, thermalPrint } = await import('./thermal-printer');
       const printerSettings = loadPrinterSettings();
 
       if (printerSettings.enabled && printerSettings.mode !== 'browser') {
-        const totalAmount = parseNumber(data.total);
-        const subtotalBeforeTax = totalAmount / (1 + VAT_RATE);
-        const vatAmount = totalAmount - subtotalBeforeTax;
+        const totalAmountThermal = parseNumber(data.total);
+        const subtotalThermal = totalAmountThermal / (1 + VAT_RATE);
+        const vatThermal = totalAmountThermal - subtotalThermal;
         const { date: fmtDate, time: fmtTime } = formatDate(data.date);
-        const dateStr = `${fmtDate} ${fmtTime}`;
-
         const orderTypeStr = (data.orderTypeName || (data.orderType as string) || '');
-        const orderTypeLabel =
+        const orderTypeThermal =
           orderTypeStr === 'dine_in' || orderTypeStr === 'dine-in' ? 'طاولة' :
           orderTypeStr === 'takeaway' || orderTypeStr === 'pickup' ? 'سفري' :
           orderTypeStr === 'delivery' ? 'توصيل' :
           orderTypeStr === 'car_pickup' || orderTypeStr === 'car-pickup' ? 'سيارة' :
           orderTypeStr;
+        const discThermal = data.invoiceDiscount ? parseNumber(data.invoiceDiscount) : 0;
 
-        const escData = buildEscPosReceipt({
-          shopName: COMPANY_NAME,
-          vatNumber: data.vatNumber || VAT_NUMBER,
-          branchName: data.branchName,
-          address: data.branchAddress,
-          orderNumber: data.orderNumber,
-          date: dateStr,
-          cashierName: data.employeeName,
-          customerName: data.customerName && data.customerName !== 'عميل نقدي' ? data.customerName : undefined,
-          tableNumber: data.tableNumber,
-          orderType: orderTypeLabel || undefined,
-          items: data.items.map(item => ({
-            name: item.coffeeItem.nameAr,
-            qty: item.quantity,
-            price: parseNumber(item.coffeeItem.price),
-            addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
-          })),
-          subtotal: subtotalBeforeTax,
-          vat: vatAmount,
-          total: totalAmount,
-          discount: data.invoiceDiscount ? parseNumber(data.invoiceDiscount) : undefined,
-          paymentMethod: data.paymentMethod,
-          paperWidth: printerSettings.paperWidth,
-          feedLines: printerSettings.feedLines,
-        });
+        // Build a minimal, Google-Fonts-free HTML for the customer receipt image
+        const itemsRowsThermal = data.items.map(item => {
+          const up = parseNumber(item.coffeeItem.price);
+          const addons = (item.customization?.selectedItemAddons || [])
+            .map((a: any) => a.nameAr).join('، ');
+          return `
+            <div style="padding:4px 0;border-bottom:1px dashed #bbb;">
+              <div style="font-weight:700;font-size:13px;">${item.coffeeItem.nameAr}</div>
+              ${addons ? `<div style="font-size:10px;color:#555;">+ ${addons}</div>` : ''}
+              <div style="display:flex;justify-content:space-between;font-size:12px;">
+                <span>${item.quantity} × ${up.toFixed(2)}</span>
+                <span>${(item.quantity * up).toFixed(2)} ر.س</span>
+              </div>
+            </div>`;
+        }).join('');
 
+        const receiptHtml = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:Tahoma,Arial,sans-serif;direction:rtl;color:#000;background:#fff;font-size:13px;width:100%;}
+.sep{border-top:2px solid #000;margin:5px 0;}
+.dsep{border-top:1px dashed #bbb;margin:4px 0;}
+.c{text-align:center;}
+.row{display:flex;justify-content:space-between;padding:2px 0;}
+</style></head><body>
+<div style="padding:6px 8px;">
+  <div class="c" style="font-size:18px;font-weight:700;letter-spacing:1px;">${COMPANY_NAME}</div>
+  ${data.branchName ? `<div class="c" style="font-size:11px;">${data.branchName}</div>` : ''}
+  ${data.branchAddress ? `<div class="c" style="font-size:10px;">${data.branchAddress}</div>` : ''}
+  <div class="c" style="font-size:10px;">رقم الضريبة: ${data.vatNumber || VAT_NUMBER}</div>
+  <div class="sep"></div>
+  <div class="c" style="font-weight:700;font-size:13px;">فاتورة ضريبية مبسطة</div>
+  <div class="c" style="font-size:26px;font-weight:700;letter-spacing:2px;border:2px solid #000;margin:4px 0;padding:3px 0;">#${String(data.orderNumber).replace(/\D/g,'').padStart(4,'0') || data.orderNumber}</div>
+  <div class="dsep"></div>
+  <div class="row"><span>التاريخ:</span><span>${fmtDate} ${fmtTime}</span></div>
+  <div class="row"><span>الكاشير:</span><span>${data.employeeName || '—'}</span></div>
+  ${data.customerName && data.customerName !== 'عميل نقدي' ? `<div class="row"><span>العميل:</span><span>${data.customerName}</span></div>` : ''}
+  ${data.tableNumber ? `<div class="row"><span>الطاولة:</span><span>${data.tableNumber}</span></div>` : ''}
+  ${orderTypeThermal ? `<div class="row"><span>نوع الطلب:</span><span>${orderTypeThermal}</span></div>` : ''}
+  <div class="sep"></div>
+  ${itemsRowsThermal}
+  <div class="sep"></div>
+  <div class="row"><span>قبل الضريبة:</span><span>${subtotalThermal.toFixed(2)} ر.س</span></div>
+  <div class="row"><span>ضريبة 15%:</span><span>${vatThermal.toFixed(2)} ر.س</span></div>
+  ${discThermal > 0 ? `<div class="row" style="color:#16a34a;"><span>الخصم:</span><span>-${discThermal.toFixed(2)} ر.س</span></div>` : ''}
+  <div class="sep"></div>
+  <div class="c" style="font-size:20px;font-weight:700;border:2px solid #000;padding:5px 0;margin:4px 0;">الإجمالي: ${totalAmountThermal.toFixed(2)} ر.س</div>
+  <div class="sep"></div>
+  <div class="row"><span>طريقة الدفع:</span><span>${data.paymentMethod}</span></div>
+  <div class="sep"></div>
+  <div class="c" style="font-weight:700;margin:4px 0;">** شكراً لزيارتكم **</div>
+  <div class="c" style="font-size:10px;">الأسعار شاملة ضريبة القيمة المضافة 15%</div>
+  <div class="c" style="font-size:11px;margin-top:2px;">${COMPANY_NAME}</div>
+</div></body></html>`;
+
+        // Build kitchen copy HTML
+        const kitchenItemsHtml = data.items.map(item => {
+          const addons = (item.customization?.selectedItemAddons || [])
+            .map((a: any) => a.nameAr).join('، ');
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px dashed #bbb;">
+              <div>
+                <div style="font-size:16px;font-weight:700;">${item.coffeeItem.nameAr}</div>
+                ${addons ? `<div style="font-size:11px;color:#555;">+ ${addons}</div>` : ''}
+              </div>
+              <div style="font-size:26px;font-weight:700;background:#000;color:#fff;padding:2px 12px;border-radius:4px;">×${item.quantity}</div>
+            </div>`;
+        }).join('');
+
+        const kitchenHtml = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:Tahoma,Arial,sans-serif;direction:rtl;color:#000;background:#fff;width:100%;}
+</style></head><body>
+<div style="padding:6px 8px;">
+  <div style="text-align:center;font-size:14px;font-weight:700;background:#000;color:#fff;padding:5px;">نسخة المطبخ</div>
+  <div style="text-align:center;font-size:32px;font-weight:700;border:2px solid #000;margin:6px 0;padding:4px;">#${String(data.orderNumber).replace(/\D/g,'').padStart(4,'0') || data.orderNumber}</div>
+  ${data.tableNumber ? `<div style="text-align:center;font-size:20px;font-weight:700;color:#b45309;border:2px solid #b45309;padding:3px;margin-bottom:6px;">طاولة ${data.tableNumber}</div>` : ''}
+  ${orderTypeThermal ? `<div style="text-align:center;font-size:14px;font-weight:700;background:#f0f0f0;padding:3px;margin-bottom:6px;">${orderTypeThermal}</div>` : ''}
+  <div style="border-top:2px dashed #000;padding-top:4px;">
+    ${kitchenItemsHtml}
+  </div>
+  <div style="text-align:center;font-size:11px;margin-top:8px;">الكاشير: ${data.employeeName || '—'} | ${fmtDate}</div>
+</div></body></html>`;
+
+        const feedLinesCount = printerSettings.feedLines ?? 4;
+        const escData = await buildEscPosImageReceipt(receiptHtml, printerSettings.paperWidth, feedLinesCount);
         const result = await thermalPrint(escData, '', printerSettings.paperWidth);
 
         if (result.success) {
           if (printerSettings.autoKitchenCopy) {
-            await new Promise(r => setTimeout(r, 1200));
-            const kitchenEsc = buildEscPosKitchenTicket({
-              orderNumber: data.orderNumber,
-              tableNumber: data.tableNumber,
-              orderType: orderTypeLabel || undefined,
-              cashierName: data.employeeName,
-              items: data.items.map(item => ({
-                name: item.coffeeItem.nameAr,
-                qty: item.quantity,
-                addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
-              })),
-              paperWidth: printerSettings.paperWidth,
-            });
+            await new Promise(r => setTimeout(r, 1400));
+            const kitchenEsc = await buildEscPosImageReceipt(kitchenHtml, printerSettings.paperWidth, feedLinesCount);
             await thermalPrint(kitchenEsc, '', printerSettings.paperWidth);
           }
-          return; // Hardware handled it — skip HTML printing completely
+          return;
         }
 
-        // ── Thermal hardware mode is active but print FAILED ──
-        // Do NOT open a browser popup — the user chose hardware mode explicitly.
-        // Show a brief console error and stop. The cashier will see the toast error
-        // thrown by thermalPrint's caller if wired up, otherwise silent here.
         const errMsg = result.error || 'فشلت الطباعة الحرارية';
         console.error('[PrintTaxInvoice] Hardware print failed — mode:', printerSettings.mode, '— error:', errMsg);
-
-        // Show a non-blocking browser notification so the cashier knows
         if (typeof window !== 'undefined' && (window as any).__qiroxPrintError !== undefined) {
-          // Hook exists — call it
           (window as any).__qiroxPrintError(errMsg);
         } else {
-          // Fallback: dispatch a custom event the POS can listen to
           window.dispatchEvent(new CustomEvent('qirox:print-error', { detail: { error: errMsg, mode: printerSettings.mode } }));
         }
-        return; // STOP — do not open browser print popup
+        return;
       }
     } catch (e) {
       console.warn('[PrintTaxInvoice] Thermal print error:', e);

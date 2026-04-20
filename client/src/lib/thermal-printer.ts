@@ -533,6 +533,113 @@ export function buildEscPosKitchenTicket(data: {
   return new Uint8Array(buf);
 }
 
+// ─── Image-based receipt builder ─────────────────────────────────────────────
+// Renders HTML to a canvas then encodes as ESC/POS raster image.
+// This is the most reliable approach for Arabic text — no encoding issues at all.
+// Works with any thermal printer regardless of installed code pages.
+
+export async function buildEscPosImageReceipt(
+  html: string,
+  paperWidth: '58mm' | '80mm',
+  feedLines: number = 4,
+): Promise<Uint8Array> {
+  // Printer dot widths at 203 dpi: 58mm → 384 dots, 80mm → 576 dots
+  const dotWidth = paperWidth === '58mm' ? 384 : 576;
+  const bytesPerLine = dotWidth / 8; // 48 or 72
+
+  // Strip Google Fonts @import — use only system Arabic fonts (Tahoma/Arial)
+  // so rendering works even without internet access
+  let safeHtml = html
+    .replace(/@import\s+url\([^)]*fonts\.googleapis[^)]*\)[^;]*;/gi, '')
+    .replace(/font-family\s*:\s*['"]?Cairo['"]?\s*,?/gi, 'font-family: Tahoma, Arial,');
+
+  // Create an off-screen container at exact paper width
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = [
+    `width:${dotWidth}px`,
+    'position:fixed',
+    'left:-9999px',
+    'top:-9999px',
+    'background:#fff',
+    'color:#000',
+    'visibility:visible',
+    'pointer-events:none',
+    'z-index:-9999',
+  ].join(';');
+
+  // Insert a scoped <style> block that resets page width
+  const scopeStyle = `<style>
+    html,body{margin:0;padding:0;width:${dotWidth}px;background:#fff;color:#000;}
+    *{box-sizing:border-box;}
+  </style>`;
+  wrapper.innerHTML = scopeStyle + safeHtml;
+  document.body.appendChild(wrapper);
+
+  // Give browser time to layout fonts/images
+  await new Promise(r => setTimeout(r, 700));
+  const contentHeight = wrapper.scrollHeight || 800;
+
+  let canvas: HTMLCanvasElement;
+  try {
+    const { default: html2canvas } = await import('html2canvas');
+    canvas = await html2canvas(wrapper, {
+      width: dotWidth,
+      height: contentHeight,
+      scale: 1,
+      backgroundColor: '#ffffff',
+      useCORS: false,
+      logging: false,
+      allowTaint: true,
+      imageTimeout: 3000,
+      removeContainer: false,
+    });
+  } finally {
+    wrapper.remove();
+  }
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D context unavailable');
+
+  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const { width, height } = canvas;
+  const actualBpl = Math.ceil(width / 8);
+
+  // Build ESC/POS bytes ───────────────────────────────────────────────────────
+  const buf: number[] = [];
+
+  // Init printer
+  buf.push(ESC, 0x40);
+
+  // GS v 0 — Raster bit image (most compatible across Xprinter / Epson clones)
+  // Format: GS v 0 m xL xH yL yH d...
+  // m = 0 (normal), xL/xH = bytes per line, yL/yH = number of dot rows
+  buf.push(GS, 0x76, 0x30, 0x00);
+  buf.push(actualBpl & 0xff, (actualBpl >> 8) & 0xff);
+  buf.push(height & 0xff, (height >> 8) & 0xff);
+
+  // Rasterize: luminance threshold 128 (dark pixel → bit=1, MSB first)
+  for (let y = 0; y < height; y++) {
+    for (let bx = 0; bx < actualBpl; bx++) {
+      let byte = 0;
+      for (let bit = 0; bit < 8; bit++) {
+        const px = bx * 8 + bit;
+        if (px < width) {
+          const i = (y * width + px) * 4;
+          const lum = 0.299 * imgData.data[i] + 0.587 * imgData.data[i + 1] + 0.114 * imgData.data[i + 2];
+          if (lum < 128) byte |= 1 << (7 - bit);
+        }
+      }
+      buf.push(byte);
+    }
+  }
+
+  // Feed lines then full cut
+  buf.push(ESC, 0x64, Math.max(1, feedLines));
+  buf.push(GS, 0x56, 0x41, 0x03);
+
+  return new Uint8Array(buf);
+}
+
 // ─── Main print function ──────────────────────────────────────────────────────
 
 export type PrintJobType = 'receipt' | 'kitchen' | 'employee-card';
