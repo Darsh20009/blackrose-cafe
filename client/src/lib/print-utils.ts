@@ -585,24 +585,34 @@ export async function buildReceiptPreviewHtml(data: TaxInvoiceData): Promise<str
   return `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
+/* ── Screen: paper tape look ─────────────────────────────── */
 body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e0;display:flex;justify-content:center;align-items:flex-start;padding:24px 10px;min-height:100vh;}
-@media print{body{background:#fff;padding:0;display:block;}  .paper{width:76mm;box-shadow:none;} .tape{display:none;} .body{padding:5px 4px 8px;}}
 .paper{background:#fff;width:290px;box-shadow:0 4px 20px rgba(0,0,0,.2);}
 .tape{height:14px;background:repeating-linear-gradient(90deg,#fff 0,#fff 12px,#e8e6e0 12px,#e8e6e0 24px);}
 .body{padding:14px 12px;}
 .c{text-align:center;}
 .sep{border:none;border-top:2px solid #111;margin:8px 0;}
 .dsep{border:none;border-top:1px dashed #aaa;margin:5px 0;}
-.tbl{width:100%;border-collapse:collapse;}
-.tbl td{padding:2.5px 0;font-size:12px;vertical-align:middle;}
-.tbl td:last-child{text-align:left;}
+.tbl{width:100%;border-collapse:collapse;table-layout:fixed;}
+.tbl td{padding:2.5px 0;font-size:12px;vertical-align:middle;word-break:break-word;}
+.tbl td:first-child{width:55%;white-space:nowrap;}
+.tbl td:last-child{text-align:left;width:45%;}
+/* ── Print: clean thermal layout ────────────────────────── */
+@media print{
+  @page{size:80mm auto;margin:0;}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
+  body{display:block!important;background:#fff!important;padding:0!important;min-height:0!important;}
+  .paper{width:76mm!important;max-width:76mm!important;margin:0!important;box-shadow:none!important;}
+  .tape{display:none!important;}
+  .body{padding:5px 4px 10px!important;}
+}
 </style></head><body><div class="paper">
 <div class="tape"></div>
 <div class="body">
 
   <!-- Header -->
   <div class="c" style="padding-bottom:8px;">
-    <img src="${logoSrc}" style="width:70px;height:70px;object-fit:contain;display:block;margin:0 auto 5px;"
+    <img src="${logoSrc}" style="width:100px;height:100px;object-fit:contain;display:block;margin:0 auto 6px;"
       onerror="this.style.display='none'" />
     <div style="font-size:17px;font-weight:900;letter-spacing:1px;">${COMPANY_NAME}</div>
     ${data.branchName ? `<div style="font-size:11px;color:#555;margin-top:1px;">${data.branchName}</div>` : ''}
@@ -1019,7 +1029,8 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 
     function _printViaHiddenIframe(html) {
       var f = document.createElement('iframe');
-      f.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;';
+      // Use proper paper width so content lays out correctly before printing
+      f.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:340px;height:1400px;border:none;opacity:0;visibility:hidden;';
       document.body.appendChild(f);
       var url = makeBlobUrl(html);
       f.src = url;
