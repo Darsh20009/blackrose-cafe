@@ -167,36 +167,36 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
       {/* Invoice Preview */}
       <div
         ref={invoiceRef}
-        style={{ direction: "rtl" }}
-        className="bg-white rounded-none p-10 max-w-[80mm] mx-auto text-black"
+        style={{ direction: "rtl", lineHeight: 1.7 }}
+        className="bg-white rounded-none p-6 max-w-[80mm] mx-auto text-black"
         data-testid="invoice-preview"
       >
         {/* Header */}
-        <div className="text-center mb-4 pb-2 border-b border-black">
-          <p className="text-[12px] font-black uppercase tracking-wider">{brand.nameEn}</p>
-          <p className="text-[9px] font-bold uppercase tracking-tight opacity-70">Tax Invoice - فاتورة ضريبية</p>
+        <div className="text-center mb-4 pb-3 border-b-2 border-black">
+          <p className="text-[15px] font-black uppercase tracking-wider">{brand.nameEn}</p>
+          <p className="text-[12px] font-bold uppercase tracking-tight opacity-80 mt-1">Tax Invoice - فاتورة ضريبية</p>
         </div>
 
         {/* Order Info */}
-        <div className="grid grid-cols-2 gap-1 mb-3 text-[9px] border-b border-black/5 pb-2">
-          <div className="space-y-0.5">
-            <div className="flex justify-between">
-              <span className="opacity-60">رقم الفاتورة:</span>
-              <span className="font-mono">{fmtOrderNum(order.orderNumber)}</span>
+        <div className="grid grid-cols-2 gap-2 mb-4 text-[12px] border-b border-black pb-3">
+          <div className="space-y-1.5">
+            <div className="flex justify-between gap-2">
+              <span className="opacity-70">رقم الفاتورة:</span>
+              <span className="font-mono font-bold">{fmtOrderNum(order.orderNumber)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="opacity-60">التاريخ:</span>
+            <div className="flex justify-between gap-2">
+              <span className="opacity-70">التاريخ:</span>
               <span>{new Date(order.createdAt).toLocaleDateString('ar-SA')}</span>
             </div>
           </div>
-          <div className="space-y-0.5 text-left">
-            <div className="flex justify-between flex-row-reverse">
-              <span className="opacity-60">:الوقت</span>
+          <div className="space-y-1.5 text-left">
+            <div className="flex justify-between flex-row-reverse gap-2">
+              <span className="opacity-70">:الوقت</span>
               <span>{new Date(order.createdAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
             {order.tableNumber && (
-              <div className="flex justify-between flex-row-reverse">
-                <span className="opacity-60">:الطاولة</span>
+              <div className="flex justify-between flex-row-reverse gap-2">
+                <span className="opacity-70">:الطاولة</span>
                 <span className="font-bold">#{order.tableNumber}</span>
               </div>
             )}
@@ -204,35 +204,36 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
         </div>
 
         {/* Items Table */}
-        <div className="mb-3">
-          <table className="w-full text-[10px]">
+        <div className="mb-4">
+          <table className="w-full text-[13px] border-collapse">
             <thead>
-              <tr className="border-b border-black">
-                <th className="text-right py-1">المنتج</th>
-                <th className="text-center py-1">كمية</th>
-                <th className="text-left py-1">المجموع</th>
+              <tr className="border-b-2 border-black">
+                <th className="text-right py-2 font-bold">المنتج</th>
+                <th className="text-center py-2 font-bold w-10">كمية</th>
+                <th className="text-left py-2 font-bold w-16">المجموع</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {items.map((item: any, index: number) => {
                 const inlineAddons = item.customization?.selectedItemAddons || [];
                 const itemNameAr = item.nameAr || item.coffeeItem?.nameAr || item.name || '';
                 const itemNameEn = item.nameEn || item.coffeeItem?.nameEn || '';
+                const isLast = index === items.length - 1;
                 return (
-                  <tr key={index}>
-                    <td className="py-1 text-right">
-                      <div className="font-medium">{itemNameAr}</div>
+                  <tr key={index} className={isLast ? '' : 'border-b border-gray-300'}>
+                    <td className="py-3 text-right align-top">
+                      <div className="font-bold leading-relaxed">{itemNameAr}</div>
                       {itemNameEn && itemNameEn !== itemNameAr && (
-                        <div className="text-[9px] text-gray-400 mt-0.5 ltr text-right">{itemNameEn}</div>
+                        <div className="text-[11px] text-gray-500 mt-1 ltr text-right">{itemNameEn}</div>
                       )}
                       {inlineAddons.length > 0 && (
-                        <div className="text-[9px] text-gray-500 mt-0.5">
+                        <div className="text-[11px] text-gray-600 mt-1 leading-relaxed">
                           + {inlineAddons.map((a: any) => a.nameAr).join('، ')}
                         </div>
                       )}
                     </td>
-                    <td className="py-1 text-center">{item.quantity}</td>
-                    <td className="py-1 text-left font-medium">
+                    <td className="py-3 text-center align-top font-bold">{item.quantity}</td>
+                    <td className="py-3 text-left align-top font-bold">
                       {(parseFloat(item.price || 0) * (item.quantity || 1)).toFixed(2)}
                     </td>
                   </tr>
@@ -243,27 +244,27 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
         </div>
 
         {/* Totals */}
-        <div className="border-t border-black pt-1.5 space-y-0.5 text-[10px]">
+        <div className="border-t-2 border-black pt-3 space-y-1.5 text-[13px]">
           <div className="flex justify-between">
             <span>المجموع الفرعي:</span>
-            <span>{(Number(order.totalAmount) / 1.15).toFixed(2)} <SarIcon /></span>
+            <span className="font-medium">{(Number(order.totalAmount) / 1.15).toFixed(2)} <SarIcon /></span>
           </div>
           <div className="flex justify-between">
             <span>الضريبة (15%):</span>
-            <span>{(Number(order.totalAmount) - (Number(order.totalAmount) / 1.15)).toFixed(2)} <SarIcon /></span>
+            <span className="font-medium">{(Number(order.totalAmount) - (Number(order.totalAmount) / 1.15)).toFixed(2)} <SarIcon /></span>
           </div>
-          <div className="flex justify-between text-sm font-black border-t border-black mt-1 pt-1">
+          <div className="flex justify-between text-[16px] font-black border-t-2 border-black mt-2 pt-2">
             <span>الإجمالي:</span>
             <span>{Number(order.totalAmount).toFixed(2)} <SarIcon /></span>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-4 pt-2 border-t border-black text-[9px]">
-          <p className="font-bold">شكراً لزيارتكم</p>
+        <div className="text-center mt-5 pt-3 border-t-2 border-black text-[12px] space-y-1">
+          <p className="font-bold text-[14px]">شكراً لزيارتكم</p>
           <p>الرقم الضريبي: 312718675800003</p>
           <p>السجل التجاري: 1163184110</p>
-          <p className="font-bold mt-1 tracking-tight">www.blackrose.com.sa</p>
+          <p className="font-bold mt-2 tracking-tight">www.blackrose.com.sa</p>
         </div>
       </div>
 
