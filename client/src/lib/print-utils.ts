@@ -724,9 +724,12 @@ body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e
   <!-- Invoice label + Order number (3-line gap between them) -->
   <div class="c" style="font-size:18px;font-weight:700;">فاتورة ضريبية مبسطة</div>
   <div style="height:54px;"></div>
-  <div class="c" style="font-size:48px;font-weight:900;letter-spacing:5px;line-height:1.1;margin-bottom:8px;">#${orderNumDisplay}</div>
+  <div class="c" style="font-size:48px;font-weight:900;letter-spacing:5px;line-height:1.1;">#${orderNumDisplay}</div>
 
-  <div class="gap"></div>
+  <!-- Decorative separator between order number and date (3-line gap above & below) -->
+  <div style="height:54px;"></div>
+  <div style="border-top:2px solid #111;width:100%;height:0;"></div>
+  <div style="height:54px;"></div>
 
   <!-- Info rows -->
   <table class="tbl">
