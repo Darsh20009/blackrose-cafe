@@ -669,35 +669,37 @@ export async function buildReceiptPreviewHtml(data: TaxInvoiceData): Promise<str
     const lineTotal = item.quantity * up - itemDisc;
     const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
     return `
-      <div style="padding:7px 0;border-bottom:1px dashed #ccc;">
-        <div style="font-weight:700;font-size:14px;">${item.coffeeItem.nameAr}${itemDisc > 0 ? ` <span style="font-size:10px;color:#16a34a;">(-${itemDisc.toFixed(2)})</span>` : ''}</div>
-        ${addons ? `<div style="font-size:11px;color:#666;margin-top:2px;">+ ${addons}</div>` : ''}
-        <table style="width:100%;margin-top:4px;border-collapse:collapse;"><tr>
-          <td style="font-size:12px;color:#555;">${item.quantity} × ${up.toFixed(2)} ر.س</td>
-          <td style="text-align:left;font-size:12px;font-weight:600;">${lineTotal.toFixed(2)} ر.س</td>
+      <div style="padding:8px 0;">
+        <div style="font-weight:700;font-size:19px;">${item.coffeeItem.nameAr}${itemDisc > 0 ? ` <span style="font-size:14px;color:#16a34a;">(-${itemDisc.toFixed(2)})</span>` : ''}</div>
+        ${addons ? `<div style="font-size:15px;color:#444;margin-top:3px;">+ ${addons}</div>` : ''}
+        <table style="width:100%;margin-top:5px;border-collapse:collapse;border:0;"><tr>
+          <td style="font-size:17px;color:#222;border:0;">${item.quantity} × ${up.toFixed(2)} ر.س</td>
+          <td style="text-align:left;font-size:17px;font-weight:700;border:0;">${lineTotal.toFixed(2)} ر.س</td>
         </tr></table>
       </div>`;
   }).join('');
 
   return `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
 <style>
-*{margin:0;padding:0;box-sizing:border-box;}
+*{margin:0;padding:0;box-sizing:border-box;border:0!important;border-color:transparent!important;}
+hr{display:none!important;}
+table,tr,td,th,thead,tbody{border:0!important;border-collapse:collapse!important;}
 /* ── Screen: paper tape look ─────────────────────────────── */
 body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e0;display:flex;justify-content:center;align-items:flex-start;padding:24px 10px;min-height:100vh;}
-.paper{background:#fff;width:290px;box-shadow:0 4px 20px rgba(0,0,0,.2);}
+.paper{background:#fff;width:320px;box-shadow:0 4px 20px rgba(0,0,0,.2);}
 .tape{height:14px;background:repeating-linear-gradient(90deg,#fff 0,#fff 12px,#e8e6e0 12px,#e8e6e0 24px);}
-.body{padding:14px 12px;}
+.body{padding:16px 14px;}
 .c{text-align:center;}
-.sep{border:none;border-top:2px solid #111;margin:8px 0;}
-.dsep{border:none;border-top:1px dashed #aaa;margin:5px 0;}
-.tbl{width:100%;border-collapse:collapse;table-layout:fixed;}
-.tbl td{padding:2.5px 0;font-size:12px;vertical-align:middle;word-break:break-word;}
+.gap{height:8px;}
+.tbl{width:100%;table-layout:fixed;}
+.tbl td{padding:4px 0;font-size:18px;vertical-align:middle;word-break:break-word;}
 .tbl td:first-child{width:55%;white-space:nowrap;}
 .tbl td:last-child{text-align:left;width:45%;}
 /* ── Print: clean thermal layout ────────────────────────── */
 @media print{
   @page{size:80mm auto;margin:0;}
-  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;border:0!important;}
+  hr{display:none!important;}
   body{display:block!important;background:#fff!important;padding:0!important;min-height:0!important;}
   .paper{width:76mm!important;max-width:76mm!important;margin:0!important;box-shadow:none!important;}
   .tape{display:none!important;}
@@ -708,23 +710,23 @@ body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e
 <div class="body">
 
   <!-- Header -->
-  <div class="c" style="padding-bottom:8px;">
-    <img src="${logoSrc}" style="width:60px;height:60px;object-fit:contain;display:block;margin:0 auto 6px;"
+  <div class="c" style="padding-bottom:6px;">
+    <img src="${logoSrc}" style="width:80px;height:80px;object-fit:contain;display:block;margin:0 auto 8px;"
       onerror="this.style.display='none'" />
-    <div style="font-size:17px;font-weight:900;letter-spacing:1px;">${COMPANY_NAME}</div>
-    ${data.branchName ? `<div style="font-size:11px;color:#555;margin-top:1px;">${data.branchName}</div>` : ''}
-    <div style="font-size:10px;color:#888;margin-top:2px;font-style:italic;">${TAGLINE}</div>
-    <div style="font-size:10px;color:#777;margin-top:2px;">VAT: ${data.vatNumber || VAT_NUMBER}</div>
+    <div style="font-size:24px;font-weight:900;letter-spacing:1px;">${COMPANY_NAME}</div>
+    ${data.branchName ? `<div style="font-size:16px;color:#333;margin-top:2px;">${data.branchName}</div>` : ''}
+    <div style="font-size:14px;color:#444;margin-top:3px;font-style:italic;">${TAGLINE}</div>
+    <div style="font-size:14px;color:#333;margin-top:3px;">VAT: ${data.vatNumber || VAT_NUMBER}</div>
   </div>
 
-  <hr class="sep"/>
+  <div class="gap"></div>
 
   <!-- Invoice label + Order number -->
-  <div class="c" style="font-size:12px;font-weight:700;margin-bottom:4px;">فاتورة ضريبية مبسطة</div>
-  <div class="c" style="font-size:11px;color:#555;margin-bottom:2px;">رقم الطلب</div>
-  <div class="c" style="font-size:38px;font-weight:900;letter-spacing:5px;line-height:1.1;margin-bottom:6px;">#${orderNumDisplay}</div>
+  <div class="c" style="font-size:18px;font-weight:700;margin-bottom:6px;">فاتورة ضريبية مبسطة</div>
+  <div class="c" style="font-size:16px;color:#333;margin-bottom:2px;">رقم الطلب</div>
+  <div class="c" style="font-size:48px;font-weight:900;letter-spacing:5px;line-height:1.1;margin-bottom:8px;">#${orderNumDisplay}</div>
 
-  <hr class="dsep"/>
+  <div class="gap"></div>
 
   <!-- Info rows -->
   <table class="tbl">
@@ -735,12 +737,12 @@ body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e
     ${orderTypeLabel ? `<tr><td>نوع الطلب:</td><td>${orderTypeLabel}</td></tr>` : ''}
   </table>
 
-  <hr class="sep"/>
+  <div class="gap"></div>
 
   <!-- Items -->
   ${itemsHtml}
 
-  <hr class="sep"/>
+  <div class="gap"></div>
 
   <!-- Totals -->
   <table class="tbl">
@@ -749,46 +751,46 @@ body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e
     ${disc > 0 ? `<tr><td style="color:#16a34a;">الخصم:</td><td style="color:#16a34a;">-${disc.toFixed(2)} ر.س</td></tr>` : ''}
   </table>
 
-  <hr class="sep"/>
+  <div class="gap"></div>
 
-  <!-- Total — NOT bold, normal weight per design -->
+  <!-- Total -->
   <table class="tbl">
     <tr>
-      <td style="font-size:15px;">الإجمالي:</td>
-      <td style="font-size:15px;text-align:left;">${totalAmount.toFixed(2)} ر.س</td>
+      <td style="font-size:24px;font-weight:900;">الإجمالي:</td>
+      <td style="font-size:24px;font-weight:900;text-align:left;">${totalAmount.toFixed(2)} ر.س</td>
     </tr>
   </table>
 
-  <hr class="dsep"/>
+  <div class="gap"></div>
 
   <!-- Payment -->
   <table class="tbl">
     <tr><td>طريقة الدفع:</td><td>${data.paymentMethod}</td></tr>
     ${data.splitPayment ? `
-    <tr><td style="padding-right:6px;font-size:11px;">نقدي:</td><td style="font-size:11px;">${data.splitPayment.cash.toFixed(2)} ر.س</td></tr>
-    <tr><td style="padding-right:6px;font-size:11px;">شبكة:</td><td style="font-size:11px;">${data.splitPayment.card.toFixed(2)} ر.س</td></tr>` : ''}
+    <tr><td style="padding-right:6px;font-size:16px;">نقدي:</td><td style="font-size:16px;">${data.splitPayment.cash.toFixed(2)} ر.س</td></tr>
+    <tr><td style="padding-right:6px;font-size:16px;">شبكة:</td><td style="font-size:16px;">${data.splitPayment.card.toFixed(2)} ر.س</td></tr>` : ''}
   </table>
 
   ${trackingQrUrl ? `
-  <hr class="sep"/>
+  <div class="gap"></div>
   <div class="c" style="padding:6px 0;">
-    <img src="${trackingQrUrl}" style="width:120px;height:120px;display:block;margin:0 auto;" />
-    <div style="font-size:10px;color:#666;margin-top:3px;">امسح للتتبع وتسجيل النقاط</div>
+    <img src="${trackingQrUrl}" style="width:140px;height:140px;display:block;margin:0 auto;" />
+    <div style="font-size:14px;color:#333;margin-top:4px;">امسح للتتبع وتسجيل النقاط</div>
   </div>` : ''}
 
-  <hr class="sep"/>
+  <div class="gap"></div>
 
   <!-- Footer -->
-  <div class="c" style="font-size:14px;font-weight:700;margin:5px 0;">** شكراً لزيارتكم **</div>
-  <div class="c" style="font-size:10px;color:#666;">الأسعار شاملة ضريبة القيمة المضافة 15%</div>
-  <div class="c" style="font-size:10px;color:#888;font-style:italic;margin-top:2px;">${TAGLINE}</div>
-  <div class="c" style="font-size:12px;font-weight:700;margin-top:3px;">${COMPANY_NAME}</div>
+  <div class="c" style="font-size:20px;font-weight:700;margin:6px 0;">** شكراً لزيارتكم **</div>
+  <div class="c" style="font-size:14px;color:#333;">الأسعار شاملة ضريبة القيمة المضافة 15%</div>
+  <div class="c" style="font-size:14px;color:#444;font-style:italic;margin-top:3px;">${TAGLINE}</div>
+  <div class="c" style="font-size:18px;font-weight:700;margin-top:4px;">${COMPANY_NAME}</div>
 
   ${zatcaQrUrl ? `
-  <hr class="dsep"/>
+  <div class="gap"></div>
   <div class="c" style="padding:8px 0;">
-    <img src="${zatcaQrUrl}" style="width:160px;height:160px;display:block;margin:0 auto;" />
-    <div style="font-size:10px;color:#888;margin-top:3px;">ZATCA · باركود الضريبة</div>
+    <img src="${zatcaQrUrl}" style="width:180px;height:180px;display:block;margin:0 auto;" />
+    <div style="font-size:14px;color:#444;margin-top:4px;">ZATCA · باركود الضريبة</div>
   </div>` : ''}
 
 </div>
