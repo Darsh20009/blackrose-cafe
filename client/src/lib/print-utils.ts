@@ -723,7 +723,6 @@ body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e
 
   <!-- Invoice label + Order number -->
   <div class="c" style="font-size:18px;font-weight:700;margin-bottom:6px;">فاتورة ضريبية مبسطة</div>
-  <div class="c" style="font-size:16px;color:#333;margin-bottom:2px;">رقم الطلب</div>
   <div class="c" style="font-size:48px;font-weight:900;letter-spacing:5px;line-height:1.1;margin-bottom:8px;">#${orderNumDisplay}</div>
 
   <div class="gap"></div>
@@ -814,45 +813,39 @@ export function buildEmployeeReceiptPreviewHtml(data: TaxInvoiceData): string {
   const itemsHtml = data.items.map(item => {
     const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
     return `
-      <div style="padding:10px 0;border-bottom:1px dashed #ccc;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-        <div style="flex:1;">
-          <div style="font-size:16px;font-weight:800;line-height:1.3;">${item.coffeeItem.nameAr}</div>
-          ${addons ? `<div style="font-size:11px;color:#666;margin-top:3px;">+ ${addons}</div>` : ''}
-        </div>
-        <div style="font-size:24px;font-weight:900;background:#000;color:#fff;padding:4px 14px;border-radius:6px;white-space:nowrap;min-width:50px;text-align:center;">×${item.quantity}</div>
+      <div style="padding:8px 0;">
+        <div style="font-size:22px;font-weight:800;line-height:1.4;">${item.quantity} × ${item.coffeeItem.nameAr}</div>
+        ${addons ? `<div style="font-size:16px;color:#333;margin-top:3px;">+ ${addons}</div>` : ''}
       </div>`;
   }).join('');
 
   return `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
 <style>
-*{margin:0;padding:0;box-sizing:border-box;}
+*{margin:0;padding:0;box-sizing:border-box;border:0!important;}
+hr{display:none!important;}
 body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e0;display:flex;justify-content:center;align-items:flex-start;padding:24px 10px;min-height:100vh;}
-.paper{background:#fff;width:290px;box-shadow:0 4px 20px rgba(0,0,0,.2);}
+.paper{background:#fff;width:320px;box-shadow:0 4px 20px rgba(0,0,0,.2);}
 .tape{height:14px;background:repeating-linear-gradient(90deg,#fff 0,#fff 12px,#e8e6e0 12px,#e8e6e0 24px);}
-.body{padding:14px 12px;}
-.header{text-align:center;background:#000;color:#fff;padding:10px 8px;margin-bottom:10px;border-radius:4px;}
-.header-title{font-size:13px;font-weight:700;letter-spacing:1px;}
-.order-num{font-size:42px;font-weight:900;letter-spacing:4px;border:3px solid #000;border-radius:6px;padding:6px 0;text-align:center;margin:8px 0;font-family:monospace;color:#000;}
-.badge{display:inline-block;background:#b45309;color:#fff;font-size:13px;font-weight:700;padding:4px 14px;border-radius:20px;margin:0 auto 6px;display:block;text-align:center;width:fit-content;margin:0 auto;}
-.type-badge{display:block;text-align:center;font-size:13px;font-weight:700;color:#1e40af;background:#dbeafe;padding:3px 10px;border-radius:4px;margin:4px 0;}
-.meta{font-size:11px;color:#666;text-align:center;margin-bottom:8px;}
-.sep{border:none;border-top:2px solid #000;margin:8px 0;}
-.dsep{border:none;border-top:1px dashed #aaa;margin:5px 0;}
-.footer{font-size:10px;color:#888;text-align:center;margin-top:10px;padding-top:8px;border-top:1px dashed #ccc;}
+.body{padding:18px 16px;}
+.c{text-align:center;}
+.gap{height:10px;}
+@media print{
+  @page{size:80mm auto;margin:0;}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;border:0!important;}
+  hr{display:none!important;}
+  body{display:block!important;background:#fff!important;padding:0!important;min-height:0!important;}
+  .paper{width:76mm!important;max-width:76mm!important;margin:0!important;box-shadow:none!important;}
+  .tape{display:none!important;}
+  .body{padding:6px 4px 12px!important;}
+}
 </style></head><body><div class="paper">
 <div class="tape"></div>
 <div class="body">
-  <div class="header">
-    <div class="header-title">ورقة التحضير — نسخة الموظف</div>
-  </div>
-  <div class="order-num">#${orderNumDisplay}</div>
-  ${data.tableNumber ? `<div class="badge">طاولة ${data.tableNumber}</div>` : ''}
-  ${orderTypeLabel ? `<div class="type-badge">${orderTypeLabel}</div>` : ''}
-  <div class="meta">${fmtTime} — ${fmtDate} | الكاشير: ${data.employeeName || '—'}</div>
-  <hr class="sep"/>
+  <div class="c" style="font-size:24px;font-weight:900;">نسخة الموظف</div>
+  <div class="gap"></div>
+  <div class="c" style="font-size:48px;font-weight:900;letter-spacing:4px;">#${orderNumDisplay}</div>
+  <div class="gap"></div>
   ${itemsHtml}
-  <hr class="sep"/>
-  <div class="footer">العميل: ${data.customerName || 'نقدي'} | الإجمالي: ${parseNumber(data.total).toFixed(2)} ر.س</div>
 </div>
 <div class="tape"></div>
 </div></body></html>`;

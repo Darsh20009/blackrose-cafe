@@ -629,9 +629,8 @@ export async function buildReceiptCanvas(opts: ReceiptBitmapOpts): Promise<HTMLC
   addText('فاتورة ضريبية مبسطة', 'center', FS, true);
   addGap(4);
 
-  // Order number — label + number (not bold total)
+  // Order number (no label, just the number — large and bold)
   const orderNumFmt = String(opts.orderNumber).replace(/\D/g, '').padStart(4, '0') || opts.orderNumber;
-  addText('رقم الطلب', 'center', FS);
   addText(`#${orderNumFmt}`, 'center', Math.round(FS * 2.8), true);
 
   addLine(false, true);
@@ -840,7 +839,7 @@ export interface EmployeeCopyOpts {
 export async function buildEmployeeCopyCanvas(opts: EmployeeCopyOpts): Promise<HTMLCanvasElement> {
   const DW = opts.paperWidth === '58mm' ? 384 : 576;
   const PAD = Math.round(DW * 0.04);
-  const FS = opts.paperWidth === '58mm' ? 14 : 18;
+  const FS = opts.paperWidth === '58mm' ? 20 : 26;
 
   const canvas = document.createElement('canvas');
   canvas.width = DW;
@@ -849,143 +848,47 @@ export async function buildEmployeeCopyCanvas(opts: EmployeeCopyOpts): Promise<H
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, DW, 4000);
 
-  let y = 16;
-  const lh = (fs: number) => Math.ceil(fs * 1.5);
+  let y = 18;
+  const lh = (fs: number) => Math.ceil(fs * 1.6);
 
-  const drawCenter = (text: string, fs: number, bold = false, color = '#000') => {
+  const drawCenter = (text: string, fs: number, bold = false) => {
     ctx.font = `${bold ? '700' : '400'} ${fs}px Tahoma, Arial, sans-serif`;
-    ctx.fillStyle = color;
+    ctx.fillStyle = '#000';
     ctx.direction = 'rtl';
     ctx.textAlign = 'center';
     ctx.fillText(text, DW / 2, y);
     y += lh(fs);
   };
-  const drawRight = (text: string, fs: number, bold = false, color = '#000') => {
+  const drawRight = (text: string, fs: number, bold = false) => {
     ctx.font = `${bold ? '700' : '400'} ${fs}px Tahoma, Arial, sans-serif`;
-    ctx.fillStyle = color;
+    ctx.fillStyle = '#000';
     ctx.direction = 'rtl';
     ctx.textAlign = 'right';
     ctx.fillText(text, DW - PAD, y);
     y += lh(fs);
   };
-  const drawRow = (label: string, value: string, fs: number, boldValue = false) => {
-    ctx.font = `400 ${fs}px Tahoma, Arial, sans-serif`;
-    ctx.fillStyle = '#000';
-    ctx.direction = 'rtl';
-    ctx.textAlign = 'right';
-    ctx.fillText(label, DW - PAD, y);
-    ctx.font = `${boldValue ? '700' : '400'} ${fs}px Tahoma, Arial, sans-serif`;
-    ctx.direction = 'ltr';
-    ctx.textAlign = 'left';
-    ctx.fillText(value, PAD, y);
-    y += lh(fs);
-  };
-  const drawLine = (thick = false, dashed = false) => {
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = thick ? 2.5 : 1;
-    ctx.setLineDash(dashed ? [6, 5] : []);
-    ctx.beginPath();
-    ctx.moveTo(PAD, y + 2);
-    ctx.lineTo(DW - PAD, y + 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    y += 12;
-  };
-  const drawBlackBar = (text: string, fs: number) => {
-    const h = lh(fs) + 6;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(PAD, y - lh(fs) + 6, DW - PAD * 2, h);
-    ctx.font = `700 ${fs}px Tahoma, Arial, sans-serif`;
-    ctx.fillStyle = '#fff';
-    ctx.direction = 'rtl';
-    ctx.textAlign = 'center';
-    ctx.fillText(text, DW / 2, y + 2);
-    y += h + 2;
-  };
 
-  // ── HEADER ────────────────────────────────────────────────────────────────
-  drawBlackBar('نسخة الموظف · ملخص الطلب', FS);
-  y += 4;
+  // ── HEADER: نسخة الموظف ──
+  drawCenter('نسخة الموظف', Math.round(FS * 1.2), true);
+  y += 8;
 
-  // Order number — extra large, centered, in border
+  // ── Order number (large, no box) ──
   const orderFmt = `#${String(opts.orderNumber).replace(/\D/g, '').padStart(4, '0') || opts.orderNumber}`;
-  const bigFs = Math.round(FS * 2.4);
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = 2.5;
-  ctx.strokeRect(PAD, y - 4, DW - PAD * 2, lh(bigFs) + 6);
-  drawCenter(orderFmt, bigFs, true);
-  y += 6;
+  drawCenter(orderFmt, Math.round(FS * 2.2), true);
+  y += 12;
 
-  if (opts.tableNumber) {
-    drawCenter(`طاولة ${opts.tableNumber}`, Math.round(FS * 1.3), true, '#b45309');
-  }
-  if (opts.orderType) {
-    drawCenter(`[ ${opts.orderType} ]`, FS, true);
-  }
-
-  drawLine(false, true);
-
-  // ── ITEMS ────────────────────────────────────────────────────────────────
+  // ── Items: each on a single line "qty × name" ──
   for (const item of opts.items) {
-    // Item name (right) + qty x N (left)
-    const itemFs = Math.round(FS * 1.05);
-    ctx.font = `700 ${itemFs}px Tahoma, Arial, sans-serif`;
-    ctx.fillStyle = '#000';
-    ctx.direction = 'rtl';
-    ctx.textAlign = 'right';
-    // Reserve space for qty box on left
-    const qtyText = `× ${item.qty}`;
-    const qtyW = ctx.measureText(qtyText).width + 16;
-    ctx.fillText(item.name, DW - PAD, y);
-    // Qty pill
-    const pillH = lh(itemFs);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(PAD, y - itemFs + 4, qtyW, pillH);
-    ctx.font = `700 ${itemFs}px Tahoma, Arial, sans-serif`;
-    ctx.fillStyle = '#fff';
-    ctx.direction = 'ltr';
-    ctx.textAlign = 'center';
-    ctx.fillText(qtyText, PAD + qtyW / 2, y);
-    y += pillH + 2;
-
+    drawRight(`${item.qty} × ${item.name}`, Math.round(FS * 1.1), true);
     if (item.addons?.length) {
       for (const a of item.addons) {
-        drawRight(`+ ${a}`, Math.round(FS * 0.85), false, '#555');
+        drawRight(`+ ${a}`, Math.round(FS * 0.9));
       }
     }
-    // Soft separator
-    ctx.strokeStyle = '#bbb';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath();
-    ctx.moveTo(PAD, y);
-    ctx.lineTo(DW - PAD, y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    y += 8;
+    y += 4;
   }
 
-  // ── NOTES ─────────────────────────────────────────────────────────────────
-  if (opts.notes) {
-    drawLine(false, true);
-    drawCenter('** ملاحظات **', FS, true);
-    drawRight(opts.notes, FS, false, '#444');
-  }
-
-  // ── TOTAL ─────────────────────────────────────────────────────────────────
-  if (opts.total !== undefined) {
-    drawLine(true);
-    drawRow('الإجمالي:', `${opts.total.toFixed(2)} ر.س`, Math.round(FS * 1.15), true);
-  }
-
-  // ── FOOTER ────────────────────────────────────────────────────────────────
-  drawLine(false, true);
-  const footFs = Math.round(FS * 0.85);
-  const footParts = [`الكاشير: ${opts.cashierName}`];
-  if (opts.orderDate) footParts.push(opts.orderDate);
-  drawCenter(footParts.join(' · '), footFs, false, '#555');
-
-  y += 24; // feed
+  y += 32; // feed
 
   // Trim
   const finalH = Math.min(y + 10, 4000);
