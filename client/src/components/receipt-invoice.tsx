@@ -172,7 +172,7 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
         data-testid="invoice-preview"
       >
         {/* Header */}
-        <div className="text-center mb-4 pb-3 border-b-2 border-black">
+        <div className="text-center mb-4 pb-3">
           <img
             src={brand.logoCustomer}
             alt={brand.nameEn}
@@ -180,29 +180,29 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
             className="mx-auto mb-2"
             style={{ width: '70%', maxWidth: 180, height: 'auto', display: 'block' }}
           />
-          <p className="text-[12px] font-bold uppercase tracking-tight opacity-80 mt-1">Tax Invoice - فاتورة ضريبية</p>
+          <p className="text-[18px] font-bold uppercase tracking-tight mt-1">Tax Invoice - فاتورة ضريبية</p>
         </div>
 
         {/* Order Info */}
-        <div className="grid grid-cols-2 gap-2 mb-4 text-[12px] border-b border-black pb-3">
+        <div className="grid grid-cols-2 gap-2 mb-4 text-[18px] pb-3">
           <div className="space-y-1.5">
             <div className="flex justify-between gap-2">
-              <span className="opacity-70">رقم الفاتورة:</span>
+              <span>رقم الفاتورة:</span>
               <span className="font-mono font-bold">{fmtOrderNum(order.orderNumber)}</span>
             </div>
             <div className="flex justify-between gap-2">
-              <span className="opacity-70">التاريخ:</span>
+              <span>التاريخ:</span>
               <span>{new Date(order.createdAt).toLocaleDateString('ar-SA')}</span>
             </div>
           </div>
           <div className="space-y-1.5 text-left">
             <div className="flex justify-between flex-row-reverse gap-2">
-              <span className="opacity-70">:الوقت</span>
+              <span>:الوقت</span>
               <span>{new Date(order.createdAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
             {order.tableNumber && (
               <div className="flex justify-between flex-row-reverse gap-2">
-                <span className="opacity-70">:الطاولة</span>
+                <span>:الطاولة</span>
                 <span className="font-bold">#{order.tableNumber}</span>
               </div>
             )}
@@ -211,12 +211,12 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
 
         {/* Items Table */}
         <div className="mb-4">
-          <table className="w-full text-[13px] border-collapse">
+          <table className="w-full text-[19px] border-collapse">
             <thead>
-              <tr className="border-b-2 border-black">
+              <tr>
                 <th className="text-right py-2 font-bold">المنتج</th>
-                <th className="text-center py-2 font-bold w-10">كمية</th>
-                <th className="text-left py-2 font-bold w-16">المجموع</th>
+                <th className="text-center py-2 font-bold w-12">كمية</th>
+                <th className="text-left py-2 font-bold w-20">المجموع</th>
               </tr>
             </thead>
             <tbody>
@@ -224,22 +224,21 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
                 const inlineAddons = item.customization?.selectedItemAddons || [];
                 const itemNameAr = item.nameAr || item.coffeeItem?.nameAr || item.name || '';
                 const itemNameEn = item.nameEn || item.coffeeItem?.nameEn || '';
-                const isLast = index === items.length - 1;
                 return (
-                  <tr key={index} className={isLast ? '' : 'border-b border-gray-300'}>
-                    <td className="py-3 text-right align-top">
+                  <tr key={index}>
+                    <td className="py-2 text-right align-top">
                       <div className="font-bold leading-relaxed">{itemNameAr}</div>
                       {itemNameEn && itemNameEn !== itemNameAr && (
-                        <div className="text-[11px] text-gray-500 mt-1 ltr text-right">{itemNameEn}</div>
+                        <div className="text-[15px] mt-1 ltr text-right">{itemNameEn}</div>
                       )}
                       {inlineAddons.length > 0 && (
-                        <div className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+                        <div className="text-[15px] mt-1 leading-relaxed">
                           + {inlineAddons.map((a: any) => a.nameAr).join('، ')}
                         </div>
                       )}
                     </td>
-                    <td className="py-3 text-center align-top font-bold">{item.quantity}</td>
-                    <td className="py-3 text-left align-top font-bold">
+                    <td className="py-2 text-center align-top font-bold">{item.quantity}</td>
+                    <td className="py-2 text-left align-top font-bold">
                       {(parseFloat(item.price || 0) * (item.quantity || 1)).toFixed(2)}
                     </td>
                   </tr>
@@ -250,7 +249,7 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
         </div>
 
         {/* Totals */}
-        <div className="border-t-2 border-black pt-3 space-y-1.5 text-[13px]">
+        <div className="pt-3 space-y-1.5 text-[19px]">
           <div className="flex justify-between">
             <span>المجموع الفرعي:</span>
             <span className="font-medium">{(Number(order.totalAmount) / 1.15).toFixed(2)} <SarIcon /></span>
@@ -259,15 +258,15 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
             <span>الضريبة (15%):</span>
             <span className="font-medium">{(Number(order.totalAmount) - (Number(order.totalAmount) / 1.15)).toFixed(2)} <SarIcon /></span>
           </div>
-          <div className="flex justify-between text-[16px] font-black border-t-2 border-black mt-2 pt-2">
+          <div className="flex justify-between text-[24px] font-black mt-2 pt-2">
             <span>الإجمالي:</span>
             <span>{Number(order.totalAmount).toFixed(2)} <SarIcon /></span>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-5 pt-3 border-t-2 border-black text-[12px] space-y-1">
-          <p className="font-bold text-[14px]">شكراً لزيارتكم</p>
+        <div className="text-center mt-5 pt-3 text-[18px] space-y-1">
+          <p className="font-bold text-[20px]">شكراً لزيارتكم</p>
           <p>الرقم الضريبي: 312718675800003</p>
           <p>السجل التجاري: 1163184110</p>
           <p className="font-bold mt-2 tracking-tight">www.blackrose.com.sa</p>
