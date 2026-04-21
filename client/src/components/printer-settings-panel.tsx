@@ -1208,6 +1208,53 @@ export default function PrinterSettingsPanel() {
 
           <Separator />
 
+          {/* عدد نسخ فاتورة العميل */}
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <Label className="text-sm font-medium">{tc("عدد نسخ فاتورة العميل", "Customer receipt copies")}</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">{tc("كم نسخة تطبع من فاتورة العميل لكل طلب", "How many customer receipts to print per order")}</p>
+            </div>
+            <Select
+              value={String(settings.customerCopies ?? 1)}
+              onValueChange={(v) => updateSetting('customerCopies', Number(v))}
+            >
+              <SelectTrigger className="w-24" data-testid="select-customer-copies">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[1, 2, 3, 4, 5].map(n => (
+                  <SelectItem key={n} value={String(n)}>{n} {tc("نسخة", "copies")}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Separator />
+
+          {/* عدد نسخ المطبخ/الموظف */}
+          <div className={`flex items-center justify-between gap-4 ${!settings.autoKitchenCopy ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div>
+              <Label className="text-sm font-medium">{tc("عدد نسخ المطبخ/الموظف", "Kitchen copies")}</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">{tc("كم نسخة تطبع من تذكرة المطبخ", "How many kitchen tickets to print")}</p>
+            </div>
+            <Select
+              value={String(settings.kitchenCopies ?? 1)}
+              onValueChange={(v) => updateSetting('kitchenCopies', Number(v))}
+              disabled={!settings.autoKitchenCopy}
+            >
+              <SelectTrigger className="w-24" data-testid="select-kitchen-copies">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[1, 2, 3, 4, 5].map(n => (
+                  <SelectItem key={n} value={String(n)}>{n} {tc("نسخة", "copies")}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Separator />
+
           {/* Paper Width */}
           <div className="flex items-center justify-between gap-4">
             <div>

@@ -930,11 +930,18 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
           feedLines: printerSettings.feedLines ?? 4,
         });
 
-        const result = await thermalPrint(escData, '', printerSettings.paperWidth);
+        const customerCopies = Math.max(1, Math.min(5, printerSettings.customerCopies || 1));
+        const kitchenCopies = Math.max(1, Math.min(5, printerSettings.kitchenCopies || 1));
+
+        let result = await thermalPrint(escData, '', printerSettings.paperWidth);
+        // طباعة نسخ إضافية لفاتورة العميل
+        for (let i = 1; i < customerCopies && result.success; i++) {
+          await new Promise(r => setTimeout(r, 1400));
+          result = await thermalPrint(escData, '', printerSettings.paperWidth);
+        }
 
         if (result.success) {
           if (printerSettings.autoKitchenCopy) {
-            await new Promise(r => setTimeout(r, 1400));
             const kitchenEsc = buildEscPosKitchenTicket({
               orderNumber: data.orderNumber,
               tableNumber: data.tableNumber,
@@ -948,7 +955,10 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
               notes: undefined,
               paperWidth: printerSettings.paperWidth,
             });
-            await thermalPrint(kitchenEsc, '', printerSettings.paperWidth);
+            for (let i = 0; i < kitchenCopies; i++) {
+              await new Promise(r => setTimeout(r, 1400));
+              await thermalPrint(kitchenEsc, '', printerSettings.paperWidth);
+            }
           }
           return;
         }
@@ -1076,10 +1086,22 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
   });
 
   if (shouldAutoPrint) {
-    // طباعة متتالية: العميل أولاً ثم نسخة الموظف بعد فاصل قصير
-    await printOneImage(receiptPng);
-    await new Promise(r => setTimeout(r, 800));
-    await printOneImage(employeePng);
+    // قراءة عدد النسخ من الإعدادات (يعمل أيضاً في وضع المتصفح)
+    const { loadPrinterSettings } = await import('./thermal-printer');
+    const ps = loadPrinterSettings();
+    const customerCopies = Math.max(1, Math.min(5, ps.customerCopies || 1));
+    const kitchenCopies = ps.autoKitchenCopy ? Math.max(1, Math.min(5, ps.kitchenCopies || 1)) : 0;
+
+    // طباعة فاتورة العميل N مرة
+    for (let i = 0; i < customerCopies; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 800));
+      await printOneImage(receiptPng);
+    }
+    // ثم نسخة الموظف N مرة
+    for (let i = 0; i < kitchenCopies; i++) {
+      await new Promise(r => setTimeout(r, 800));
+      await printOneImage(employeePng);
+    }
   } else {
     // وضع المعاينة: نافذة تعرض النسختين جنباً إلى جنب مع أزرار طباعة
     const win = window.open('', '_blank', 'width=820,height=860,scrollbars=yes,resizable=yes');

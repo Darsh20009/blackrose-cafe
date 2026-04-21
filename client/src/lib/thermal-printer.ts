@@ -46,6 +46,10 @@ export interface PrinterSettings {
   paperWidth: '58mm' | '80mm';
   autoPrint: boolean;
   autoKitchenCopy: boolean;
+  /** عدد نسخ فاتورة العميل (1-5) */
+  customerCopies: number;
+  /** عدد نسخ نسخة المطبخ/الموظف (1-5). يُستخدم فقط إذا autoKitchenCopy مفعّل */
+  kitchenCopies: number;
   vendorId?: number;
   productId?: number;
   printerName?: string;
@@ -70,6 +74,8 @@ const DEFAULT_SETTINGS: PrinterSettings = {
   paperWidth: '80mm',
   autoPrint: true,
   autoKitchenCopy: true,
+  customerCopies: 1,
+  kitchenCopies: 1,
   fontSize: 'normal',
   cuttingMode: 'auto',
   feedLines: 3,
