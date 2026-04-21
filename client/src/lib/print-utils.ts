@@ -1006,38 +1006,23 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 
   const logoDataUrl = await fetchLogoBase64().catch(() => '');
 
-  const { buildReceiptCanvas, buildEmployeeCopyCanvas } = await import('./thermal-printer');
-  const receiptCanvas = await buildReceiptCanvas({
-    shopName: COMPANY_NAME,
-    vatNumber: data.vatNumber || VAT_NUMBER,
-    branchName: data.branchName,
-    tagline: 'قَهْوَةٌ تُقَالُ وَوَرْدٌ يُهْدَى',
-    orderNumber: data.orderNumber,
-    orderDate: `${fmtDate} ${fmtTime}`,
-    cashierName: data.employeeName || '—',
-    customerName: data.customerName,
-    tableNumber: data.tableNumber,
-    orderType: orderTypeLabel,
-    items: data.items.map(item => ({
-      name: item.coffeeItem.nameAr,
-      qty: item.quantity,
-      price: parseNumber(item.coffeeItem.price),
-      addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
-    })),
-    subtotal: subtotalAmt,
-    vat: vatAmt,
-    total: totalAmount,
-    discount: discAmt,
-    splitPayment: data.splitPayment,
-    paymentMethod: data.paymentMethod,
-    logoDataUrl: logoDataUrl || undefined,
-    trackingQrDataUrl: trackingQrDataUrl || undefined,
-    zatcaQrDataUrl: zatcaQrDataUrl || undefined,
-    paperWidth: '80mm',
-    feedLines: 4,
-  });
+  const { buildEmployeeCopyCanvas } = await import('./thermal-printer');
+  const { renderReceiptPreviewToPng } = await import('./render-receipt-preview');
 
-  const receiptPng = receiptCanvas.toDataURL('image/png');
+  // ── فاتورة العميل = نفس مكوّن المعاينة بالظبط (rendered → captured) ──
+  const receiptPng = await renderReceiptPreviewToPng({
+    orderNumber: data.orderNumber,
+    createdAt: new Date(),
+    tableNumber: data.tableNumber,
+    totalAmount: totalAmount,
+    items: data.items.map(item => ({
+      nameAr: item.coffeeItem.nameAr,
+      nameEn: (item.coffeeItem as any).nameEn,
+      quantity: item.quantity,
+      price: parseNumber(item.coffeeItem.price),
+      customization: item.customization,
+    })),
+  });
 
   // ── نسخة الموظف — Canvas منفصل (نفس الأنبوب الآمن، بلا HTML) ──
   const employeeCanvas = await buildEmployeeCopyCanvas({
