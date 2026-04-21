@@ -681,7 +681,7 @@ export async function buildReceiptPreviewHtml(data: TaxInvoiceData): Promise<str
 
   return `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
 <style>
-*{margin:0;padding:0;box-sizing:border-box;border:0!important;border-color:transparent!important;}
+*{margin:0;padding:0;box-sizing:border-box;border:0;border-color:transparent;}
 hr{display:none!important;}
 table,tr,td,th,thead,tbody{border:0!important;border-collapse:collapse!important;}
 /* ── Screen: paper tape look ─────────────────────────────── */
@@ -721,8 +721,9 @@ body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e
 
   <div class="gap"></div>
 
-  <!-- Invoice label + Order number -->
-  <div class="c" style="font-size:18px;font-weight:700;margin-bottom:6px;">فاتورة ضريبية مبسطة</div>
+  <!-- Invoice label + Order number (3-line gap between them) -->
+  <div class="c" style="font-size:18px;font-weight:700;">فاتورة ضريبية مبسطة</div>
+  <div style="height:54px;"></div>
   <div class="c" style="font-size:48px;font-weight:900;letter-spacing:5px;line-height:1.1;margin-bottom:8px;">#${orderNumDisplay}</div>
 
   <div class="gap"></div>
@@ -769,6 +770,11 @@ body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e
     <tr><td style="padding-right:6px;font-size:16px;">نقدي:</td><td style="font-size:16px;">${data.splitPayment.cash.toFixed(2)} ر.س</td></tr>
     <tr><td style="padding-right:6px;font-size:16px;">شبكة:</td><td style="font-size:16px;">${data.splitPayment.card.toFixed(2)} ر.س</td></tr>` : ''}
   </table>
+
+  <!-- Decorative separator after payment (3-line gap above & below) -->
+  <div style="height:54px;"></div>
+  <div style="border-top:2px solid #111!important;width:100%;height:0;"></div>
+  <div style="height:54px;"></div>
 
   ${trackingQrUrl ? `
   <div class="gap"></div>
