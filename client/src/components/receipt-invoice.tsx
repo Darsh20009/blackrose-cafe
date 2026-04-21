@@ -173,7 +173,13 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
       >
         {/* Header */}
         <div className="text-center mb-4 pb-3 border-b-2 border-black">
-          <p className="text-[15px] font-black uppercase tracking-wider">{brand.nameEn}</p>
+          <img
+            src={brand.logoCustomer}
+            alt={brand.nameEn}
+            crossOrigin="anonymous"
+            className="mx-auto mb-2"
+            style={{ width: '70%', maxWidth: 180, height: 'auto', display: 'block' }}
+          />
           <p className="text-[12px] font-bold uppercase tracking-tight opacity-80 mt-1">Tax Invoice - فاتورة ضريبية</p>
         </div>
 
