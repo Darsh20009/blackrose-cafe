@@ -1006,7 +1006,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 
   const logoDataUrl = await fetchLogoBase64().catch(() => '');
 
-  const { buildReceiptCanvas } = await import('./thermal-printer');
+  const { buildReceiptCanvas, buildEmployeeCopyCanvas } = await import('./thermal-printer');
   const receiptCanvas = await buildReceiptCanvas({
     shopName: COMPANY_NAME,
     vatNumber: data.vatNumber || VAT_NUMBER,
@@ -1039,62 +1039,112 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 
   const receiptPng = receiptCanvas.toDataURL('image/png');
 
-  if (shouldAutoPrint) {
-    // طباعة فورية: صورة PNG واحدة → iframe → window.print()
+  // ── نسخة الموظف — Canvas منفصل (نفس الأنبوب الآمن، بلا HTML) ──
+  const employeeCanvas = await buildEmployeeCopyCanvas({
+    orderNumber: data.orderNumber,
+    tableNumber: data.tableNumber,
+    orderType: orderTypeLabel,
+    cashierName: data.employeeName || '—',
+    items: data.items.map(item => ({
+      name: item.coffeeItem.nameAr,
+      qty: item.quantity,
+      addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
+    })),
+    total: totalAmount,
+    orderDate: `${fmtDate} ${fmtTime}`,
+    paperWidth: '80mm',
+  });
+  const employeePng = employeeCanvas.toDataURL('image/png');
+
+  // ── طباعة صورة في iframe واحد ──
+  const printOneImage = (imgSrc: string): Promise<void> => new Promise(resolve => {
     const printFrame = document.createElement('iframe');
     printFrame.setAttribute('aria-hidden', 'true');
     printFrame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;pointer-events:none;';
     document.body.appendChild(printFrame);
     const pdoc = printFrame.contentDocument || printFrame.contentWindow?.document;
-    if (pdoc) {
-      pdoc.open();
-      pdoc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-        @page { size: 80mm auto; margin: 0; }
-        html,body { margin:0; padding:0; background:#fff; }
-        img { width: 80mm; display: block; margin: 0; padding: 0; }
-      </style></head><body><img src="${receiptPng}" /></body></html>`);
-      pdoc.close();
-      const img = pdoc.querySelector('img') as HTMLImageElement | null;
-      const doPrint = () => {
-        try { printFrame.contentWindow?.focus(); printFrame.contentWindow?.print(); } catch {}
-        const cleanup = () => { try { printFrame.remove(); } catch {} };
-        printFrame.contentWindow?.addEventListener('afterprint', cleanup, { once: true });
-        setTimeout(cleanup, 8000);
-      };
-      if (img && !img.complete) {
-        img.onload = () => setTimeout(doPrint, 100);
-        img.onerror = () => setTimeout(doPrint, 100);
-      } else {
-        setTimeout(doPrint, 200);
-      }
+    if (!pdoc) { try { printFrame.remove(); } catch {} ; resolve(); return; }
+    pdoc.open();
+    pdoc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+      @page { size: 80mm auto; margin: 0; }
+      html,body { margin:0; padding:0; background:#fff; }
+      img { width: 80mm; display: block; margin: 0; padding: 0; }
+    </style></head><body><img src="${imgSrc}" /></body></html>`);
+    pdoc.close();
+    const img = pdoc.querySelector('img') as HTMLImageElement | null;
+    let done = false;
+    const finish = () => {
+      if (done) return; done = true;
+      setTimeout(() => { try { printFrame.remove(); } catch {} ; resolve(); }, 200);
+    };
+    const doPrint = () => {
+      try { printFrame.contentWindow?.focus(); printFrame.contentWindow?.print(); } catch {}
+      printFrame.contentWindow?.addEventListener('afterprint', finish, { once: true });
+      setTimeout(finish, 5000);
+    };
+    if (img && !img.complete) {
+      img.onload = () => setTimeout(doPrint, 100);
+      img.onerror = () => setTimeout(doPrint, 100);
+    } else {
+      setTimeout(doPrint, 200);
     }
+  });
+
+  if (shouldAutoPrint) {
+    // طباعة متتالية: العميل أولاً ثم نسخة الموظف بعد فاصل قصير
+    await printOneImage(receiptPng);
+    await new Promise(r => setTimeout(r, 800));
+    await printOneImage(employeePng);
   } else {
-    // وضع المعاينة: نافذة منبثقة تعرض الصورة فقط مع زر طباعة
-    const win = window.open('', '_blank', 'width=520,height=820,scrollbars=yes,resizable=yes');
+    // وضع المعاينة: نافذة تعرض النسختين جنباً إلى جنب مع أزرار طباعة
+    const win = window.open('', '_blank', 'width=820,height=860,scrollbars=yes,resizable=yes');
     if (win) {
       win.document.open();
-      win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فاتورة - ${displayInvoiceNumber}</title><style>
+      win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فواتير الطلب - ${displayInvoiceNumber}</title><style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: Tahoma, Arial, sans-serif; background: #e8e8e8; padding: 16px; min-height: 100vh; text-align: center; }
-        .toolbar { margin-bottom: 16px; display: flex; gap: 10px; justify-content: center; }
-        .btn { padding: 12px 28px; font-size: 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
+        .toolbar { margin-bottom: 16px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        .btn { padding: 12px 24px; font-size: 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
         .btn-print { background: #1a1a1a; color: #fff; }
+        .btn-cust { background: #1e40af; color: #fff; }
+        .btn-emp { background: #b45309; color: #fff; }
         .btn-close { background: #6b7280; color: #fff; }
-        .receipt { display: inline-block; background: #fff; padding: 0; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
+        .frames { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+        .col { display: flex; flex-direction: column; align-items: center; }
+        h3 { font-size: 12px; font-weight: 700; color: #333; margin-bottom: 8px; background: #fff; padding: 4px 14px; border-radius: 20px; border: 1px solid #ccc; }
+        .receipt { display: inline-block; background: #fff; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
         .receipt img { display: block; width: 320px; height: auto; }
         @media print {
           body { background: #fff; padding: 0; margin: 0; }
-          .toolbar, .no-print { display: none !important; }
-          .receipt { box-shadow: none; padding: 0; border: 0; }
+          .toolbar, .no-print, h3 { display: none !important; }
+          .frames { display: block; }
+          .col { display: block; page-break-after: always; }
+          .col:last-child { page-break-after: auto; }
+          .receipt { box-shadow: none; border-radius: 0; }
           .receipt img { width: 80mm; }
           @page { size: 80mm auto; margin: 0; }
         }
       </style></head><body>
         <div class="toolbar no-print">
-          <button class="btn btn-print" onclick="window.print()">🖨️ طباعة الفاتورة</button>
+          <button class="btn btn-print" onclick="window.print()">🖨️ طباعة النسختين</button>
+          <button class="btn btn-cust" onclick="printOne('cust')">🧾 العميل فقط</button>
+          <button class="btn btn-emp" onclick="printOne('emp')">📋 الموظف فقط</button>
           <button class="btn btn-close" onclick="window.close()">✕ إغلاق</button>
         </div>
-        <div class="receipt"><img src="${receiptPng}" alt="فاتورة" /></div>
+        <div class="frames">
+          <div class="col" id="col-cust"><h3>🧾 فاتورة العميل</h3><div class="receipt"><img src="${receiptPng}" alt="فاتورة العميل" /></div></div>
+          <div class="col" id="col-emp"><h3>📋 نسخة الموظف</h3><div class="receipt"><img src="${employeePng}" alt="نسخة الموظف" /></div></div>
+        </div>
+        <script>
+          function printOne(which) {
+            var hideId = which === 'cust' ? 'col-emp' : 'col-cust';
+            var el = document.getElementById(hideId);
+            var prev = el.style.display;
+            el.style.display = 'none';
+            window.print();
+            setTimeout(function(){ el.style.display = prev; }, 500);
+          }
+        </script>
       </body></html>`);
       win.document.close();
     }

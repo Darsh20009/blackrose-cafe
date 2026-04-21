@@ -814,6 +814,181 @@ export async function buildReceiptBitmapEscPos(opts: ReceiptBitmapOpts): Promise
   return new Uint8Array(raster);
 }
 
+/**
+ * Renders a compact "Employee Copy" / kitchen ticket as a Canvas 2D bitmap.
+ * Same Arabic-safe pipeline as the main receipt — no HTML, no encoding issues.
+ */
+export interface EmployeeCopyOpts {
+  orderNumber: string;
+  tableNumber?: string;
+  orderType?: string;
+  cashierName: string;
+  items: Array<{ name: string; qty: number; addons?: string[] }>;
+  notes?: string;
+  total?: number;
+  orderDate?: string;
+  paperWidth: '58mm' | '80mm';
+}
+
+export async function buildEmployeeCopyCanvas(opts: EmployeeCopyOpts): Promise<HTMLCanvasElement> {
+  const DW = opts.paperWidth === '58mm' ? 384 : 576;
+  const PAD = Math.round(DW * 0.04);
+  const FS = opts.paperWidth === '58mm' ? 14 : 18;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = DW;
+  canvas.height = 4000;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, DW, 4000);
+
+  let y = 16;
+  const lh = (fs: number) => Math.ceil(fs * 1.5);
+
+  const drawCenter = (text: string, fs: number, bold = false, color = '#000') => {
+    ctx.font = `${bold ? '700' : '400'} ${fs}px Tahoma, Arial, sans-serif`;
+    ctx.fillStyle = color;
+    ctx.direction = 'rtl';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, DW / 2, y);
+    y += lh(fs);
+  };
+  const drawRight = (text: string, fs: number, bold = false, color = '#000') => {
+    ctx.font = `${bold ? '700' : '400'} ${fs}px Tahoma, Arial, sans-serif`;
+    ctx.fillStyle = color;
+    ctx.direction = 'rtl';
+    ctx.textAlign = 'right';
+    ctx.fillText(text, DW - PAD, y);
+    y += lh(fs);
+  };
+  const drawRow = (label: string, value: string, fs: number, boldValue = false) => {
+    ctx.font = `400 ${fs}px Tahoma, Arial, sans-serif`;
+    ctx.fillStyle = '#000';
+    ctx.direction = 'rtl';
+    ctx.textAlign = 'right';
+    ctx.fillText(label, DW - PAD, y);
+    ctx.font = `${boldValue ? '700' : '400'} ${fs}px Tahoma, Arial, sans-serif`;
+    ctx.direction = 'ltr';
+    ctx.textAlign = 'left';
+    ctx.fillText(value, PAD, y);
+    y += lh(fs);
+  };
+  const drawLine = (thick = false, dashed = false) => {
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = thick ? 2.5 : 1;
+    ctx.setLineDash(dashed ? [6, 5] : []);
+    ctx.beginPath();
+    ctx.moveTo(PAD, y + 2);
+    ctx.lineTo(DW - PAD, y + 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    y += 12;
+  };
+  const drawBlackBar = (text: string, fs: number) => {
+    const h = lh(fs) + 6;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(PAD, y - lh(fs) + 6, DW - PAD * 2, h);
+    ctx.font = `700 ${fs}px Tahoma, Arial, sans-serif`;
+    ctx.fillStyle = '#fff';
+    ctx.direction = 'rtl';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, DW / 2, y + 2);
+    y += h + 2;
+  };
+
+  // ── HEADER ────────────────────────────────────────────────────────────────
+  drawBlackBar('نسخة الموظف · ملخص الطلب', FS);
+  y += 4;
+
+  // Order number — extra large, centered, in border
+  const orderFmt = `#${String(opts.orderNumber).replace(/\D/g, '').padStart(4, '0') || opts.orderNumber}`;
+  const bigFs = Math.round(FS * 2.4);
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(PAD, y - 4, DW - PAD * 2, lh(bigFs) + 6);
+  drawCenter(orderFmt, bigFs, true);
+  y += 6;
+
+  if (opts.tableNumber) {
+    drawCenter(`طاولة ${opts.tableNumber}`, Math.round(FS * 1.3), true, '#b45309');
+  }
+  if (opts.orderType) {
+    drawCenter(`[ ${opts.orderType} ]`, FS, true);
+  }
+
+  drawLine(false, true);
+
+  // ── ITEMS ────────────────────────────────────────────────────────────────
+  for (const item of opts.items) {
+    // Item name (right) + qty x N (left)
+    const itemFs = Math.round(FS * 1.05);
+    ctx.font = `700 ${itemFs}px Tahoma, Arial, sans-serif`;
+    ctx.fillStyle = '#000';
+    ctx.direction = 'rtl';
+    ctx.textAlign = 'right';
+    // Reserve space for qty box on left
+    const qtyText = `× ${item.qty}`;
+    const qtyW = ctx.measureText(qtyText).width + 16;
+    ctx.fillText(item.name, DW - PAD, y);
+    // Qty pill
+    const pillH = lh(itemFs);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(PAD, y - itemFs + 4, qtyW, pillH);
+    ctx.font = `700 ${itemFs}px Tahoma, Arial, sans-serif`;
+    ctx.fillStyle = '#fff';
+    ctx.direction = 'ltr';
+    ctx.textAlign = 'center';
+    ctx.fillText(qtyText, PAD + qtyW / 2, y);
+    y += pillH + 2;
+
+    if (item.addons?.length) {
+      for (const a of item.addons) {
+        drawRight(`+ ${a}`, Math.round(FS * 0.85), false, '#555');
+      }
+    }
+    // Soft separator
+    ctx.strokeStyle = '#bbb';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(PAD, y);
+    ctx.lineTo(DW - PAD, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    y += 8;
+  }
+
+  // ── NOTES ─────────────────────────────────────────────────────────────────
+  if (opts.notes) {
+    drawLine(false, true);
+    drawCenter('** ملاحظات **', FS, true);
+    drawRight(opts.notes, FS, false, '#444');
+  }
+
+  // ── TOTAL ─────────────────────────────────────────────────────────────────
+  if (opts.total !== undefined) {
+    drawLine(true);
+    drawRow('الإجمالي:', `${opts.total.toFixed(2)} ر.س`, Math.round(FS * 1.15), true);
+  }
+
+  // ── FOOTER ────────────────────────────────────────────────────────────────
+  drawLine(false, true);
+  const footFs = Math.round(FS * 0.85);
+  const footParts = [`الكاشير: ${opts.cashierName}`];
+  if (opts.orderDate) footParts.push(opts.orderDate);
+  drawCenter(footParts.join(' · '), footFs, false, '#555');
+
+  y += 24; // feed
+
+  // Trim
+  const finalH = Math.min(y + 10, 4000);
+  const trimmed = document.createElement('canvas');
+  trimmed.width = DW;
+  trimmed.height = finalH;
+  trimmed.getContext('2d')!.drawImage(canvas, 0, 0);
+  return trimmed;
+}
+
 export function buildEscPosKitchenTicket(data: {
   orderNumber: string;
   tableNumber?: string;
