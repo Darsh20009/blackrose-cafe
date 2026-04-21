@@ -531,7 +531,7 @@ export async function dataUrlToEscPosRaster(
  * Draws the complete receipt using the browser's own text engine (Arabic works perfectly).
  * Output is pixel-for-pixel identical to the HTML preview.
  */
-export async function buildReceiptBitmapEscPos(opts: {
+export interface ReceiptBitmapOpts {
   shopName: string;
   vatNumber: string;
   branchName?: string;
@@ -554,7 +554,14 @@ export async function buildReceiptBitmapEscPos(opts: {
   zatcaQrDataUrl?: string;
   paperWidth: '58mm' | '80mm';
   feedLines?: number;
-}): Promise<Uint8Array> {
+}
+
+/**
+ * Renders a complete receipt to a Canvas 2D bitmap with native Arabic shaping.
+ * Returns the trimmed canvas — pixel-perfect, no HTML, no font loading races,
+ * no encoding issues. Used by both ESC/POS thermal printing and browser printing.
+ */
+export async function buildReceiptCanvas(opts: ReceiptBitmapOpts): Promise<HTMLCanvasElement> {
   const DW = opts.paperWidth === '58mm' ? 384 : 576;
   const PAD = Math.round(DW * 0.04);   // ~4% side padding
   const CONTENT_W = DW - PAD * 2;
@@ -761,9 +768,21 @@ export async function buildReceiptBitmapEscPos(opts: {
   trimmed.height = finalH;
   const tctx = trimmed.getContext('2d')!;
   tctx.drawImage(canvas, 0, 0);
+  return trimmed;
+}
+
+/**
+ * Builds the receipt as a Canvas 2D bitmap, then converts to ESC/POS GS v 0 raster bytes
+ * for direct thermal printer transmission. Arabic-safe — uses native browser text shaping.
+ */
+export async function buildReceiptBitmapEscPos(opts: ReceiptBitmapOpts): Promise<Uint8Array> {
+  const canvas = await buildReceiptCanvas(opts);
+  const DW = canvas.width;
+  const finalH = canvas.height;
+  const ctx = canvas.getContext('2d')!;
 
   // ── Convert to ESC/POS GS v 0 raster bytes ───────────────────────────────
-  const imgData = tctx.getImageData(0, 0, DW, finalH);
+  const imgData = ctx.getImageData(0, 0, DW, finalH);
   const bpl = Math.ceil(DW / 8);
   const raster: number[] = [];
 

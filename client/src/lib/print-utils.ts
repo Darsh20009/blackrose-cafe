@@ -978,226 +978,127 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     (data.orderType as string) === 'drive_thru' ? 'درايف ثرو' : ''
   );
 
-  // ══════════════════════════════════════════════════════════════
-  //  فاتورة العميل (Job 1) — مطابقة للمعاينة تماماً
-  //  يستخدم نفس buildReceiptPreviewHtml لضمان التطابق الكامل
-  // ══════════════════════════════════════════════════════════════
-  const customerHtml = await buildReceiptPreviewHtml(data);
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PURE CANVAS 2D RENDERING — لا HTML, لا html2canvas, لا تكسير عربي
+  //  نفس مولّد الصورة المستخدم للطابعة الحرارية → صورة واحدة → طباعة واحدة
+  //  حل جذري: لا يوجد أي مسار يرسل HTML للطابعة، إطلاقاً.
+  // ══════════════════════════════════════════════════════════════════════════
+  const subtotalAmt = totalAmount / (1 + VAT_RATE);
+  const vatAmt = totalAmount - subtotalAmt;
+  const discAmt = data.invoiceDiscount ? parseNumber(data.invoiceDiscount) : 0;
+  const { date: fmtDate, time: fmtTime } = formatDate(data.date);
 
-  // ══════════════════════════════════════════════
-  //  فاتورة الموظف / المطبخ  (Job 2)
-  // ══════════════════════════════════════════════
-  const empHtml = `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <title>نسخة الموظف - ${displayInvoiceNumber}</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
-    @page { size: 80mm auto; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Cairo', Arial, sans-serif; background: #fff; color: #000; direction: rtl; }
-    .wrap { width: 76mm; margin: 0 auto; padding: 6px 4px; }
-    .ehdr { text-align: center; font-size: 13px; font-weight: 700; background: #000; color: #fff;
-            padding: 5px 4px; border-radius: 4px; margin-bottom: 8px; }
-    .eorder { font-size: 34px; font-weight: 700; text-align: center; margin: 4px 0;
-              letter-spacing: 3px; font-family: monospace; border: 2px solid #000;
-              border-radius: 6px; padding: 4px 0; }
-    .etable { text-align: center; }
-    .etag { display: inline-block; font-size: 20px; font-weight: 700; border: 2px solid #b45309;
-            color: #b45309; padding: 3px 14px; border-radius: 5px; margin: 4px auto; }
-    .etype { text-align: center; font-size: 14px; font-weight: 700; background: #f0f0f0;
-             padding: 4px; border-radius: 4px; margin: 4px 0 8px; }
-    .eitems { border-top: 2px dashed #000; margin-top: 4px; padding-top: 4px; }
-    .eitem { display: flex; justify-content: space-between; padding: 7px 0;
-             border-bottom: 1px dashed #ccc; align-items: flex-start; }
-    .ename { font-size: 15px; font-weight: 600; flex: 1; }
-    .eaddons { font-size: 10px; color: #555; margin-top: 2px; }
-    .eqty { font-size: 22px; font-weight: 700; background: #000; color: #fff;
-            padding: 2px 14px; border-radius: 4px; flex-shrink: 0; margin-right: 6px;
-            min-width: 48px; text-align: center; }
-    .etotal { display: flex; justify-content: space-between; font-weight: 700; font-size: 15px;
-              margin-top: 8px; padding-top: 6px; border-top: 1.5px solid #000; }
-    .einfo { font-size: 10px; color: #666; text-align: center; margin-top: 8px; }
-    @media print { body { margin: 0; } }
-  </style>
-</head>
-<body>
-<div class="wrap">
-  <div class="ehdr">نسخة الموظف · ملخص الطلب</div>
-  <div class="eorder">${displayInvoiceNumber}</div>
-  ${data.tableNumber ? `<div class="etable"><span class="etag">طاولة ${data.tableNumber}</span></div>` : ''}
-  ${orderTypeLabel ? `<div class="etype">${orderTypeLabel}</div>` : ''}
+  // QR codes
+  const invoiceTs = data.date ? new Date(data.date).toISOString() : new Date().toISOString();
+  const zatcaPayload = generateZATCAQRCode({
+    sellerName: COMPANY_NAME,
+    vatNumber: data.vatNumber || VAT_NUMBER,
+    timestamp: invoiceTs,
+    totalWithVat: totalAmount.toFixed(2),
+    vatAmount: vatAmt.toFixed(2),
+  });
+  let zatcaQrDataUrl = '';
+  try { zatcaQrDataUrl = await QRCode.toDataURL(zatcaPayload, { width: 250, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
 
-  <div class="eitems">
-    ${data.items.map(item => {
-      const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
-      return `
-      <div class="eitem">
-        <div style="flex:1;">
-          <div class="ename">${item.coffeeItem.nameAr}</div>
-          ${addons ? `<div class="eaddons">+ ${addons}</div>` : ''}
-        </div>
-        <span class="eqty">x${item.quantity}</span>
-      </div>`;
-    }).join('')}
-  </div>
+  const trackingUrl = `${window.location.origin}/track/${data.orderNumber}`;
+  let trackingQrDataUrl = '';
+  try { trackingQrDataUrl = await QRCode.toDataURL(trackingUrl, { width: 200, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
 
-  <div class="etotal">
-    <span>الإجمالي:</span>
-    <span>${totalAmount.toFixed(2)} ر.س</span>
-  </div>
-  <div class="einfo">الكاشير: ${data.employeeName || '—'} | ${formattedDate} ${formattedTime}</div>
-</div>
-</body>
-</html>`;
+  const logoDataUrl = await fetchLogoBase64().catch(() => '');
 
-  // ══════════════════════════════════════════════════════════════
-  //  طباعة منفصلة: العميل (مهمة ١) + الموظف (مهمة ٢) — بدون تعارض CSS
-  //  كل نسخة مستند HTML مستقل → لا تداخل، لا رموز، لا تعارض أنماط
-  // ══════════════════════════════════════════════════════════════
+  const { buildReceiptCanvas } = await import('./thermal-printer');
+  const receiptCanvas = await buildReceiptCanvas({
+    shopName: COMPANY_NAME,
+    vatNumber: data.vatNumber || VAT_NUMBER,
+    branchName: data.branchName,
+    tagline: 'قَهْوَةٌ تُقَالُ وَوَرْدٌ يُهْدَى',
+    orderNumber: data.orderNumber,
+    orderDate: `${fmtDate} ${fmtTime}`,
+    cashierName: data.employeeName || '—',
+    customerName: data.customerName,
+    tableNumber: data.tableNumber,
+    orderType: orderTypeLabel,
+    items: data.items.map(item => ({
+      name: item.coffeeItem.nameAr,
+      qty: item.quantity,
+      price: parseNumber(item.coffeeItem.price),
+      addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
+    })),
+    subtotal: subtotalAmt,
+    vat: vatAmt,
+    total: totalAmount,
+    discount: discAmt,
+    splitPayment: data.splitPayment,
+    paymentMethod: data.paymentMethod,
+    logoDataUrl: logoDataUrl || undefined,
+    trackingQrDataUrl: trackingQrDataUrl || undefined,
+    zatcaQrDataUrl: zatcaQrDataUrl || undefined,
+    paperWidth: '80mm',
+    feedLines: 4,
+  });
+
+  const receiptPng = receiptCanvas.toDataURL('image/png');
 
   if (shouldAutoPrint) {
-    // طباعة نسخة العميل أولاً ثم نسخة الموظف بعد 900ms (وقت كافٍ للطابعة الحرارية)
-    _printQueue.push({ html: customerHtml, paperWidth: '80mm', isFullDoc: true });
-    _printQueue.push({ html: empHtml, paperWidth: '80mm', isFullDoc: true });
-    _drainPrintQueue();
-  } else {
-    // ── وضع المعاينة: نافذة منبثقة تُظهر النسختين جنباً إلى جنب ──
-    // نستخدم Blob URLs لضمان عرض كل نسخة في إطارها بشكل مستقل وصحيح
-    const previewHtml = `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <title>فواتير الطلب - ${displayInvoiceNumber}</title>
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"><\/script>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Cairo', sans-serif; background: #e8e8e8; padding: 16px; direction: rtl; min-height: 100vh; }
-    .toolbar { display: flex; gap: 10px; margin-bottom: 16px; justify-content: center; flex-wrap: wrap; }
-    .btn { padding: 10px 24px; font-size: 14px; font-family: 'Cairo', sans-serif; border: none;
-           border-radius: 8px; cursor: pointer; font-weight: 700; transition: opacity .2s; }
-    .btn:hover { opacity: 0.82; }
-    .btn-print { background: #1a1a1a; color: #fff; font-size: 15px; }
-    .btn-customer { background: #1e40af; color: #fff; }
-    .btn-employee { background: #b45309; color: #fff; }
-    .btn-close  { background: #6b7280; color: #fff; }
-    .frames { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
-    .col { display: flex; flex-direction: column; align-items: center; }
-    h3 { text-align: center; font-size: 12px; font-weight: 700; color: #333; margin-bottom: 8px;
-         background: #fff; padding: 4px 14px; border-radius: 20px; border: 1px solid #ccc; }
-    iframe { border: 2px solid #ccc; background: #fff; border-radius: 6px;
-             box-shadow: 0 4px 16px rgba(0,0,0,.15); display: block; }
-    @media print { body { display: none; } }
-  </style>
-</head>
-<body>
-  <div class="toolbar">
-    <button class="btn btn-print" onclick="printBoth()">🖨️ طباعة النسختين</button>
-    <button class="btn btn-customer" onclick="printOne('customer')">🧾 طباعة نسخة العميل</button>
-    <button class="btn btn-employee" onclick="printOne('employee')">📋 طباعة نسخة الموظف</button>
-    <button class="btn btn-close" onclick="window.close()">✕ إغلاق</button>
-  </div>
-  <div class="frames">
-    <div class="col">
-      <h3>🧾 فاتورة العميل</h3>
-      <iframe id="f-customer" width="320" height="620"></iframe>
-    </div>
-    <div class="col">
-      <h3>📋 نسخة الموظف</h3>
-      <iframe id="f-employee" width="320" height="460"></iframe>
-    </div>
-  </div>
-  <script>
-    var customerHtml = ${JSON.stringify(customerHtml)};
-    var empHtml = ${JSON.stringify(empHtml)};
-
-    function makeBlobUrl(html) {
-      var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-      return URL.createObjectURL(blob);
-    }
-
-    // تحميل كل إطار من blob URL مستقل — يضمن عزل CSS تاماً وعرض صحيح
-    var custUrl = makeBlobUrl(customerHtml);
-    var empUrl  = makeBlobUrl(empHtml);
-
-    document.getElementById('f-customer').src = custUrl;
-    document.getElementById('f-employee').src = empUrl;
-
-    // html2canvas — capture rendered HTML as image before printing (fixes Arabic encoding)
-    function _printAsImage(html, paperWidthPx) {
-      paperWidthPx = paperWidthPx || 302;
-      var renderFrame = document.createElement('iframe');
-      renderFrame.style.cssText = 'position:fixed;top:-99999px;left:-99999px;width:' + paperWidthPx + 'px;height:3000px;border:none;opacity:0;pointer-events:none;';
-      document.body.appendChild(renderFrame);
-      var rDoc = renderFrame.contentDocument || renderFrame.contentWindow.document;
-      rDoc.open(); rDoc.write(html); rDoc.close();
-      setTimeout(function() {
-        var h2c = window.html2canvas;
-        if (!h2c) {
-          // html2canvas not loaded yet — fall back to direct print
-          renderFrame.remove();
-          _printDirectHtml(html);
-          return;
-        }
-        h2c(rDoc.body, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', width: paperWidthPx, windowWidth: paperWidthPx, logging: false })
-          .then(function(canvas) {
-            renderFrame.remove();
-            var imgData = canvas.toDataURL('image/png');
-            var pf = document.createElement('iframe');
-            pf.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;';
-            document.body.appendChild(pf);
-            var pd = pf.contentDocument || pf.contentWindow.document;
-            pd.open();
-            pd.write('<!DOCTYPE html><html><head><style>@page{size:80mm auto;margin:0;}*{margin:0;padding:0;}body{background:#fff;}img{width:100%;display:block;}</style></head><body><img src="' + imgData + '"/></body></html>');
-            pd.close();
-            setTimeout(function() {
-              try { pf.contentWindow.print(); } catch(e) {}
-              pf.addEventListener('afterprint', function() { setTimeout(function(){ try{pf.remove();}catch(e){} }, 300); }, { once: true });
-              setTimeout(function(){ try{pf.remove();}catch(e){} }, 8000);
-            }, 300);
-          })
-          .catch(function() {
-            renderFrame.remove();
-            _printDirectHtml(html);
-          });
-      }, 900);
-    }
-
-    function _printDirectHtml(html) {
-      var f = document.createElement('iframe');
-      f.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:340px;height:1400px;border:none;opacity:0;visibility:hidden;';
-      document.body.appendChild(f);
-      var url = makeBlobUrl(html);
-      f.src = url;
-      f.onload = function() {
-        setTimeout(function() {
-          try { f.contentWindow.focus(); f.contentWindow.print(); } catch(e) {}
-          f.addEventListener('afterprint', function() { setTimeout(function(){ try{ f.remove(); URL.revokeObjectURL(url); }catch(e){} }, 300); }, { once: true });
-          setTimeout(function(){ try{ f.remove(); URL.revokeObjectURL(url); }catch(e){} }, 9000);
-        }, 400);
+    // طباعة فورية: صورة PNG واحدة → iframe → window.print()
+    const printFrame = document.createElement('iframe');
+    printFrame.setAttribute('aria-hidden', 'true');
+    printFrame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;pointer-events:none;';
+    document.body.appendChild(printFrame);
+    const pdoc = printFrame.contentDocument || printFrame.contentWindow?.document;
+    if (pdoc) {
+      pdoc.open();
+      pdoc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+        @page { size: 80mm auto; margin: 0; }
+        html,body { margin:0; padding:0; background:#fff; }
+        img { width: 80mm; display: block; margin: 0; padding: 0; }
+      </style></head><body><img src="${receiptPng}" /></body></html>`);
+      pdoc.close();
+      const img = pdoc.querySelector('img') as HTMLImageElement | null;
+      const doPrint = () => {
+        try { printFrame.contentWindow?.focus(); printFrame.contentWindow?.print(); } catch {}
+        const cleanup = () => { try { printFrame.remove(); } catch {} };
+        printFrame.contentWindow?.addEventListener('afterprint', cleanup, { once: true });
+        setTimeout(cleanup, 8000);
       };
+      if (img && !img.complete) {
+        img.onload = () => setTimeout(doPrint, 100);
+        img.onerror = () => setTimeout(doPrint, 100);
+      } else {
+        setTimeout(doPrint, 200);
+      }
     }
-
-    function printBoth() {
-      _printAsImage(customerHtml);
-      setTimeout(function() { _printAsImage(empHtml); }, 1800);
-    }
-
-    function printOne(which) {
-      _printAsImage(which === 'customer' ? customerHtml : empHtml);
-    }
-  </script>
-</body>
-</html>`;
-    const win = window.open('', '_blank', 'width=820,height=760,scrollbars=yes,resizable=yes');
+  } else {
+    // وضع المعاينة: نافذة منبثقة تعرض الصورة فقط مع زر طباعة
+    const win = window.open('', '_blank', 'width=520,height=820,scrollbars=yes,resizable=yes');
     if (win) {
       win.document.open();
-      win.document.write(previewHtml);
+      win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فاتورة - ${displayInvoiceNumber}</title><style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Tahoma, Arial, sans-serif; background: #e8e8e8; padding: 16px; min-height: 100vh; text-align: center; }
+        .toolbar { margin-bottom: 16px; display: flex; gap: 10px; justify-content: center; }
+        .btn { padding: 12px 28px; font-size: 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
+        .btn-print { background: #1a1a1a; color: #fff; }
+        .btn-close { background: #6b7280; color: #fff; }
+        .receipt { display: inline-block; background: #fff; padding: 0; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
+        .receipt img { display: block; width: 320px; height: auto; }
+        @media print {
+          body { background: #fff; padding: 0; margin: 0; }
+          .toolbar, .no-print { display: none !important; }
+          .receipt { box-shadow: none; padding: 0; border: 0; }
+          .receipt img { width: 80mm; }
+          @page { size: 80mm auto; margin: 0; }
+        }
+      </style></head><body>
+        <div class="toolbar no-print">
+          <button class="btn btn-print" onclick="window.print()">🖨️ طباعة الفاتورة</button>
+          <button class="btn btn-close" onclick="window.close()">✕ إغلاق</button>
+        </div>
+        <div class="receipt"><img src="${receiptPng}" alt="فاتورة" /></div>
+      </body></html>`);
       win.document.close();
-      win.document.title = `فواتير الطلب - ${displayInvoiceNumber}`;
     }
+    return;
   }
 }
 
