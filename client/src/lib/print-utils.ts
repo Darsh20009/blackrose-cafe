@@ -866,7 +866,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
   // ── ESC/POS Thermal printing — Canvas 2D bitmap (Arabic-safe, matches preview) ──
   if (shouldAutoPrint) {
     try {
-      const { loadPrinterSettings, buildReceiptBitmapEscPos, buildEscPosKitchenTicket, thermalPrint } = await import('./thermal-printer');
+      const { loadPrinterSettings, buildReceiptBitmapEscPos, buildEscPosKitchenTicketBitmap, thermalPrint } = await import('./thermal-printer');
       const printerSettings = loadPrinterSettings();
 
       if (printerSettings.enabled && printerSettings.mode !== 'browser') {
@@ -946,7 +946,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 
         if (result.success) {
           if (printerSettings.autoKitchenCopy) {
-            const kitchenEsc = buildEscPosKitchenTicket({
+            const kitchenEsc = await buildEscPosKitchenTicketBitmap({
               orderNumber: data.orderNumber,
               tableNumber: data.tableNumber,
               orderType: orderTypeThermal,
@@ -1376,7 +1376,7 @@ export async function printCashierReceipt(data: TaxInvoiceData & { deliveryType?
 export async function printAllReceipts(data: TaxInvoiceData & { deliveryType?: string; deliveryTypeAr?: string }): Promise<void> {
   // Try thermal printer (WebUSB) first
   try {
-    const { loadPrinterSettings, buildEscPosReceipt, buildEscPosKitchenTicket, thermalPrint } = await import('./thermal-printer');
+    const { loadPrinterSettings, buildEscPosReceipt, buildEscPosKitchenTicketBitmap, thermalPrint } = await import('./thermal-printer');
     const printerSettings = loadPrinterSettings();
 
     if (printerSettings.enabled && printerSettings.autoPrint) {
@@ -1424,7 +1424,7 @@ export async function printAllReceipts(data: TaxInvoiceData & { deliveryType?: s
         // Hardware print succeeded — handle kitchen copy if needed
         if (result.mode === 'webusb' && printerSettings.autoKitchenCopy) {
           await new Promise(r => setTimeout(r, 1200));
-          const kitchenEsc = buildEscPosKitchenTicket({
+          const kitchenEsc = await buildEscPosKitchenTicketBitmap({
             orderNumber: data.orderNumber,
             tableNumber: data.tableNumber,
             orderType: orderTypeLabel || undefined,

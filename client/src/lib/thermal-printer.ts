@@ -899,6 +899,57 @@ export async function buildEmployeeCopyCanvas(opts: EmployeeCopyOpts): Promise<H
   return trimmed;
 }
 
+/**
+ * Arabic-safe kitchen/employee ticket via Canvas 2D bitmap.
+ * Replaces the legacy raw-text builder which produced garbled Arabic on most thermal printers.
+ */
+export async function buildEscPosKitchenTicketBitmap(data: {
+  orderNumber: string;
+  tableNumber?: string;
+  orderType?: string;
+  cashierName: string;
+  items: Array<{ name: string; qty: number; addons?: string[] }>;
+  notes?: string;
+  paperWidth: '58mm' | '80mm';
+}): Promise<Uint8Array> {
+  const canvas = await buildEmployeeCopyCanvas({
+    orderNumber: data.orderNumber,
+    tableNumber: data.tableNumber,
+    orderType: data.orderType,
+    cashierName: data.cashierName,
+    items: data.items,
+    notes: data.notes,
+    paperWidth: data.paperWidth,
+  });
+  const DW = canvas.width;
+  const finalH = canvas.height;
+  const ctx = canvas.getContext('2d')!;
+  const imgData = ctx.getImageData(0, 0, DW, finalH);
+  const bpl = Math.ceil(DW / 8);
+  const raster: number[] = [];
+  raster.push(0x1b, 0x40);
+  raster.push(0x1d, 0x76, 0x30, 0x00);
+  raster.push(bpl & 0xff, (bpl >> 8) & 0xff);
+  raster.push(finalH & 0xff, (finalH >> 8) & 0xff);
+  for (let row = 0; row < finalH; row++) {
+    for (let bx = 0; bx < bpl; bx++) {
+      let byte = 0;
+      for (let bit = 0; bit < 8; bit++) {
+        const px = bx * 8 + bit;
+        if (px < DW) {
+          const i = (row * DW + px) * 4;
+          const lum = 0.299 * imgData.data[i] + 0.587 * imgData.data[i + 1] + 0.114 * imgData.data[i + 2];
+          if (lum < 128) byte |= 1 << (7 - bit);
+        }
+      }
+      raster.push(byte);
+    }
+  }
+  raster.push(0x1b, 0x64, 4);
+  raster.push(0x1d, 0x56, 0x41, 0x03);
+  return new Uint8Array(raster);
+}
+
 export function buildEscPosKitchenTicket(data: {
   orderNumber: string;
   tableNumber?: string;
