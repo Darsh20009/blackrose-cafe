@@ -571,7 +571,7 @@ export async function buildReceiptCanvas(opts: ReceiptBitmapOpts): Promise<HTMLC
   const DW = opts.paperWidth === '58mm' ? 384 : 576;
   const PAD = Math.round(DW * 0.04);   // ~4% side padding
   const CONTENT_W = DW - PAD * 2;
-  const FS = opts.paperWidth === '58mm' ? 13 : 16;  // base font size
+  const FS = opts.paperWidth === '58mm' ? 18 : 22;  // base font size (enlarged per request)
 
   // ── Helper: load an image from dataUrl ───────────────────────────────────
   const loadImg = (src: string): Promise<HTMLImageElement> =>
@@ -601,7 +601,8 @@ export async function buildReceiptCanvas(opts: ReceiptBitmapOpts): Promise<HTMLC
   const ops: DrawOp[] = [];
 
   const addGap   = (h = 6) => ops.push({ type: 'gap', h });
-  const addLine  = (thick = false, dashed = false) => ops.push({ type: 'line', thick, dashed });
+  // Lines/dividers removed per request — replaced with a small spacing gap
+  const addLine  = (_thick = false, _dashed = false) => ops.push({ type: 'gap', h: 6 });
   const addText  = (text: string, align: 'center'|'left'|'right' = 'center', fs = FS, bold = false, color?: string) =>
     ops.push({ type: 'text', text, align, fs, bold, color });
   const addRow   = (label: string, value: string, fs = FS, boldLabel = false, boldValue = false, color?: string) =>
