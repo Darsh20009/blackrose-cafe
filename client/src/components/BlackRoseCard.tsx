@@ -1,3 +1,5 @@
+import cardFrame from "@assets/Screenshot_2026-04-23_at_2.48.53_AM_1776901738354.png";
+
 interface BlackRoseCardProps {
   phone?: string;
   points?: number;
@@ -36,130 +38,34 @@ export default function BlackRoseCard({
         width: "100%",
         aspectRatio: "85.6 / 53.98",
         borderRadius: 22,
-        background: "linear-gradient(145deg, #1a0a10 0%, #0d0d0d 45%, #120e04 100%)",
+        backgroundImage: `url(${cardFrame})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
         boxShadow:
-          "0 32px 80px rgba(0,0,0,0.85), 0 0 0 1px rgba(200,165,58,0.14), inset 0 1px 0 rgba(200,165,58,0.08)",
+          "0 32px 80px rgba(0,0,0,0.85), 0 0 0 1px rgba(200,165,58,0.18), inset 0 1px 0 rgba(200,165,58,0.08)",
       }}
       data-testid="loyalty-card"
     >
-      {/* Red glow — top right */}
+      {/* Middle: Phone number + name */}
       <div
         style={{
           position: "absolute",
-          top: "-30%",
-          right: "-15%",
-          width: "55%",
-          height: "130%",
-          background:
-            "radial-gradient(ellipse at center, rgba(190,24,69,0.18) 0%, transparent 70%)",
-          pointerEvents: "none",
-        }}
-      />
-
-      {/* Gold shimmer band */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "linear-gradient(115deg, transparent 30%, rgba(200,165,58,0.05) 50%, transparent 70%)",
-          pointerEvents: "none",
-        }}
-      />
-
-      {/* Subtle grid lines */}
-      <svg
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          opacity: 0.04,
-          pointerEvents: "none",
-        }}
-        viewBox="0 0 856 540"
-        preserveAspectRatio="none"
-      >
-        <line x1="0" y1="180" x2="856" y2="180" stroke="#C8A53A" strokeWidth="1" />
-        <line x1="0" y1="360" x2="856" y2="360" stroke="#C8A53A" strokeWidth="1" />
-        <line x1="285" y1="0" x2="285" y2="540" stroke="#C8A53A" strokeWidth="1" />
-        <line x1="570" y1="0" x2="570" y2="540" stroke="#C8A53A" strokeWidth="1" />
-        <circle cx="428" cy="270" r="180" fill="none" stroke="#C8A53A" strokeWidth="0.8" />
-      </svg>
-
-      {/* Top left: Brand name */}
-      <div
-        style={{
-          position: "absolute",
-          top: "12%",
+          top: "54%",
           left: "7%",
-        }}
-      >
-        <p
-          style={{
-            color: "#C8A53A",
-            fontSize: "clamp(9px, 2.3vw, 14px)",
-            fontWeight: 800,
-            letterSpacing: "0.3em",
-            margin: 0,
-            textShadow: "0 1px 10px rgba(200,165,58,0.6)",
-            lineHeight: 1,
-          }}
-        >
-          BLACK ROSE
-        </p>
-        <p
-          style={{
-            color: "rgba(200,165,58,0.45)",
-            fontSize: "clamp(5px, 1.2vw, 7px)",
-            letterSpacing: "0.4em",
-            margin: "3px 0 0",
-            textTransform: "uppercase",
-          }}
-        >
-          Loyalty Card
-        </p>
-      </div>
-
-      {/* Top right: Rose emblem */}
-      <div
-        style={{
-          position: "absolute",
-          top: "10%",
           right: "7%",
-          width: "clamp(26px, 6.5vw, 38px)",
-          height: "clamp(26px, 6.5vw, 38px)",
-          borderRadius: "50%",
-          border: "1px solid rgba(190,24,69,0.55)",
-          background: "rgba(190,24,69,0.1)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "clamp(11px, 2.8vw, 17px)",
-        }}
-      >
-        🌹
-      </div>
-
-      {/* Middle left: Phone number + name */}
-      <div
-        style={{
-          position: "absolute",
-          top: "50%",
-          left: "7%",
           transform: "translateY(-50%)",
         }}
       >
         <p
           dir="ltr"
           style={{
-            color: "#C8A53A",
+            color: "#E5C461",
             fontWeight: 700,
             fontSize: "clamp(11px, 3vw, 18px)",
-            letterSpacing: "0.1em",
+            letterSpacing: "0.18em",
             margin: 0,
             fontFamily: "'Courier New', 'Trebuchet MS', monospace",
-            textShadow: "0 1px 8px rgba(200,165,58,0.45)",
+            textShadow: "0 1px 10px rgba(0,0,0,0.85)",
           }}
           data-testid="text-phone-display"
         >
@@ -168,33 +74,18 @@ export default function BlackRoseCard({
         {customerName && (
           <p
             style={{
-              color: "rgba(255,255,255,0.32)",
-              fontSize: "clamp(6px, 1.4vw, 9px)",
-              margin: "4px 0 0",
-              letterSpacing: "0.07em",
+              color: "rgba(229,196,97,0.85)",
+              fontSize: "clamp(7px, 1.6vw, 11px)",
+              margin: "5px 0 0",
+              letterSpacing: "0.12em",
+              textShadow: "0 1px 6px rgba(0,0,0,0.8)",
+              textTransform: "uppercase",
             }}
           >
             {customerName}
           </p>
         )}
       </div>
-
-      {/* Middle right: Chip (decorative) */}
-      <div
-        style={{
-          position: "absolute",
-          top: "44%",
-          right: "7%",
-          transform: "translateY(-50%)",
-          width: "clamp(26px, 6vw, 38px)",
-          height: "clamp(20px, 4.5vw, 28px)",
-          borderRadius: 5,
-          background:
-            "linear-gradient(135deg, rgba(200,165,58,0.55) 0%, rgba(200,165,58,0.18) 100%)",
-          border: "1px solid rgba(200,165,58,0.38)",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1)",
-        }}
-      />
 
       {/* Bottom: Points + SAR */}
       <div
@@ -211,23 +102,24 @@ export default function BlackRoseCard({
         <div>
           <p
             style={{
-              color: "rgba(200,165,58,0.5)",
-              fontSize: "clamp(5px, 1.2vw, 7px)",
+              color: "rgba(229,196,97,0.7)",
+              fontSize: "clamp(5px, 1.3vw, 8px)",
               letterSpacing: "0.35em",
               margin: 0,
               textTransform: "uppercase",
+              textShadow: "0 1px 4px rgba(0,0,0,0.9)",
             }}
           >
             Points
           </p>
           <p
             style={{
-              color: "#C8A53A",
+              color: "#E5C461",
               fontWeight: 900,
               fontSize: "clamp(20px, 5.2vw, 32px)",
               margin: 0,
               lineHeight: 1,
-              textShadow: "0 2px 14px rgba(200,165,58,0.55)",
+              textShadow: "0 2px 14px rgba(0,0,0,0.9)",
             }}
             data-testid="text-points"
           >
@@ -238,22 +130,24 @@ export default function BlackRoseCard({
         <div style={{ textAlign: "right" }}>
           <p
             style={{
-              color: "rgba(200,165,58,0.45)",
-              fontSize: "clamp(5px, 1.2vw, 7px)",
+              color: "rgba(229,196,97,0.65)",
+              fontSize: "clamp(5px, 1.3vw, 8px)",
               letterSpacing: "0.25em",
               margin: 0,
               textTransform: "uppercase",
+              textShadow: "0 1px 4px rgba(0,0,0,0.9)",
             }}
           >
             Value
           </p>
           <p
             style={{
-              color: "rgba(200,165,58,0.75)",
-              fontSize: "clamp(9px, 2.2vw, 13px)",
+              color: "#E5C461",
+              fontSize: "clamp(10px, 2.4vw, 14px)",
               margin: 0,
               fontFamily: "monospace",
               letterSpacing: "0.04em",
+              textShadow: "0 1px 6px rgba(0,0,0,0.9)",
             }}
             data-testid="text-sar-value"
           >
@@ -261,19 +155,6 @@ export default function BlackRoseCard({
           </p>
         </div>
       </div>
-
-      {/* Bottom gold line accent */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: "7%",
-          right: "7%",
-          height: 1,
-          background:
-            "linear-gradient(90deg, transparent, rgba(200,165,58,0.4) 30%, rgba(200,165,58,0.4) 70%, transparent)",
-        }}
-      />
     </div>
   );
 }
