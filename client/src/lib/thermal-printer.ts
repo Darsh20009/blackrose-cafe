@@ -66,6 +66,10 @@ export interface PrinterSettings {
   // The relay agent is a small Node.js server running on the local network.
   // Download: /print-relay.js  — run with: node print-relay.js
   relayAgentUrl?: string; // e.g. "http://192.168.8.10:8089"
+  /** الرابط العام للمتجر (يُستخدم لباركود تتبع الطلب)
+   *  مثال: https://blackrose.com.sa
+   *  إذا تُرك فارغاً يستخدم window.location.origin */
+  publicBaseUrl?: string;
 }
 
 const DEFAULT_SETTINGS: PrinterSettings = {
@@ -681,13 +685,14 @@ export async function buildReceiptCanvas(opts: ReceiptBitmapOpts): Promise<HTMLC
     addRow('  شبكة:', `${opts.splitPayment.card.toFixed(2)} ر.س`, Math.round(FS * 0.9));
   }
 
-  // Tracking QR
+  // Tracking QR — LARGE (primary action for the customer)
   if (trackImg && trackImg.naturalWidth > 0) {
     addLine(true);
-    addGap(4);
-    addImg(trackImg, Math.round(DW * 0.35));
-    addText('امسح للتتبع وتسجيل النقاط', 'center', Math.round(FS * 0.82), false, '#555');
-    addGap(4);
+    addGap(8);
+    addImg(trackImg, Math.round(DW * 0.60));   // large
+    addGap(Math.round(FS * 1.2));              // breathing room before label
+    addText('امسح للتتبع وتسجيل النقاط', 'center', Math.round(FS * 0.9), true, '#333');
+    addGap(Math.round(FS * 2));                // ~2 lines of empty space below the tracking QR block
   }
 
   addLine(true);
@@ -698,12 +703,12 @@ export async function buildReceiptCanvas(opts: ReceiptBitmapOpts): Promise<HTMLC
   if (opts.tagline) addText(opts.tagline, 'center', Math.round(FS * 0.9), false, '#444');
   addText(opts.shopName, 'center', FS, true);
 
-  // ZATCA QR — large and regular (not bold)
+  // ZATCA QR — smaller (compliance only)
   if (zatcaImg && zatcaImg.naturalWidth > 0) {
     addLine(false, true);
     addGap(6);
-    addImg(zatcaImg, Math.round(DW * 0.55));   // large
-    addText('ZATCA · باركود الضريبة', 'center', Math.round(FS * 0.8), false, '#555');
+    addImg(zatcaImg, Math.round(DW * 0.32));   // small
+    addText('ZATCA · باركود الضريبة', 'center', Math.round(FS * 0.75), false, '#555');
     addGap(6);
   }
 

@@ -896,9 +896,10 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
         try { zatcaQrDataUrl = await QRCode.toDataURL(zatcaPayload, { width: 250, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
 
         // ── Generate tracking QR (public /track/:orderNumber URL) ─────────────
-        const trackingUrl = `${window.location.origin}/track/${data.orderNumber}`;
+        const trackingBase = (printerSettings.publicBaseUrl?.replace(/\/+$/, '')) || window.location.origin;
+        const trackingUrl = `${trackingBase}/track/${data.orderNumber}`;
         let trackingQrDataUrl = '';
-        try { trackingQrDataUrl = await QRCode.toDataURL(trackingUrl, { width: 200, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
+        try { trackingQrDataUrl = await QRCode.toDataURL(trackingUrl, { width: 400, margin: 1, errorCorrectionLevel: 'H' }); } catch {}
 
         // ── Logo (cached base64) ───────────────────────────────────────────────
         const logoDataUrl = await fetchLogoBase64().catch(() => '');
@@ -1014,9 +1015,11 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
   let zatcaQrDataUrl = '';
   try { zatcaQrDataUrl = await QRCode.toDataURL(zatcaPayload, { width: 250, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
 
-  const trackingUrl = `${window.location.origin}/track/${data.orderNumber}`;
+  const ps2 = (await import('./thermal-printer')).loadPrinterSettings();
+  const trackingBase2 = (ps2.publicBaseUrl?.replace(/\/+$/, '')) || window.location.origin;
+  const trackingUrl = `${trackingBase2}/track/${data.orderNumber}`;
   let trackingQrDataUrl = '';
-  try { trackingQrDataUrl = await QRCode.toDataURL(trackingUrl, { width: 200, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
+  try { trackingQrDataUrl = await QRCode.toDataURL(trackingUrl, { width: 400, margin: 1, errorCorrectionLevel: 'H' }); } catch {}
 
   const logoDataUrl = await fetchLogoBase64().catch(() => '');
 

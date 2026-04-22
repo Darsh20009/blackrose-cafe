@@ -1255,6 +1255,24 @@ export default function PrinterSettingsPanel() {
 
           <Separator />
 
+          {/* الرابط العام لتتبع الطلب */}
+          <div className="flex flex-col gap-2">
+            <div>
+              <Label className="text-sm font-medium">{tc("رابط الموقع العام (لباركود التتبع)", "Public site URL (for tracking QR)")}</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">{tc("الرابط الذي يستخدمه العملاء (مثل https://blackrose.com.sa). إذا تركته فارغاً، سيستخدم نفس عنوان المتصفح.", "Public URL customers use (e.g. https://blackrose.com.sa). If empty, uses the current browser URL.")}</p>
+            </div>
+            <Input
+              type="url"
+              placeholder="https://example.com"
+              value={settings.publicBaseUrl ?? ''}
+              onChange={(e) => updateSetting('publicBaseUrl', e.target.value.trim())}
+              data-testid="input-public-base-url"
+              dir="ltr"
+            />
+          </div>
+
+          <Separator />
+
           {/* Paper Width */}
           <div className="flex items-center justify-between gap-4">
             <div>
