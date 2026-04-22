@@ -96,7 +96,7 @@ export function setSoundEnabled(pageKey: string, enabled: boolean): void {
 // ─── Deduplication: per-type, 3 second window ────────────────────────────────
 
 const DEDUP_KEY = 'qirox_sound_dedup';
-const DEDUP_WINDOW_MS = 3000;
+const DEDUP_WINDOW_MS = 600;
 
 function isDuplicate(type: NotificationSoundType): boolean {
   try {

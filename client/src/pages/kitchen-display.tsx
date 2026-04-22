@@ -121,17 +121,55 @@ export default function KitchenDisplay() {
   const handleNewOrder = useCallback(
     (order: Order) => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders/kitchen"] });
+      const isOnlineOrder =
+        order?.channel === "online" ||
+        order?.channel === "web" ||
+        order?.orderType === "online";
       if (soundEnabled) {
-        const isOnlineOrder =
-          order?.channel === "online" ||
-          order?.channel === "web" ||
-          order?.orderType === "online" ||
-          !order?.channel;
         playNotificationSound(isOnlineOrder ? "cashierOrder" : "newOrder", 0.8);
         toast({
           title: tc("طلب جديد!", "New Order!"),
           description: `${tc("وصل طلب جديد", "New order arrived")} #${order.orderNumber}`,
         });
+      }
+
+      // ── Auto-print online orders from KDS as a fallback when no POS tab is open ──
+      if (isOnlineOrder) {
+        (async () => {
+          try {
+            const { loadPrinterSettings } = await import("@/lib/thermal-printer");
+            const ps = loadPrinterSettings();
+            if (!ps.autoPrint) return;
+            // Multi-tab guard: only one tab prints per order (1 minute lock)
+            const lockKey = `kds-print-lock-${order.id || order.orderNumber}`;
+            if (typeof localStorage !== "undefined") {
+              const existing = localStorage.getItem(lockKey);
+              if (existing && Date.now() - Number(existing) < 60_000) return;
+              localStorage.setItem(lockKey, String(Date.now()));
+            }
+            const { printTaxInvoice } = await import("@/lib/print-utils");
+            const printData: any = {
+              orderNumber: order.orderNumber,
+              items: (order as any).items || [],
+              subtotal: Number((order as any).subtotal ?? 0),
+              tax: Number((order as any).tax ?? (order as any).vat ?? 0),
+              total: Number((order as any).totalAmount ?? (order as any).total ?? 0),
+              paymentMethod: (order as any).paymentMethod || "غير محدد",
+              employeeName: (order as any).employeeName || "أونلاين",
+              customerName: (order as any).customerName || "عميل أونلاين",
+              tableNumber: (order as any).tableNumber,
+              orderType: (order as any).deliveryType || (order as any).orderType,
+              date: (order as any).createdAt || new Date().toISOString(),
+            };
+            setTimeout(() => {
+              try { printTaxInvoice(printData, { autoPrint: true }); } catch (e) {
+                console.warn("[KDS] Online order auto-print failed:", e);
+              }
+            }, 300);
+          } catch (e) {
+            console.warn("[KDS] Auto-print init failed:", e);
+          }
+        })();
       }
     },
     [soundEnabled, toast, tc]

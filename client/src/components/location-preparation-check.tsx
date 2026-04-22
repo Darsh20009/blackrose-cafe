@@ -58,7 +58,7 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 export default function LocationPreparationCheck({ 
   branch, 
   onPreparationReady,
-  preparationRadius = 100000 
+  preparationRadius = 5 
 }: LocationPreparationCheckProps) {
   const [locationState, setLocationState] = useState<LocationState>({ status: 'idle' });
   const [distance, setDistance] = useState<number | null>(null);
@@ -120,25 +120,25 @@ export default function LocationPreparationCheck({
 
     setLocationState({ status: 'loading' });
 
-    // Get initial position
+    // Get initial position — fast first fix using cached/low-accuracy
     navigator.geolocation.getCurrentPosition(
       handleLocationUpdate,
       handleLocationError,
       {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
+        enableHighAccuracy: false,
+        timeout: 4000,
+        maximumAge: 30000
       }
     );
 
-    // Watch for position changes
+    // Watch for position changes — high accuracy refines after first fix
     const id = navigator.geolocation.watchPosition(
       handleLocationUpdate,
       handleLocationError,
       {
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 5000
+        timeout: 8000,
+        maximumAge: 2000
       }
     );
     setWatchId(id);
@@ -238,7 +238,7 @@ export default function LocationPreparationCheck({
         {locationState.status === 'idle' && (
           <div className="text-center py-6" dir="rtl">
             <p className="text-muted-foreground mb-4">
-              اضغط على الزر لتحديد موقعك والتحقق من قربك من الفرع (اختياري)
+              اضغط على الزر لتحديد موقعك والتحقق من قربك من الفرع (مطلوب لتأكيد الاستلام)
             </p>
             <Button 
               onClick={startLocationTracking}

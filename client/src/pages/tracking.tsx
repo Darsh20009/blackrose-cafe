@@ -376,7 +376,7 @@ export default function OrderTrackingPage() {
             {branch && order.deliveryType === 'pickup' && ['in_progress', 'ready'].includes(order.status) && (
               <LocationPreparationCheck 
                 branch={branch}
-                preparationRadius={300}
+                preparationRadius={5}
                 onPreparationReady={() => {
                   toast({
                     title: t("tracking.proximity_toast_title"),
