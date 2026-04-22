@@ -307,6 +307,81 @@ export default function CheckoutPage() {
   const { customer, setCustomer } = useCustomer();
   const isGuestMode = !customer && customerStorage.isGuestMode();
 
+  // Inline auth panel state (sign-in / register without leaving checkout)
+  const [authPanelOpen, setAuthPanelOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authIdentifier, setAuthIdentifier] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+
+  const handleInlineLogin = async () => {
+    const id = authIdentifier.replace(/\s/g, '').trim();
+    if (!id) {
+      toast({ variant: "destructive", title: tc("خطأ", "Error"), description: tc("أدخل رقم الجوال أو البريد", "Enter phone or email") });
+      return;
+    }
+    if (!authPassword || authPassword.length < 4) {
+      toast({ variant: "destructive", title: tc("خطأ", "Error"), description: tc("كلمة المرور 4 أحرف على الأقل", "Password must be at least 4 chars") });
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/customers/login", { identifier: id, password: authPassword });
+      const c = await res.json();
+      setCustomer(c);
+      customerStorage.clearGuestInfo();
+      customerStorage.setGuestMode(false);
+      setCustomerName(c.name);
+      setCustomerPhone(c.phone);
+      if (c.email) setCustomerEmail(c.email);
+      setAuthPanelOpen(false);
+      setAuthPassword('');
+      toast({ title: tc("مرحباً بعودتك", "Welcome back"), description: c.name });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: tc("فشل تسجيل الدخول", "Login failed"), description: e?.message || tc("بيانات غير صحيحة", "Invalid credentials") });
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleInlineRegister = async () => {
+    // Use guest info if present, otherwise use form fields
+    const guestInfo = customerStorage.getGuestInfo();
+    const phone = (guestInfo?.phone || authIdentifier).replace(/\s/g, '').trim();
+    const fullName = (guestInfo?.name || authName).trim();
+    if (!phone || phone.length !== 9 || !phone.startsWith('5')) {
+      toast({ variant: "destructive", title: tc("خطأ", "Error"), description: tc("رقم الجوال 9 أرقام يبدأ بـ 5", "Phone must be 9 digits starting with 5") });
+      return;
+    }
+    if (!fullName || fullName.length < 2) {
+      toast({ variant: "destructive", title: tc("خطأ", "Error"), description: tc("الاسم حرفان على الأقل", "Name must be at least 2 chars") });
+      return;
+    }
+    if (!authPassword || authPassword.length < 4) {
+      toast({ variant: "destructive", title: tc("خطأ", "Error"), description: tc("كلمة المرور 4 أحرف على الأقل", "Password must be at least 4 chars") });
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/customers/register", { phone, name: fullName, password: authPassword });
+      const c = await res.json();
+      setCustomer(c);
+      customerStorage.clearGuestInfo();
+      customerStorage.setGuestMode(false);
+      setCustomerName(c.name);
+      setCustomerPhone(c.phone);
+      setAuthPanelOpen(false);
+      setAuthPassword('');
+      setAuthName('');
+      toast({ title: tc("تم إنشاء حسابك ", "Account created ") + fullName, description: tc("تم ربط طلباتك السابقة", "Previous orders linked") });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: tc("فشل التسجيل", "Registration failed"), description: e?.message || tc("حاول مرة أخرى", "Please try again") });
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (customer) {
       setCustomerName(customer.name);
@@ -1209,7 +1284,7 @@ export default function CheckoutPage() {
                 <p className="font-bold text-sm">احصل على نقاط مكافآت</p>
                 <p className="text-xs text-muted-foreground">سجّل بنفس رقم جوالك لربط طلباتك</p>
               </div>
-              <Button size="sm" onClick={() => setLocation("/auth")} data-testid="button-register-after-order" className="flex-shrink-0">
+              <Button size="sm" onClick={() => { setAuthMode('register'); setAuthPanelOpen(true); }} data-testid="button-register-after-order" className="flex-shrink-0">
                 سجّل
               </Button>
             </div>
@@ -1340,13 +1415,86 @@ export default function CheckoutPage() {
                       <p className="text-xs text-amber-800 dark:text-amber-300">{tc("سجّل الآن واحصل على نقاط ولاء وتتبع طلباتك", "Register now to earn loyalty points and track your orders")}</p>
                       <button
                         type="button"
-                        onClick={() => setLocation("/auth")}
+                        onClick={() => { setAuthMode('register'); setAuthPanelOpen(v => !v); }}
                         className="text-xs font-bold text-accent hover:underline whitespace-nowrap mr-2"
                         data-testid="link-register-now"
                       >
-                        تسجيل ←
+                        {authPanelOpen ? tc("إخفاء", "Hide") : tc("تسجيل ←", "Register ←")}
                       </button>
                     </div>
+
+                    {/* Inline auth panel — sign-in / register without leaving page */}
+                    {authPanelOpen && (
+                      <div className="border rounded-lg p-4 space-y-3 bg-card" data-testid="panel-inline-auth">
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setAuthMode('login')}
+                            className={`flex-1 text-sm py-2 rounded-lg transition-colors ${authMode === 'login' ? 'bg-accent text-accent-foreground font-bold' : 'bg-muted text-muted-foreground'}`}
+                            data-testid="tab-auth-login"
+                          >
+                            {tc("تسجيل الدخول", "Sign In")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAuthMode('register')}
+                            className={`flex-1 text-sm py-2 rounded-lg transition-colors ${authMode === 'register' ? 'bg-accent text-accent-foreground font-bold' : 'bg-muted text-muted-foreground'}`}
+                            data-testid="tab-auth-register"
+                          >
+                            {tc("حساب جديد", "New Account")}
+                          </button>
+                        </div>
+
+                        {authMode === 'login' ? (
+                          <div className="space-y-2">
+                            <Input
+                              value={authIdentifier}
+                              onChange={e => setAuthIdentifier(e.target.value)}
+                              placeholder={tc("رقم الجوال أو البريد", "Phone or email")}
+                              data-testid="input-auth-identifier"
+                            />
+                            <Input
+                              type="password"
+                              value={authPassword}
+                              onChange={e => setAuthPassword(e.target.value)}
+                              placeholder={tc("كلمة المرور", "Password")}
+                              onKeyDown={e => e.key === 'Enter' && handleInlineLogin()}
+                              data-testid="input-auth-password"
+                            />
+                            <Button
+                              onClick={handleInlineLogin}
+                              disabled={authLoading}
+                              className="w-full"
+                              data-testid="button-inline-login"
+                            >
+                              {authLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : tc("دخول", "Sign In")}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                              {tc(`سيتم استخدام: ${customerName} / ${customerPhone}`, `Using: ${customerName} / ${customerPhone}`)}
+                            </p>
+                            <Input
+                              type="password"
+                              value={authPassword}
+                              onChange={e => setAuthPassword(e.target.value)}
+                              placeholder={tc("اختر كلمة مرور (4 أحرف+)", "Choose password (4+ chars)")}
+                              onKeyDown={e => e.key === 'Enter' && handleInlineRegister()}
+                              data-testid="input-auth-new-password"
+                            />
+                            <Button
+                              onClick={handleInlineRegister}
+                              disabled={authLoading}
+                              className="w-full"
+                              data-testid="button-inline-register"
+                            >
+                              {authLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : tc("إنشاء حساب", "Create Account")}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
