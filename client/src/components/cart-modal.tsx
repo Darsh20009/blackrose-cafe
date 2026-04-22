@@ -6,10 +6,15 @@ import { ShoppingCart, Trash2, Plus, Minus } from "lucide-react";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import SarIcon from "@/components/sar-icon";
+import { useCustomer } from "@/contexts/CustomerContext";
+import { useAuthModal } from "@/contexts/AuthModalContext";
+import { customerStorage } from "@/lib/customer-storage";
 
 const CartModal = memo(() => {
   const { t, i18n } = useTranslation();
   const dir = i18n.language === 'ar' ? 'rtl' : 'ltr';
+  const { isAuthenticated } = useCustomer();
+  const { openAuthModal } = useAuthModal();
   const {
     cartItems,
     isCartOpen,
@@ -20,8 +25,14 @@ const CartModal = memo(() => {
   } = useCartStore();
 
   const handleCheckout = () => {
+    const isGuest = customerStorage.isGuestMode() && !!customerStorage.getGuestInfo();
+    if (isAuthenticated || isGuest) {
+      hideCart();
+      window.location.href = "/delivery";
+      return;
+    }
     hideCart();
-    window.location.href = "/delivery";
+    openAuthModal({ onSuccess: () => { window.location.href = "/delivery"; } });
   };
 
   return (

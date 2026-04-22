@@ -10,6 +10,7 @@ import { AdminLayout } from "@/components/admin-layout";
 import { ManagerLayout } from "@/components/manager-layout";
 import { CartProvider, useCartStore } from "@/lib/cart-store";
 import { CustomerProvider } from "@/contexts/CustomerContext";
+import { AuthModalProvider } from "@/contexts/AuthModalContext";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { PWAUpdateNotifier } from "@/components/PWAUpdateNotifier";
 import { GlobalPrompts } from "@/components/global-prompts";
@@ -20,6 +21,7 @@ import { useProximityNotify } from "@/hooks/useProximityNotify";
 
 const CartModal = lazy(() => import("@/components/cart-modal"));
 const CheckoutModal = lazy(() => import("@/components/checkout-modal"));
+const CustomerAuthModal = lazy(() => import("@/components/customer-auth-modal"));
 const MenuPage = lazy(() => import("@/pages/menu"));
 const CustomerProfile = lazy(() => import("@/pages/customer-profile"));
 const CartPage = lazy(() => import("@/pages/cart-page"));
@@ -230,7 +232,7 @@ function AppRouter() {
       <Route path="/my-offers"><AuthGuard userType="customer"><MyOffers /></AuthGuard></Route>
       <Route path="/my-card"><AuthGuard userType="customer"><MyCard /></AuthGuard></Route>
       <Route path="/referrals"><AuthGuard userType="customer"><ReferralProgram /></AuthGuard></Route>
-      <Route path="/cart"><AuthGuard userType="customer"><CartPage /></AuthGuard></Route>
+      <Route path="/cart"><CartPage /></Route>
       <Route path="/delivery"><AuthGuard userType="customer"><DeliverySelectionPage /></AuthGuard></Route>
       <Route path="/delivery/map"><AuthGuard userType="customer"><DeliveryMapPage /></AuthGuard></Route>
       <Route path="/checkout"><AuthGuard userType="customer"><CheckoutPage /></AuthGuard></Route>
@@ -368,6 +370,7 @@ function AppContent() {
       <Suspense fallback={null}>
         {isCartOpen && <CartModal />}
         {isCheckoutOpen && <CheckoutModal />}
+        <CustomerAuthModal />
       </Suspense>
       <Toaster />
     </>
@@ -423,6 +426,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <CustomerProvider>
+            <AuthModalProvider>
             <CartProvider>
               <ErrorBoundary>
                 <WouterRouter>
@@ -434,6 +438,7 @@ function App() {
                 <OfflineIndicator />
               </ErrorBoundary>
             </CartProvider>
+            </AuthModalProvider>
           </CustomerProvider>
         </TooltipProvider>
       </QueryClientProvider>

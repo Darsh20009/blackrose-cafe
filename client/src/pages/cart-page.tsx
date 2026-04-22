@@ -8,6 +8,9 @@ import { getCoffeeImage } from "@/lib/coffee-data-clean";
 import { ArrowRight, ShoppingCart, Trash2, Plus, Minus, ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import SarIcon from "@/components/sar-icon";
+import { useCustomer } from "@/contexts/CustomerContext";
+import { useAuthModal } from "@/contexts/AuthModalContext";
+import { customerStorage } from "@/lib/customer-storage";
 
 export default function CartPage() {
   const translation = useTranslation();
@@ -15,6 +18,16 @@ export default function CartPage() {
   const i18n = translation?.i18n || { language: 'ar' };
   const { cartItems, removeFromCart, updateQuantity, getTotalPrice } = useCartStore();
   const [, setLocation] = useLocation();
+  const { isAuthenticated } = useCustomer();
+  const { openAuthModal } = useAuthModal();
+  const goCheckout = () => {
+    const isGuest = customerStorage.isGuestMode() && !!customerStorage.getGuestInfo();
+    if (isAuthenticated || isGuest) {
+      setLocation("/delivery");
+      return;
+    }
+    openAuthModal({ onSuccess: () => setLocation("/delivery") });
+  };
 
   const isAr = i18n.language === 'ar';
 
@@ -219,7 +232,7 @@ export default function CartPage() {
                   </div>
 
                   <Button 
-                    onClick={() => setLocation("/delivery")}
+                    onClick={goCheckout}
                     className="w-full bg-primary text-primary-foreground py-6 text-xl font-bold hover:bg-primary/90 transition-all duration-300 shadow-xl rounded-full"
                     data-testid="button-checkout"
                   >
@@ -239,7 +252,7 @@ export default function CartPage() {
               <span className="text-xl font-black text-primary">{totalPrice.toFixed(2)} <SarIcon /></span>
             </div>
             <Button 
-              onClick={() => setLocation("/delivery")}
+              onClick={goCheckout}
               className="flex-1 max-w-[200px] bg-primary text-primary-foreground py-5 text-lg font-bold hover:bg-primary/90 rounded-full shadow-lg"
               data-testid="button-checkout-mobile"
             >
