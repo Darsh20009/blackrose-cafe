@@ -398,14 +398,18 @@ export function buildEscPosReceipt(data: EscPosReceiptData): Uint8Array {
   buf.push(...dottedLine(w));
 
   // ── Invoice label ─────────────────────────────────────────────────────────
-  buf.push(...CMD.ALIGN_CENTER, ...CMD.BOLD_ON);
+  buf.push(...CMD.ALIGN_CENTER, ...CMD.BOLD_ON, ...CMD.DOUBLE_SIZE);
   buf.push(...textBytes('فاتورة ضريبية مبسطة'), 0x0a);
-  buf.push(...CMD.BOLD_OFF);
+  buf.push(...CMD.NORMAL_SIZE, ...CMD.BOLD_OFF);
+
+  // ── Spacing between invoice label and order number (3 blank lines) ───────
+  buf.push(0x0a, 0x0a, 0x0a);
 
   // ── Order number (large, centered) ───────────────────────────────────────
-  buf.push(...CMD.DOUBLE_SIZE, ...CMD.ALIGN_CENTER);
+  buf.push(...CMD.DOUBLE_SIZE, ...CMD.BOLD_ON, ...CMD.ALIGN_CENTER);
   buf.push(...textBytes(fmtOrderNum(data.orderNumber)), 0x0a);
-  buf.push(...CMD.NORMAL_SIZE);
+  buf.push(...CMD.NORMAL_SIZE, ...CMD.BOLD_OFF);
+  buf.push(0x0a);
 
   buf.push(...thinLine(w));
 
@@ -571,7 +575,7 @@ export async function buildReceiptCanvas(opts: ReceiptBitmapOpts): Promise<HTMLC
   const DW = opts.paperWidth === '58mm' ? 384 : 576;
   const PAD = Math.round(DW * 0.04);   // ~4% side padding
   const CONTENT_W = DW - PAD * 2;
-  const FS = opts.paperWidth === '58mm' ? 18 : 22;  // base font size (enlarged per request)
+  const FS = opts.paperWidth === '58mm' ? 24 : 30;  // base font size (enlarged per request)
 
   // ── Helper: load an image from dataUrl ───────────────────────────────────
   const loadImg = (src: string): Promise<HTMLImageElement> =>
@@ -626,12 +630,13 @@ export async function buildReceiptCanvas(opts: ReceiptBitmapOpts): Promise<HTMLC
 
   addLine(true);
 
-  addText('فاتورة ضريبية مبسطة', 'center', FS, true);
-  addGap(4);
+  addText('فاتورة ضريبية مبسطة', 'center', Math.round(FS * 1.15), true);
+  addGap(Math.round(FS * 2.5));
 
   // Order number (no label, just the number — large and bold)
   const orderNumFmt = String(opts.orderNumber).replace(/\D/g, '').padStart(4, '0') || opts.orderNumber;
   addText(`#${orderNumFmt}`, 'center', Math.round(FS * 2.8), true);
+  addGap(Math.round(FS * 0.6));
 
   addLine(false, true);
 
