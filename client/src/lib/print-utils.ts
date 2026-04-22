@@ -896,8 +896,11 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
         try { zatcaQrDataUrl = await QRCode.toDataURL(zatcaPayload, { width: 250, margin: 1, errorCorrectionLevel: 'M' }); } catch {}
 
         // ── Generate tracking QR (public /track/:orderNumber URL) ─────────────
+        // IMPORTANT: orderNumber may contain '#' (e.g. "ORD#0042") which would be
+        // interpreted as a URL fragment by browsers and break the route lookup.
+        // Always URL-encode the segment.
         const trackingBase = (printerSettings.publicBaseUrl?.replace(/\/+$/, '')) || window.location.origin;
-        const trackingUrl = `${trackingBase}/track/${data.orderNumber}`;
+        const trackingUrl = `${trackingBase}/track/${encodeURIComponent(String(data.orderNumber))}`;
         let trackingQrDataUrl = '';
         try { trackingQrDataUrl = await QRCode.toDataURL(trackingUrl, { width: 400, margin: 1, errorCorrectionLevel: 'H' }); } catch {}
 
@@ -1017,7 +1020,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 
   const ps2 = (await import('./thermal-printer')).loadPrinterSettings();
   const trackingBase2 = (ps2.publicBaseUrl?.replace(/\/+$/, '')) || window.location.origin;
-  const trackingUrl = `${trackingBase2}/track/${data.orderNumber}`;
+  const trackingUrl = `${trackingBase2}/track/${encodeURIComponent(String(data.orderNumber))}`;
   let trackingQrDataUrl = '';
   try { trackingQrDataUrl = await QRCode.toDataURL(trackingUrl, { width: 400, margin: 1, errorCorrectionLevel: 'H' }); } catch {}
 
