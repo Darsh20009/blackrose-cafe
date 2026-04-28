@@ -2397,14 +2397,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Toggle New Product status
+  // Update a coffee item (also persists & links its addons so they appear in POS)
   app.put("/api/coffee-items/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
-      const updated = await CoffeeItemModel.findOneAndUpdate({ id: req.params.id }, { $set: req.body }, { new: true });
+      const itemId = req.params.id;
+      const { addons, ...itemFields } = req.body || {};
+
+      const updated = await CoffeeItemModel.findOneAndUpdate({ id: itemId }, { $set: itemFields }, { new: true });
+
+      // Persist addons & link them to the coffee item (works for both food and drinks)
+      if (Array.isArray(addons)) {
+        const keepAddonIds: string[] = [];
+        for (const addon of addons) {
+          if (!addon || !addon.nameAr) continue;
+          if (!addon.id) addon.id = nanoid();
+          keepAddonIds.push(addon.id);
+          try {
+            await ProductAddonModel.findOneAndUpdate(
+              { id: addon.id },
+              { $set: { id: addon.id, ...addon, category: addon.category || 'other', createdAt: addon.createdAt || new Date() } },
+              { upsert: true, new: true }
+            );
+            await CoffeeItemAddonModel.findOneAndUpdate(
+              { coffeeItemId: itemId, addonId: addon.id },
+              { $set: { coffeeItemId: itemId, addonId: addon.id, isDefault: addon.isDefault || 0, minQuantity: addon.minQuantity || 0, maxQuantity: addon.maxQuantity || 10, createdAt: new Date() } },
+              { upsert: true }
+            );
+          } catch (err) {
+            console.error("[PUT /api/coffee-items/:id] Error saving addon:", err);
+          }
+        }
+        // Remove links for addons the user deleted in the editor
+        try {
+          await CoffeeItemAddonModel.deleteMany({ coffeeItemId: itemId, addonId: { $nin: keepAddonIds } });
+        } catch (err) {
+          console.error("[PUT /api/coffee-items/:id] Error pruning addon links:", err);
+        }
+      }
+
       const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       invalidateCoffeeItemsCache(tenantId);
+      cache.del(cacheKey('with-addons', 'global'));
       res.json(serializeDoc(updated));
     } catch (error) {
+      console.error("[PUT /api/coffee-items/:id] Error:", error);
       res.status(500).json({ error: "فشل في تحديث حالة المنتج" });
     }
   });
