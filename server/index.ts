@@ -139,6 +139,29 @@ async function connectDatabase() {
       );
       console.log("✅ Subscription: Infinity plan — all features unlocked");
     } catch (_) {}
+    // Seed promotional discount code BRCAFE10 (10% off, shareable promo link)
+    try {
+      const { DiscountCodeModel } = await import("@shared/schema");
+      await DiscountCodeModel.findOneAndUpdate(
+        { code: "BRCAFE10" },
+        {
+          $setOnInsert: {
+            code: "BRCAFE10",
+            discountPercentage: 10,
+            reason: "كوبون ترويجي 10% - رابط خاص",
+            employeeId: "system",
+            isActive: 1,
+            usageCount: 0,
+            visibleToCustomers: true,
+            createdAt: new Date(),
+          },
+        },
+        { upsert: true, new: true }
+      );
+      console.log("✅ Promo code BRCAFE10 (10% off) is ready");
+    } catch (err) {
+      console.error("BRCAFE10 seed error:", err);
+    }
   } catch (error) {
     isDbConnected = false;
     console.error("❌ MongoDB connection error:", error);

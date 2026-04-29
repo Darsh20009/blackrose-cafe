@@ -405,6 +405,26 @@ export default function CheckoutPage() {
     setReceiptPreview(null);
   }, [selectedPaymentMethod]);
 
+  // Auto-apply pending coupon (saved from /promo/:code link)
+  const pendingCouponTriedRef = useRef(false);
+  useEffect(() => {
+    if (pendingCouponTriedRef.current) return;
+    if (appliedDiscount) return;
+    let pending: { code?: string } | null = null;
+    try {
+      const raw = localStorage.getItem("pendingCoupon");
+      if (raw) pending = JSON.parse(raw);
+    } catch (_) {}
+    if (!pending?.code) return;
+    pendingCouponTriedRef.current = true;
+    setDiscountCode(pending.code);
+    handleValidateDiscount(pending.code).finally(() => {
+      try {
+        localStorage.removeItem("pendingCoupon");
+      } catch (_) {}
+    });
+  }, [appliedDiscount]);
+
   const handleReceiptFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
