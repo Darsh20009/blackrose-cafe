@@ -433,6 +433,9 @@ const [aiEditDescription, setAiEditDescription] = useState("");
  },
  onSuccess: () => {
  queryClient.invalidateQueries({ queryKey: ["/api/coffee-items"] });
+ queryClient.invalidateQueries({ queryKey: ["/api/coffee-items/with-addons"] });
+ queryClient.invalidateQueries({ queryKey: ["/api/coffee-items/addons-preview"] });
+ queryClient.invalidateQueries({ queryKey: ["/api/product-addons"] });
  setIsEditDialogOpen(false);
  setEditingItem(null);
  toast({
