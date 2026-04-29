@@ -72,27 +72,52 @@ export default function PromoPage() {
   return (
     <div
       dir="rtl"
-      className="min-h-[100dvh] w-full flex flex-col items-center justify-center px-5 py-10 font-ibm-arabic"
-      style={{
-        background:
-          "radial-gradient(circle at 20% 0%, #6b3a1a 0%, #4a2410 40%, #2a140a 100%)",
-      }}
+      className="relative min-h-[100dvh] w-full flex flex-col items-center justify-center px-5 py-10 font-ibm-arabic bg-black overflow-hidden"
       data-testid="page-promo"
     >
+      {/* Subtle radial accent like the splash */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-40"
+        style={{
+          background:
+            "radial-gradient(circle at 50% 20%, rgba(190,24,69,0.18) 0%, transparent 60%)",
+        }}
+      />
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-md"
+        className="relative w-full max-w-md"
       >
-        <div className="flex justify-center mb-6">
-          <img
-            src={blackroseLogo}
-            alt="Black Rose Cafe"
-            className="h-20 w-20 rounded-full bg-white/10 p-2 ring-1 ring-white/20"
-            data-testid="img-promo-logo"
-          />
-        </div>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.7 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, type: "spring", stiffness: 140, damping: 14 }}
+          className="flex justify-center mb-4"
+        >
+          <div className="w-24 h-24 rounded-3xl bg-white/10 backdrop-blur-md border border-white/15 shadow-2xl flex items-center justify-center p-3">
+            <img
+              src={blackroseLogo}
+              alt="Black Rose Cafe"
+              className="w-full h-full object-contain"
+              data-testid="img-promo-logo"
+            />
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.25 }}
+          className="text-center mb-6"
+        >
+          <h1 className="text-xl font-black tracking-[0.3em] text-white uppercase">
+            BLACK ROSE
+          </h1>
+          <p className="text-[#BE1845] text-[11px] font-bold tracking-[0.45em] uppercase mt-1">
+            CAFE
+          </p>
+        </motion.div>
 
         <div
           className="relative bg-[#fdf6ee] rounded-3xl shadow-2xl overflow-hidden"
