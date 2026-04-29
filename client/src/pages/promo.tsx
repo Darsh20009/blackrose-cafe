@@ -234,7 +234,7 @@ export default function PromoPage() {
 
           <div className="bg-[#3a1f10] text-white text-[11px] text-center py-2 flex items-center justify-center gap-1">
             <BadgePercent className="h-3.5 w-3.5" />
-            عرض حصري - بلاك روز كافيه
+            عرض حصري - كلية التقنية للبنات بينبع
           </div>
         </div>
       </motion.div>
