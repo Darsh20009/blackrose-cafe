@@ -3,6 +3,7 @@ import { useLocation, useRoute } from "wouter";
 import { motion } from "framer-motion";
 import { Ticket, LogIn, ShoppingBag, BadgePercent } from "lucide-react";
 import blackroseLogo from "@assets/blackrose-logo.png";
+import bannerImage1 from "@assets/blackrose-banner-1.png";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
@@ -72,9 +73,19 @@ export default function PromoPage() {
   return (
     <div
       dir="rtl"
-      className="relative min-h-[100dvh] w-full flex flex-col items-center px-5 py-8 font-ibm-arabic bg-black overflow-hidden"
+      className="relative min-h-[100dvh] w-full flex flex-col items-center px-5 py-8 font-ibm-arabic overflow-hidden"
       data-testid="page-promo"
     >
+      {/* Background image with overlay (same as welcome/splash) */}
+      <div className="absolute inset-0 z-0">
+        <img
+          src={bannerImage1}
+          alt="Coffee Background"
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/55 to-black/80" />
+      </div>
+      <div className="relative z-10 w-full flex flex-col items-center">
       {/* Logo (same as splash) */}
       <motion.div
         initial={{ opacity: 0, scale: 0.6 }}
@@ -227,6 +238,7 @@ export default function PromoPage() {
           </div>
         </div>
       </motion.div>
+      </div>
     </div>
   );
 }
