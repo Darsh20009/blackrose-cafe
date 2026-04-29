@@ -72,60 +72,71 @@ export default function PromoPage() {
   return (
     <div
       dir="rtl"
-      className="relative min-h-[100dvh] w-full flex flex-col items-center justify-center px-5 py-10 font-ibm-arabic bg-black overflow-hidden"
+      className="relative min-h-[100dvh] w-full flex flex-col items-center px-5 py-8 font-ibm-arabic bg-black overflow-hidden"
       data-testid="page-promo"
     >
-      {/* Subtle radial accent like the splash */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-40"
-        style={{
-          background:
-            "radial-gradient(circle at 50% 20%, rgba(190,24,69,0.18) 0%, transparent 60%)",
-        }}
-      />
+      {/* Logo (same as splash) */}
       <motion.div
-        initial={{ opacity: 0, y: 24 }}
+        initial={{ opacity: 0, scale: 0.6 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.7, type: "spring", stiffness: 140, damping: 14 }}
+        className="mb-7 mt-6"
+      >
+        <div className="w-32 h-32 rounded-3xl bg-white/10 backdrop-blur-md border border-white/15 shadow-2xl flex items-center justify-center p-4">
+          <img
+            src={blackroseLogo}
+            alt="Black Rose Cafe"
+            className="w-full h-full object-contain"
+            data-testid="img-promo-logo"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        </div>
+      </motion.div>
+
+      {/* Brand (same as splash) */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.6, delay: 0.4 }}
+        className="text-center mb-6"
+      >
+        <h1 className="text-2xl font-black tracking-[0.3em] text-white uppercase">
+          BLACK ROSE
+        </h1>
+        <p className="text-[#BE1845] text-xs font-bold tracking-[0.45em] uppercase mt-0.5">
+          CAFE
+        </p>
+      </motion.div>
+
+      {/* Bouncing dots (same as splash) */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.7 }}
+        className="flex items-center gap-2 mb-8"
+      >
+        {[0, 150, 300].map((delay) => (
+          <div
+            key={delay}
+            className="w-2 h-2 rounded-full bg-[#BE1845] animate-bounce"
+            style={{ animationDelay: `${delay}ms` }}
+          />
+        ))}
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.3 }}
         className="relative w-full max-w-md"
       >
-        <motion.div
-          initial={{ opacity: 0, scale: 0.7 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.6, type: "spring", stiffness: 140, damping: 14 }}
-          className="flex justify-center mb-4"
-        >
-          <div className="w-24 h-24 rounded-3xl bg-white/10 backdrop-blur-md border border-white/15 shadow-2xl flex items-center justify-center p-3">
-            <img
-              src={blackroseLogo}
-              alt="Black Rose Cafe"
-              className="w-full h-full object-contain"
-              data-testid="img-promo-logo"
-            />
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.25 }}
-          className="text-center mb-6"
-        >
-          <h1 className="text-xl font-black tracking-[0.3em] text-white uppercase">
-            BLACK ROSE
-          </h1>
-          <p className="text-[#BE1845] text-[11px] font-bold tracking-[0.45em] uppercase mt-1">
-            CAFE
-          </p>
-        </motion.div>
-
         <div
           className="relative bg-[#fdf6ee] rounded-3xl shadow-2xl overflow-hidden"
           data-testid="card-coupon"
         >
           {/* Decorative ticket notches */}
-          <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#2a140a]" />
-          <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#2a140a]" />
+          <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black" />
+          <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black" />
 
           <div className="p-6">
             <div className="flex items-center justify-between mb-5">
