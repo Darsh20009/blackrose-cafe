@@ -162,6 +162,29 @@ async function connectDatabase() {
     } catch (err) {
       console.error("BRCAFE10 seed error:", err);
     }
+    // Seed discount code TECH10 — كلية التقنية للبنات بينبع (10% off, POS use)
+    try {
+      const { DiscountCodeModel } = await import("@shared/schema");
+      await DiscountCodeModel.findOneAndUpdate(
+        { code: "TECH10" },
+        {
+          $setOnInsert: {
+            code: "TECH10",
+            discountPercentage: 10,
+            reason: "كلية التقنية للبنات بينبع",
+            employeeId: "system",
+            isActive: 1,
+            usageCount: 0,
+            visibleToCustomers: true,
+            createdAt: new Date(),
+          },
+        },
+        { upsert: true, new: true }
+      );
+      console.log("✅ Discount code TECH10 (كلية التقنية للبنات بينبع — 10% off) is ready");
+    } catch (err) {
+      console.error("TECH10 seed error:", err);
+    }
   } catch (error) {
     isDbConnected = false;
     console.error("❌ MongoDB connection error:", error);

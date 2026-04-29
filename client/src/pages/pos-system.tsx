@@ -571,6 +571,59 @@ export default function PosSystem() {
 
   const calculateSubtotal = useMemo(() => calculateTotal / 1.15, [calculateTotal]);
 
+  // Discount coupon (e.g. TECH10 — كلية التقنية للبنات بينبع)
+  const [discountCode, setDiscountCode] = useState("");
+  const [isValidatingDiscount, setIsValidatingDiscount] = useState(false);
+  const [appliedDiscount, setAppliedDiscount] = useState<{ code: string; percentage: number; reason?: string } | null>(null);
+
+  const couponDiscountAmount = useMemo(
+    () => (appliedDiscount ? calculateTotalAfterPoints * appliedDiscount.percentage / 100 : 0),
+    [appliedDiscount, calculateTotalAfterPoints]
+  );
+
+  const calculateGrandTotal = useMemo(
+    () => Math.max(0, calculateTotalAfterPoints - couponDiscountAmount),
+    [calculateTotalAfterPoints, couponDiscountAmount]
+  );
+
+  const handleValidateDiscount = async () => {
+    const code = discountCode.trim();
+    if (!code) return;
+    setIsValidatingDiscount(true);
+    try {
+      const response = await fetch("/api/discount-codes/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, amount: calculateTotalAfterPoints }),
+      });
+      const data = await response.json();
+      if (response.ok && data.valid) {
+        setAppliedDiscount({ code: data.code, percentage: data.discountPercentage, reason: data.reason });
+        setDiscountCode(data.code);
+        toast({
+          title: tc("تم تطبيق الكوبون", "Coupon applied"),
+          description: `${data.reason || data.code} — ${data.discountPercentage}%`,
+        });
+      } else {
+        setAppliedDiscount(null);
+        toast({
+          variant: "destructive",
+          title: tc("كود غير صالح", "Invalid code"),
+          description: data.error || tc("تعذر التحقق من الكود", "Could not validate code"),
+        });
+      }
+    } catch (_) {
+      toast({ variant: "destructive", title: tc("خطأ في الاتصال", "Connection error") });
+    } finally {
+      setIsValidatingDiscount(false);
+    }
+  };
+
+  const handleClearDiscount = () => {
+    setAppliedDiscount(null);
+    setDiscountCode("");
+  };
+
   const buildDisplayPayload = (items: any[], event: string, extra?: any) => {
     const total = items.reduce((s, i) => s + Number(i.coffeeItem.price) * i.quantity, 0);
     const subtotal = total / 1.15;
@@ -640,7 +693,10 @@ export default function PosSystem() {
     try {
       setSyncing(true);
       const rawTotal = calculateTotal;
-      const discount = usePoints && customerPoints >= 100 ? pointsDiscount : 0;
+      const pointsDiscountAmt = usePoints && customerPoints >= 100 ? pointsDiscount : 0;
+      const afterPoints = Math.max(0, rawTotal - pointsDiscountAmt);
+      const couponDiscountAmt = appliedDiscount ? afterPoints * appliedDiscount.percentage / 100 : 0;
+      const discount = pointsDiscountAmt + couponDiscountAmt;
       const total = Math.max(0, rawTotal - discount);
       const subtotal = calculateSubtotal;
       const tax = rawTotal - subtotal;
@@ -691,6 +747,11 @@ export default function PosSystem() {
           pointsRedeemed: pointsUsed,
           pointsValue: discount,
           bypassPointsVerification: true,
+        } : {}),
+        ...(appliedDiscount ? {
+          discountCode: appliedDiscount.code,
+          discountPercentage: appliedDiscount.percentage,
+          discountAmount: couponDiscountAmt,
         } : {}),
       };
 
@@ -1555,6 +1616,59 @@ export default function PosSystem() {
           </div>
 
           <div className="p-2 sm:p-4 pb-[72px] md:pb-4 border-t bg-muted/10 gap-2 sm:gap-3 flex flex-col">
+            {/* Discount coupon input */}
+            <div className="rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 p-2 sm:p-3" data-testid="card-pos-discount">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Tag className="w-3.5 h-3.5 text-primary" />
+                <span className="text-[11px] sm:text-xs font-black text-primary">
+                  {tc('كوبون خصم', 'Discount Coupon')}
+                </span>
+              </div>
+              {appliedDiscount ? (
+                <div className="flex items-center justify-between gap-2 bg-green-50 dark:bg-green-950/30 border border-green-300 dark:border-green-700 rounded-lg px-2 py-1.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] sm:text-xs font-black text-green-700 dark:text-green-300 truncate" data-testid="text-applied-coupon">
+                      {appliedDiscount.code} — {appliedDiscount.percentage}%
+                    </p>
+                    {appliedDiscount.reason && (
+                      <p className="text-[9px] sm:text-[10px] text-green-600 dark:text-green-400 truncate">
+                        {appliedDiscount.reason}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-red-600 hover:bg-red-50 shrink-0"
+                    onClick={handleClearDiscount}
+                    data-testid="button-clear-discount"
+                  >
+                    <XCircle className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={discountCode}
+                    onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
+                    placeholder={tc('أدخل الكود', 'Enter code')}
+                    className="h-8 text-[11px] sm:text-xs font-bold"
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleValidateDiscount(); } }}
+                    data-testid="input-discount-code"
+                  />
+                  <Button
+                    size="sm"
+                    className="h-8 px-2 text-[11px] sm:text-xs font-bold shrink-0"
+                    onClick={handleValidateDiscount}
+                    disabled={isValidatingDiscount || !discountCode.trim()}
+                    data-testid="button-apply-discount"
+                  >
+                    {isValidatingDiscount ? '...' : tc('تطبيق', 'Apply')}
+                  </Button>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-1.5 sm:space-y-2">
               <div className="flex justify-between text-[10px] sm:text-sm">
                 <span className="text-muted-foreground">{t('pos.subtotal')}</span>
@@ -1567,7 +1681,7 @@ export default function PosSystem() {
               <Separator />
               <div className="flex justify-between items-center pt-1">
                 <span className="font-black text-sm sm:text-base">{t('pos.total')}</span>
-                <span className={`font-black text-base sm:text-xl ${usePoints && pointsDiscount > 0 ? 'line-through text-muted-foreground text-sm sm:text-base' : 'text-primary'}`}>{calculateTotal.toFixed(2)} {t('pos.currency')}</span>
+                <span className={`font-black text-base sm:text-xl ${(usePoints && pointsDiscount > 0) || appliedDiscount ? 'line-through text-muted-foreground text-sm sm:text-base' : 'text-primary'}`}>{calculateTotal.toFixed(2)} {t('pos.currency')}</span>
               </div>
               {usePoints && pointsDiscount > 0 && (
                 <div className="flex justify-between text-[10px] sm:text-sm text-amber-600">
@@ -1575,10 +1689,16 @@ export default function PosSystem() {
                   <span className="font-bold">- {pointsDiscount.toFixed(2)} {t('pos.currency')}</span>
                 </div>
               )}
-              {usePoints && pointsDiscount > 0 && (
+              {appliedDiscount && couponDiscountAmount > 0 && (
+                <div className="flex justify-between text-[10px] sm:text-sm text-green-600" data-testid="text-coupon-discount-line">
+                  <span className="font-bold">{tc('كوبون', 'Coupon')} {appliedDiscount.code} ({appliedDiscount.percentage}%)</span>
+                  <span className="font-bold">- {couponDiscountAmount.toFixed(2)} {t('pos.currency')}</span>
+                </div>
+              )}
+              {((usePoints && pointsDiscount > 0) || appliedDiscount) && (
                 <div className="flex justify-between items-center">
                   <span className="font-black text-sm sm:text-base">{i18n.language === 'ar' ? 'الإجمالي بعد الخصم' : 'Total After Discount'}</span>
-                  <span className="font-black text-base sm:text-xl text-primary">{calculateTotalAfterPoints.toFixed(2)} {t('pos.currency')}</span>
+                  <span className="font-black text-base sm:text-xl text-primary" data-testid="text-grand-total">{calculateGrandTotal.toFixed(2)} {t('pos.currency')}</span>
                 </div>
               )}
             </div>
@@ -2029,7 +2149,7 @@ export default function PosSystem() {
               <Separator />
               <div className="flex justify-between items-center pt-1">
                 <span className="font-black text-base">{t('pos.total')}</span>
-                <span className={`font-black text-xl ${usePoints && pointsDiscount > 0 ? 'line-through text-muted-foreground text-base' : 'text-primary'}`}>{calculateTotal.toFixed(2)} {t('pos.currency')}</span>
+                <span className={`font-black text-xl ${(usePoints && pointsDiscount > 0) || appliedDiscount ? 'line-through text-muted-foreground text-base' : 'text-primary'}`}>{calculateTotal.toFixed(2)} {t('pos.currency')}</span>
               </div>
               {usePoints && pointsDiscount > 0 && (
                 <div className="flex justify-between text-sm text-amber-600">
@@ -2037,10 +2157,16 @@ export default function PosSystem() {
                   <span className="font-bold">- {pointsDiscount.toFixed(2)} {t('pos.currency')}</span>
                 </div>
               )}
-              {usePoints && pointsDiscount > 0 && (
+              {appliedDiscount && couponDiscountAmount > 0 && (
+                <div className="flex justify-between text-sm text-green-600">
+                  <span className="font-bold">{tc('كوبون', 'Coupon')} {appliedDiscount.code} ({appliedDiscount.percentage}%)</span>
+                  <span className="font-bold">- {couponDiscountAmount.toFixed(2)} {t('pos.currency')}</span>
+                </div>
+              )}
+              {((usePoints && pointsDiscount > 0) || appliedDiscount) && (
                 <div className="flex justify-between items-center pt-1 border-t">
                   <span className="font-black text-base">{i18n.language === 'ar' ? 'الإجمالي النهائي' : 'Final Total'}</span>
-                  <span className="font-black text-xl text-primary">{calculateTotalAfterPoints.toFixed(2)} {t('pos.currency')}</span>
+                  <span className="font-black text-xl text-primary">{calculateGrandTotal.toFixed(2)} {t('pos.currency')}</span>
                 </div>
               )}
             </div>
