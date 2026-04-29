@@ -5432,13 +5432,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Employee authentication required" });
       }
 
-      // Verify the discount code exists and belongs to this employee
+      // Verify the discount code exists
       const existingCode = await storage.getDiscountCode(id);
       if (!existingCode) {
         return res.status(404).json({ error: "Discount code not found" });
       }
 
-      if (existingCode.employeeId !== employeeId) {
+      // Ownership check: code creator OR an admin/manager/owner may update.
+      // The 'admin' string is the legacy marker used by admin-settings UI.
+      const sessionEmp: any = (req as any).session?.employee || (req as any).employee;
+      const sessionRole = sessionEmp?.role || '';
+      const elevatedRoles = ['admin', 'owner', 'manager', 'branch_manager'];
+      const isElevated = elevatedRoles.includes(sessionRole) || employeeId === 'admin';
+      if (existingCode.employeeId !== employeeId && !isElevated) {
         return res.status(403).json({ error: "Unauthorized: You can only update your own discount codes" });
       }
 
