@@ -11,6 +11,9 @@
     "check": "tsc"
   },
   "dependencies": {
+    "@capacitor/cli": "^7.6.2",
+    "@capacitor/core": "^8.3.1",
+    "@capacitor/ios": "^8.3.1",
     "@google-cloud/storage": "^7.19.0",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",

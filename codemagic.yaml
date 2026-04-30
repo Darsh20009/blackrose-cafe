@@ -2,23 +2,42 @@ workflows:
   ios-release:
     name: iOS Release Build
     max_build_duration: 60
+    instance_type: mac_mini_m2
     environment:
+      xcode: latest
+      node: 20
+      cocoapods: default
       vars:
-        BUNDLE_ID: "com.blackrose.app"
-        XCODE_WORKSPACE: "ios/Runner.xcworkspace"
-        XCODE_SCHEME: "Runner"
+        BUNDLE_ID: "com.blackrose.cafe"
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
     scripts:
-      - name: Install dependencies
+      - name: Install npm dependencies
         script: |
           npm install
-          cd ios
-          pod install
-      - name: Build iOS
+      - name: Build web assets
         script: |
-          xcodebuild -workspace $XCODE_WORKSPACE \
-          -scheme $XCODE_SCHEME \
-          -sdk iphoneos \
-          -configuration Release \
-          archive -archivePath build/Runner.xcarchive
+          npm run build
+      - name: Add iOS platform if missing
+        script: |
+          if [ ! -d "ios" ]; then
+            npx cap add ios
+          fi
+      - name: Sync Capacitor with iOS
+        script: |
+          npx cap sync ios
+      - name: Install CocoaPods
+        script: |
+          cd ios/App && pod install
+      - name: Build iOS archive
+        script: |
+          xcodebuild \
+            -workspace "$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME" \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath build/App.xcarchive \
+            archive
     artifacts:
-      - build/ios/ipa/*.ipa
+      - build/**/*.xcarchive
+      - build/**/*.ipa
