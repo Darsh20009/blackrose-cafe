@@ -409,7 +409,7 @@ export default function AdminSettings() {
   const [newCodeType, setNewCodeType] = useState<'percent' | 'amount'>('percent');
   const [newCodeValue, setNewCodeValue] = useState(10);
   const [newCodeMaxUses, setNewCodeMaxUses] = useState(100);
-  const [newCodeVisible, setNewCodeVisible] = useState(true);
+  const [newCodeVisible, setNewCodeVisible] = useState(false);
   const [showAppGuide, setShowAppGuide] = useState(false);
 
   const createCodeMutation = useMutation({

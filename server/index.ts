@@ -140,6 +140,7 @@ async function connectDatabase() {
       console.log("✅ Subscription: Infinity plan — all features unlocked");
     } catch (_) {}
     // Seed promotional discount code BRCAFE10 (10% off, shareable promo link)
+    // Hidden from customers by default — admin can toggle visibility from admin settings.
     try {
       const { DiscountCodeModel } = await import("@shared/schema");
       await DiscountCodeModel.findOneAndUpdate(
@@ -152,17 +153,24 @@ async function connectDatabase() {
             employeeId: "system",
             isActive: 1,
             usageCount: 0,
-            visibleToCustomers: true,
+            visibleToCustomers: false,
             createdAt: new Date(),
           },
         },
         { upsert: true, new: true }
       );
-      console.log("✅ Promo code BRCAFE10 (10% off) is ready");
+      // One-time migration: hide previously auto-visible seeded code without
+      // overriding any subsequent manual change (marker prevents re-applying).
+      await DiscountCodeModel.updateOne(
+        { code: "BRCAFE10", _seedHiddenV1: { $exists: false } },
+        { $set: { visibleToCustomers: false, _seedHiddenV1: true } }
+      );
+      console.log("✅ Promo code BRCAFE10 (10% off) is ready (hidden by default)");
     } catch (err) {
       console.error("BRCAFE10 seed error:", err);
     }
     // Seed discount code TECH10 — كلية التقنية للبنات بينبع (10% off, POS use)
+    // Hidden from customers by default — admin can toggle visibility from admin settings.
     try {
       const { DiscountCodeModel } = await import("@shared/schema");
       await DiscountCodeModel.findOneAndUpdate(
@@ -175,13 +183,19 @@ async function connectDatabase() {
             employeeId: "system",
             isActive: 1,
             usageCount: 0,
-            visibleToCustomers: true,
+            visibleToCustomers: false,
             createdAt: new Date(),
           },
         },
         { upsert: true, new: true }
       );
-      console.log("✅ Discount code TECH10 (كلية التقنية للبنات بينبع — 10% off) is ready");
+      // One-time migration: hide previously auto-visible seeded code without
+      // overriding any subsequent manual change (marker prevents re-applying).
+      await DiscountCodeModel.updateOne(
+        { code: "TECH10", _seedHiddenV1: { $exists: false } },
+        { $set: { visibleToCustomers: false, _seedHiddenV1: true } }
+      );
+      console.log("✅ Discount code TECH10 (كلية التقنية للبنات بينبع — 10% off) is ready (hidden by default)");
     } catch (err) {
       console.error("TECH10 seed error:", err);
     }
