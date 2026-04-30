@@ -26,9 +26,17 @@ workflows:
       - name: Sync Capacitor with iOS
         script: |
           npx cap sync ios
+      - name: Bump iOS minimum deployment target to 14.0
+        script: |
+          cd ios/App
+          # Force Podfile to iOS 14 (Capacitor 5/6 require >= 13)
+          if [ -f Podfile ]; then
+            sed -i '' "s/platform :ios, .*/platform :ios, '14.0'/" Podfile || \
+              sed -i "s/platform :ios, .*/platform :ios, '14.0'/" Podfile
+          fi
       - name: Install CocoaPods
         script: |
-          cd ios/App && pod install
+          cd ios/App && pod install --repo-update
       - name: Build iOS archive
         script: |
           xcodebuild \

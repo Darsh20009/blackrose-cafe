@@ -4,6 +4,7 @@
   "webDir": "dist/public",
   "bundledWebRuntime": false,
   "ios": {
-    "contentInset": "always"
+    "contentInset": "always",
+    "minVersion": "14.0"
   }
 }
