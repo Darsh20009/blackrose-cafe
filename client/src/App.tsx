@@ -102,6 +102,7 @@ const AdminBranches = lazy(() => import("@/pages/admin-branches"));
 const AdminEmail = lazy(() => import("@/pages/admin-email"));
 const TenantSignup = lazy(() => import("@/pages/tenant-signup"));
 const NotFound = lazy(() => import("@/pages/not-found"));
+const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
 const ExecutiveDashboard = lazy(() => import("@/pages/executive-dashboard"));
 const ZATCAInvoices = lazy(() => import("@/pages/zatca-invoices"));
 const MenuView = lazy(() => import("@/pages/menu-view"));
@@ -171,6 +172,7 @@ function AppRouter() {
       <Route path="/welcome"><WelcomePage /></Route>
       <Route path="/promo/:code"><PromoPage /></Route>
       <Route path="/pricing"><PricingPage /></Route>
+      <Route path="/privacy"><PrivacyPolicy /></Route>
       <Route path="/" component={WelcomePage} />
       <Route path="/0">{() => { window.location.replace('/employee/login'); return null; }}</Route>
       <Route path="/tenant/signup"><TenantSignup /></Route>
