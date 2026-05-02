@@ -26,23 +26,31 @@ workflows:
         script: |
           npm run build
 
-      - name: Add iOS platform if missing
+      - name: Add iOS platform if missing (skip pod install)
         script: |
           if [ ! -d "ios" ]; then
-            npx cap add ios
+            # cap add runs pod install internally — ignore that failure,
+            # we will patch the Podfile and run pod install ourselves below.
+            npx cap add ios || true
           fi
 
-      - name: Sync Capacitor with iOS
-        script: |
-          npx cap sync ios
-
-      - name: Set minimum iOS deployment target to 14.0
+      - name: Set minimum iOS deployment target to 16.0
+        # Must run BEFORE cap sync and BEFORE pod install
         script: |
           cd ios/App
           if [ -f Podfile ]; then
-            sed -i '' "s/platform :ios, .*/platform :ios, '14.0'/" Podfile 2>/dev/null || \
-              sed -i "s/platform :ios, .*/platform :ios, '14.0'/" Podfile
+            sed -i '' "s/platform :ios, .*/platform :ios, '16.0'/" Podfile 2>/dev/null || \
+              sed -i    "s/platform :ios, .*/platform :ios, '16.0'/" Podfile
           fi
+          # Also patch the Xcode project file directly
+          find . -name "project.pbxproj" -exec \
+            sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 16.0/g' {} + 2>/dev/null || \
+          find . -name "project.pbxproj" -exec \
+            sed -i    's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 16.0/g' {} +
+
+      - name: Sync Capacitor with iOS (skip CocoaPods — we run it below)
+        script: |
+          npx cap sync ios --no-deps
 
       - name: Inject Info.plist permission strings & encryption flag
         script: |
@@ -114,23 +122,28 @@ workflows:
         script: |
           npm run build
 
-      - name: Add iOS platform if missing
+      - name: Add iOS platform if missing (skip pod install)
         script: |
           if [ ! -d "ios" ]; then
-            npx cap add ios
+            npx cap add ios || true
           fi
 
-      - name: Sync Capacitor with iOS
-        script: |
-          npx cap sync ios
-
-      - name: Set minimum iOS deployment target to 14.0
+      - name: Set minimum iOS deployment target to 16.0
+        # Must run BEFORE cap sync and BEFORE pod install
         script: |
           cd ios/App
           if [ -f Podfile ]; then
-            sed -i '' "s/platform :ios, .*/platform :ios, '14.0'/" Podfile 2>/dev/null || \
-              sed -i "s/platform :ios, .*/platform :ios, '14.0'/" Podfile
+            sed -i '' "s/platform :ios, .*/platform :ios, '16.0'/" Podfile 2>/dev/null || \
+              sed -i    "s/platform :ios, .*/platform :ios, '16.0'/" Podfile
           fi
+          find . -name "project.pbxproj" -exec \
+            sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 16.0/g' {} + 2>/dev/null || \
+          find . -name "project.pbxproj" -exec \
+            sed -i    's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 16.0/g' {} +
+
+      - name: Sync Capacitor with iOS (skip CocoaPods — we run it below)
+        script: |
+          npx cap sync ios --no-deps
 
       - name: Inject Info.plist permission strings & encryption flag
         script: |
