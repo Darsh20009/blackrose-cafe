@@ -1,6 +1,6 @@
 {
-  "appId": "com.blackrose.cafe",
-  "appName": "BlackRose Cafe",
+  "appId": "blackrose.com.sa",
+  "appName": "Black Rose Cafe",
   "webDir": "dist/public",
   "bundledWebRuntime": false,
   "ios": {

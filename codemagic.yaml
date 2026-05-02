@@ -12,7 +12,7 @@ workflows:
       node: 20
       cocoapods: default
       vars:
-        BUNDLE_ID: "com.blackrose.cafe"
+        BUNDLE_ID: "blackrose.com.sa"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
     scripts:
@@ -100,7 +100,7 @@ workflows:
       groups:
         - apple_credentials
       vars:
-        BUNDLE_ID: "com.blackrose.cafe"
+        BUNDLE_ID: "blackrose.com.sa"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
     scripts:
