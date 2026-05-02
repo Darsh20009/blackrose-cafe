@@ -215,7 +215,6 @@ export default function CheckoutPage() {
   const [giftCardCode, setGiftCardCode] = useState("");
   const [appliedGiftCard, setAppliedGiftCard] = useState<{ code: string; balance: number; applied: number } | null>(null);
   const [isCheckingGiftCard, setIsCheckingGiftCard] = useState(false);
-  const [showCouponSuggestions, setShowCouponSuggestions] = useState(false);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const { card: loyaltyCard, refetch: refetchLoyaltyCard } = useLoyaltyCard();
 
@@ -654,12 +653,6 @@ export default function CheckoutPage() {
     onError: (error) => toast({ variant: "destructive", title: t("checkout.order_error"), description: error.message }),
   });
 
-  const { data: coupons = [] } = useQuery<any[]>({
-    queryKey: ["/api/discount-codes"],
-  });
-
-  const safeCoupons = Array.isArray(coupons) ? coupons.filter(c => c && c.code && typeof c.code === 'string') : [];
-
   const handleValidateDiscount = async (codeOverride?: string) => {
     const codeToUse = codeOverride || discountCode.trim();
     if (!codeToUse) return;
@@ -679,7 +672,6 @@ export default function CheckoutPage() {
       if (response.ok && data.valid) {
         setAppliedDiscount({ code: data.code, percentage: data.discountPercentage });
         setDiscountCode(data.code);
-        setShowCouponSuggestions(false);
         toast({
           title: t("checkout.coupon_applied"),
           description: `${t("checkout.discount")}: ${data.discountPercentage}%`,
@@ -1639,40 +1631,6 @@ export default function CheckoutPage() {
                     <Gift className="w-5 h-5 text-orange-600" />
                     <Label className="font-semibold">{t("checkout.have_discount")}</Label>
                   </div>
-
-                  {/* Available coupon codes */}
-                  {safeCoupons.length > 0 && !appliedDiscount && !usePointsAsDiscount && (
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
-                        <Ticket className="w-3.5 h-3.5" />
-                        {t("checkout.available_coupons")}
-                      </p>
-                      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                        {safeCoupons.map((coupon) => (
-                          <button
-                            key={coupon.id || coupon._id || coupon.code}
-                            onClick={() => {
-                              setDiscountCode(coupon.code);
-                              handleValidateDiscount(coupon.code);
-                            }}
-                            data-testid={`button-coupon-${coupon.code}`}
-                            className="flex-shrink-0 flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/60 transition-all group min-w-[100px]"
-                          >
-                            <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center group-hover:scale-110 transition-transform">
-                              <Tag className="w-4 h-4 text-primary" />
-                            </div>
-                            <span className="font-mono font-black text-xs tracking-wider text-foreground">{coupon.code}</span>
-                            <Badge className="bg-primary text-white border-0 font-black text-[10px] px-1.5 py-0">
-                              -{coupon.discountPercentage}%
-                            </Badge>
-                            {coupon.reason && (
-                              <span className="text-[9px] text-muted-foreground text-center line-clamp-1 max-w-[90px]">{coupon.reason}</span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
 
                   {/* Coupon code input — disabled when using points */}
                   {!usePointsAsDiscount && (
