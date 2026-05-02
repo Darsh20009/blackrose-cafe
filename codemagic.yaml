@@ -2,8 +2,6 @@ workflows:
 
   # ─────────────────────────────────────────────────────────────
   # WORKFLOW 1 — Build only (no App Store credentials needed)
-  # Use this to verify the build pipeline works before adding
-  # your Apple credentials.
   # ─────────────────────────────────────────────────────────────
   ios-build:
     name: iOS Build (No Signing)
@@ -26,51 +24,43 @@ workflows:
         script: |
           npm run build
 
-      - name: Add iOS platform if missing (skip pod install)
+      - name: Add iOS platform if missing
         script: |
           if [ ! -d "ios" ]; then
-            # cap add runs pod install internally — ignore that failure,
-            # we will patch the Podfile and run pod install ourselves below.
+            # The internal pod install will fail if Podfile doesn't exist yet —
+            # that's fine, we patch and re-run in the next step.
             npx cap add ios || true
           fi
 
       - name: Set minimum iOS deployment target to 16.0
-        # Must run BEFORE cap sync and BEFORE pod install
+        # Patch BEFORE cap sync so the internal pod install uses the right target
         script: |
-          cd ios/App
-          if [ -f Podfile ]; then
-            sed -i '' "s/platform :ios, .*/platform :ios, '16.0'/" Podfile 2>/dev/null || \
-              sed -i    "s/platform :ios, .*/platform :ios, '16.0'/" Podfile
+          if [ -f "ios/App/Podfile" ]; then
+            sed -i '' "s/platform :ios, .*/platform :ios, '16.0'/" ios/App/Podfile 2>/dev/null || \
+              sed -i    "s/platform :ios, .*/platform :ios, '16.0'/" ios/App/Podfile
           fi
-          # Also patch the Xcode project file directly
-          find . -name "project.pbxproj" -exec \
+          # Also patch the Xcode project file
+          find ios -name "project.pbxproj" -exec \
             sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 16.0/g' {} + 2>/dev/null || \
-          find . -name "project.pbxproj" -exec \
+          find ios -name "project.pbxproj" -exec \
             sed -i    's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 16.0/g' {} +
 
-      - name: Sync Capacitor with iOS (skip CocoaPods — we run it below)
+      - name: Sync Capacitor with iOS
+        # Podfile is already patched — cap sync will run pod install successfully
         script: |
-          npx cap sync ios --no-deps
+          npx cap sync ios
 
       - name: Inject Info.plist permission strings & encryption flag
         script: |
           PLIST="ios/App/App/Info.plist"
-          # Camera — QR scanner
           /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'يستخدم التطبيق الكاميرا لمسح رموز QR'" "$PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'يستخدم التطبيق الكاميرا لمسح رموز QR'" "$PLIST"
-          # Location — delivery and branch finder
           /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string 'يستخدم التطبيق الموقع لإيصال الطلبات وإيجاد الفروع القريبة'" "$PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :NSLocationWhenInUseUsageDescription 'يستخدم التطبيق الموقع لإيصال الطلبات وإيجاد الفروع القريبة'" "$PLIST"
-          # Photo library — upload payment receipts
           /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'يستخدم التطبيق الصور لرفع إيصالات الدفع'" "$PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'يستخدم التطبيق الصور لرفع إيصالات الدفع'" "$PLIST"
-          # Encryption compliance — only standard HTTPS, no custom encryption
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" "$PLIST"
-
-      - name: Install CocoaPods
-        script: |
-          cd ios/App && pod install --repo-update
 
       - name: Build (unsigned — simulator archive to verify the pipeline)
         script: |
@@ -102,13 +92,13 @@ workflows:
     max_build_duration: 90
     instance_type: mac_mini_m2
     integrations:
-      app_store_connect: blackrose_appstore   # Create this in Codemagic UI first
+      app_store_connect: blackrose_appstore
     environment:
       xcode: latest
       node: 20
       cocoapods: default
       groups:
-        - apple_credentials                   # Create this in Codemagic UI first
+        - apple_credentials
       vars:
         BUNDLE_ID: "com.blackrose.cafe"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
@@ -122,28 +112,26 @@ workflows:
         script: |
           npm run build
 
-      - name: Add iOS platform if missing (skip pod install)
+      - name: Add iOS platform if missing
         script: |
           if [ ! -d "ios" ]; then
             npx cap add ios || true
           fi
 
       - name: Set minimum iOS deployment target to 16.0
-        # Must run BEFORE cap sync and BEFORE pod install
         script: |
-          cd ios/App
-          if [ -f Podfile ]; then
-            sed -i '' "s/platform :ios, .*/platform :ios, '16.0'/" Podfile 2>/dev/null || \
-              sed -i    "s/platform :ios, .*/platform :ios, '16.0'/" Podfile
+          if [ -f "ios/App/Podfile" ]; then
+            sed -i '' "s/platform :ios, .*/platform :ios, '16.0'/" ios/App/Podfile 2>/dev/null || \
+              sed -i    "s/platform :ios, .*/platform :ios, '16.0'/" ios/App/Podfile
           fi
-          find . -name "project.pbxproj" -exec \
+          find ios -name "project.pbxproj" -exec \
             sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 16.0/g' {} + 2>/dev/null || \
-          find . -name "project.pbxproj" -exec \
+          find ios -name "project.pbxproj" -exec \
             sed -i    's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 16.0/g' {} +
 
-      - name: Sync Capacitor with iOS (skip CocoaPods — we run it below)
+      - name: Sync Capacitor with iOS
         script: |
-          npx cap sync ios --no-deps
+          npx cap sync ios
 
       - name: Inject Info.plist permission strings & encryption flag
         script: |
@@ -164,10 +152,6 @@ workflows:
           cd ios/App
           agvtool new-marketing-version "$MARKETING_VERSION"
           agvtool new-version -all "$BUILD_NUMBER"
-
-      - name: Install CocoaPods
-        script: |
-          cd ios/App && pod install --repo-update
 
       - name: Fetch signing certificates (App Store)
         script: |
