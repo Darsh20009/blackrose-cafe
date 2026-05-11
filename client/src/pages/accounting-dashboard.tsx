@@ -171,6 +171,8 @@ type DrilldownType = 'revenue' | 'cogs' | 'expenses' | 'orders' | null;
 
 interface DashboardData {
   totalRevenue: number;
+  totalRefunds: number;
+  netRevenue: number;
   totalVat: number;
   totalExpenses: number;
   totalCogs: number;
@@ -178,6 +180,7 @@ interface DashboardData {
   netProfit: number;
   orderCount: number;
   invoiceCount: number;
+  refundCount: number;
   profitMargin: number;
   expensesByCategory: Record<string, number>;
   revenueByPayment: Record<string, number>;
@@ -257,6 +260,8 @@ export default function AccountingDashboardPage() {
       const data = await res.json();
       return {
         totalRevenue: data.summary?.totalRevenue || 0,
+        totalRefunds: data.summary?.totalRefunds || 0,
+        netRevenue: data.summary?.netRevenue ?? data.summary?.totalRevenue ?? 0,
         totalVat: data.summary?.totalVatCollected || 0,
         totalExpenses: data.summary?.totalExpenses || 0,
         totalCogs: data.summary?.totalCogs || 0,
@@ -264,6 +269,7 @@ export default function AccountingDashboardPage() {
         netProfit: data.summary?.netProfit || 0,
         orderCount: data.summary?.orderCount || 0,
         invoiceCount: data.summary?.invoiceCount || 0,
+        refundCount: data.summary?.refundCount || 0,
         profitMargin: data.summary?.profitMargin || 0,
         expensesByCategory: data.expensesByCategory || {},
         revenueByPayment: data.revenueByPayment || {},
@@ -728,6 +734,21 @@ export default function AccountingDashboardPage() {
                           <span>{tc("إجمالي الإيرادات", "Total Revenue")}</span>
                           <span className="font-medium text-green-600">+{dashboardData.totalRevenue.toFixed(2)} <SarIcon /></span>
                         </div>
+                        {dashboardData.totalRefunds > 0 && (
+                          <div className="flex justify-between">
+                            <span className="flex items-center gap-1">
+                              الاسترجاعات
+                              <span className="text-xs text-muted-foreground">({dashboardData.refundCount} عملية)</span>
+                            </span>
+                            <span className="font-medium text-red-600">-{dashboardData.totalRefunds.toFixed(2)} <SarIcon /></span>
+                          </div>
+                        )}
+                        {dashboardData.totalRefunds > 0 && (
+                          <div className="flex justify-between border-t pt-1">
+                            <span className="font-semibold">{tc("صافي الإيرادات", "Net Revenue")}</span>
+                            <span className="font-semibold text-green-600">{dashboardData.netRevenue.toFixed(2)} <SarIcon /></span>
+                          </div>
+                        )}
                         <div className="flex justify-between">
                           <span>{tc("ضريبة القيمة المضافة", "VAT")}</span>
                           <span className="font-medium text-accent">-{dashboardData.totalVat.toFixed(2)} <SarIcon /></span>
@@ -1253,6 +1274,23 @@ export default function AccountingDashboardPage() {
                             <TableCell className="text-green-600 font-bold">{dashboardData.totalRevenue.toFixed(2)} <SarIcon /></TableCell>
                             <TableCell>100%</TableCell>
                           </TableRow>
+                          {dashboardData.totalRefunds > 0 && (
+                            <TableRow className="bg-red-50/30">
+                              <TableCell className="font-medium text-red-700">
+                                الاسترجاعات والمرتجعات
+                                <span className="text-xs text-muted-foreground mr-1">({dashboardData.refundCount} عملية)</span>
+                              </TableCell>
+                              <TableCell className="text-red-600 font-bold">-{dashboardData.totalRefunds.toFixed(2)} <SarIcon /></TableCell>
+                              <TableCell className="text-red-600">-{dashboardData.totalRevenue > 0 ? ((dashboardData.totalRefunds / dashboardData.totalRevenue) * 100).toFixed(1) : 0}%</TableCell>
+                            </TableRow>
+                          )}
+                          {dashboardData.totalRefunds > 0 && (
+                            <TableRow className="bg-green-50/30">
+                              <TableCell className="font-semibold text-green-700">= صافي الإيرادات</TableCell>
+                              <TableCell className="text-green-700 font-bold">{dashboardData.netRevenue.toFixed(2)} <SarIcon /></TableCell>
+                              <TableCell className="text-green-600">{dashboardData.totalRevenue > 0 ? ((dashboardData.netRevenue / dashboardData.totalRevenue) * 100).toFixed(1) : 0}%</TableCell>
+                            </TableRow>
+                          )}
                           <TableRow>
                             <TableCell className="font-medium">ضريبة القيمة المضافة (المحصلة)</TableCell>
                             <TableCell className="text-accent">{dashboardData.totalVat.toFixed(2)} <SarIcon /></TableCell>

@@ -8342,6 +8342,184 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── Refund / Return Orders ────────────────────────────────────────────────
+
+  // Search order for refund (by order number or phone)
+  app.get("/api/refunds/search-order", async (req: any, res) => {
+    try {
+      const { q } = req.query as { q?: string };
+      if (!q) return res.status(400).json({ error: "يرجى إدخال رقم الطلب أو رقم الجوال" });
+
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const { OrderModel } = await import('@shared/schema');
+
+      let order: any = null;
+      const isPhone = /^\d{7,12}$/.test(q.replace(/\D/g, ""));
+
+      if (isPhone) {
+        const phone = q.replace(/\D/g, "");
+        const normalizedPhone = phone.startsWith('0') ? phone.slice(1) : phone;
+        order = await OrderModel.findOne({
+          $or: [{ 'customerInfo.phone': phone }, { 'customerInfo.phone': normalizedPhone }, { customerPhone: phone }, { customerPhone: normalizedPhone }],
+        }).sort({ createdAt: -1 });
+      } else {
+        const num = q.replace(/^#/, "");
+        const numAsNumber = parseInt(num, 10);
+        order = await OrderModel.findOne({
+          $or: [
+            { orderNumber: num },
+            ...(isNaN(numAsNumber) ? [] : [{ orderNumber: numAsNumber }, { dailyNumber: numAsNumber }]),
+          ],
+        });
+      }
+
+      if (!order) return res.status(404).json({ error: "لم يتم العثور على الطلب" });
+
+      const serialized = serializeDoc(order);
+      if (typeof serialized.items === 'string') {
+        try { serialized.items = JSON.parse(serialized.items); } catch { serialized.items = []; }
+      }
+      res.json(serialized);
+    } catch (error) {
+      console.error('[Refund Search]', error);
+      res.status(500).json({ error: "فشل البحث عن الطلب" });
+    }
+  });
+
+  // List all refunds (manager/admin)
+  app.get("/api/refunds", requireAuth, async (req: any, res) => {
+    try {
+      const { RefundOrderModel } = await import('@shared/schema');
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const { period, branchId, page = '1', limit: limitStr = '50' } = req.query as Record<string, string>;
+
+      const query: any = { tenantId };
+      if (branchId) query.branchId = branchId;
+      if (period) {
+        const now = new Date();
+        let startDate = new Date();
+        if (period === 'today') { startDate.setHours(0,0,0,0); }
+        else if (period === 'week') { startDate.setDate(now.getDate() - 7); }
+        else if (period === 'month') { startDate.setMonth(now.getMonth() - 1); }
+        query.createdAt = { $gte: startDate };
+      }
+
+      const limitNum = Math.min(parseInt(limitStr, 10) || 50, 200);
+      const skip = (parseInt(page, 10) - 1) * limitNum;
+      const [refunds, total] = await Promise.all([
+        RefundOrderModel.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+        RefundOrderModel.countDocuments(query),
+      ]);
+
+      const totalAmount = await RefundOrderModel.aggregate([
+        { $match: query },
+        { $group: { _id: null, total: { $sum: '$refundAmount' } } },
+      ]);
+
+      res.json({
+        refunds: refunds.map(r => serializeDoc(r)),
+        total,
+        totalAmount: totalAmount[0]?.total || 0,
+        page: parseInt(page, 10),
+        limit: limitNum,
+      });
+    } catch (error) {
+      console.error('[Refunds List]', error);
+      res.status(500).json({ error: "فشل جلب الاسترجاعات" });
+    }
+  });
+
+  // Create a new refund
+  app.post("/api/refunds", async (req: any, res) => {
+    try {
+      const { RefundOrderModel } = await import('@shared/schema');
+      const { nanoid } = await import('nanoid');
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+
+      const {
+        originalOrderId, originalOrderNumber, branchId, employeeId, employeeName,
+        items, refundAmount, paymentMethod, cashAmount, cardAmount,
+        reason, notes, status,
+      } = req.body;
+
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: "يجب اختيار صنف واحد على الأقل" });
+      }
+      if (!reason || !reason.trim()) {
+        return res.status(400).json({ error: "سبب الاسترجاع مطلوب" });
+      }
+      if (!refundAmount || refundAmount <= 0) {
+        return res.status(400).json({ error: "مبلغ الاسترجاع يجب أن يكون أكبر من صفر" });
+      }
+      if (!['cash', 'card', 'split'].includes(paymentMethod)) {
+        return res.status(400).json({ error: "طريقة الدفع غير صحيحة" });
+      }
+
+      const refundDoc = new RefundOrderModel({
+        id: nanoid(),
+        tenantId,
+        originalOrderId: originalOrderId || undefined,
+        originalOrderNumber: originalOrderNumber || undefined,
+        branchId: branchId || undefined,
+        employeeId: employeeId || undefined,
+        employeeName: employeeName || undefined,
+        items: items.map((item: any) => ({
+          coffeeItemId: item.coffeeItemId || '',
+          nameAr: item.nameAr || 'صنف',
+          nameEn: item.nameEn,
+          quantity: Number(item.quantity) || 1,
+          unitPrice: Number(item.unitPrice) || 0,
+          subtotal: Number(item.subtotal) || 0,
+        })),
+        refundAmount: Number(refundAmount),
+        paymentMethod,
+        cashAmount: Number(cashAmount) || 0,
+        cardAmount: Number(cardAmount) || 0,
+        reason: reason.trim(),
+        notes: notes?.trim() || undefined,
+        status: status || 'completed',
+      });
+
+      await refundDoc.save();
+      res.status(201).json(serializeDoc(refundDoc));
+    } catch (error) {
+      console.error('[Create Refund]', error);
+      res.status(500).json({ error: "فشل إنشاء الاسترجاع" });
+    }
+  });
+
+  // Get single refund
+  app.get("/api/refunds/:id", requireAuth, async (req: any, res) => {
+    try {
+      const { RefundOrderModel } = await import('@shared/schema');
+      const { id } = req.params;
+      const refund = await RefundOrderModel.findOne({ id });
+      if (!refund) return res.status(404).json({ error: "الاسترجاع غير موجود" });
+      res.json(serializeDoc(refund));
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب الاسترجاع" });
+    }
+  });
+
+  // Cancel a refund (admin only)
+  app.patch("/api/refunds/:id/cancel", requireAuth, async (req: any, res) => {
+    try {
+      const { RefundOrderModel } = await import('@shared/schema');
+      const { id } = req.params;
+      const refund = await RefundOrderModel.findOneAndUpdate(
+        { id },
+        { status: 'cancelled', updatedAt: new Date() },
+        { new: true }
+      );
+      if (!refund) return res.status(404).json({ error: "الاسترجاع غير موجود" });
+      res.json(serializeDoc(refund));
+    } catch (error) {
+      res.status(500).json({ error: "فشل إلغاء الاسترجاع" });
+    }
+  });
+
+  // ─── End Refund Routes ────────────────────────────────────────────────────
+
   // Public endpoint for Order Status Display - no authentication required
   app.get("/api/orders/active-display", async (req, res) => {
     try {
@@ -15333,19 +15511,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       if (finalBranchId) allExpensesQuery.branchId = finalBranchId;
       
-      const [orders, expenses, invoices, allOrders, allExpenses] = await Promise.all([
+      const { RefundOrderModel } = await import('@shared/schema');
+      const refundQuery: any = {
+        tenantId: getTenantIdFromRequest(req) || 'demo-tenant',
+        createdAt: { $gte: startDate, $lte: endDate },
+        status: 'completed',
+      };
+      if (finalBranchId) refundQuery.branchId = finalBranchId;
+
+      const [orders, expenses, invoices, allOrders, allExpenses, refunds] = await Promise.all([
         OrderModel.find(orderQuery),
         ExpenseModel.find(expenseQuery),
         TaxInvoiceModel.find(invoiceQuery),
         OrderModel.find(allOrdersQuery),
         ExpenseModel.find(allExpensesQuery),
+        RefundOrderModel.find(refundQuery),
       ]);
       
       const totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      const totalRefunds = refunds.reduce((sum, r) => sum + ((r as any).refundAmount || 0), 0);
+      const netRevenue = Math.max(0, totalRevenue - totalRefunds);
       const totalVat = invoices.reduce((sum, i) => sum + (i.taxAmount || 0), 0);
       const totalExpenses = expenses.reduce((sum, e) => sum + e.totalAmount, 0);
       const totalCogs = orders.reduce((sum, o) => sum + (o.costOfGoods || 0), 0);
-      const grossProfit = totalRevenue - totalVat - totalCogs;
+      const grossProfit = netRevenue - totalVat - totalCogs;
       const netProfit = grossProfit - totalExpenses;
       
       // Group by category
@@ -15454,14 +15643,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         period,
         summary: {
           totalRevenue: Math.round(totalRevenue * 100) / 100,
+          totalRefunds: Math.round(totalRefunds * 100) / 100,
+          netRevenue: Math.round(netRevenue * 100) / 100,
           totalVatCollected: Math.round(totalVat * 100) / 100,
           totalExpenses: Math.round(totalExpenses * 100) / 100,
           totalCogs: Math.round(totalCogs * 100) / 100,
           grossProfit: Math.round(grossProfit * 100) / 100,
           netProfit: Math.round(netProfit * 100) / 100,
-          profitMargin: totalRevenue > 0 ? Math.round((netProfit / totalRevenue * 100) * 100) / 100 : 0,
+          profitMargin: netRevenue > 0 ? Math.round((netProfit / netRevenue * 100) * 100) / 100 : 0,
           orderCount: orders.length,
           invoiceCount: invoices.length,
+          refundCount: refunds.length,
         },
         expensesByCategory,
         revenueByPayment,

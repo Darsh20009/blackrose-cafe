@@ -5644,3 +5644,89 @@ PayrollSnapshotSchema.index({ tenantId: 1, year: 1, month: 1 }, { unique: true }
 PayrollSnapshotSchema.index({ tenantId: 1, status: 1 });
 
 export const PayrollSnapshotModel = mongoose.models['PayrollSnapshot'] || mongoose.model<IPayrollSnapshot>("PayrollSnapshot", PayrollSnapshotSchema);
+
+// ─── Refund / Return Orders ─────────────────────────────────────────────────
+export interface IRefundOrder extends Document {
+  id: string;
+  tenantId: string;
+  originalOrderId?: string;
+  originalOrderNumber?: string | number;
+  branchId?: string;
+  employeeId?: string;
+  employeeName?: string;
+  items: Array<{
+    coffeeItemId: string;
+    nameAr: string;
+    nameEn?: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+  }>;
+  refundAmount: number;
+  paymentMethod: 'cash' | 'card' | 'split';
+  cashAmount?: number;
+  cardAmount?: number;
+  reason: string;
+  notes?: string;
+  status: 'completed' | 'cancelled';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const RefundOrderSchema = new Schema<IRefundOrder>({
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, required: true },
+  originalOrderId: { type: String },
+  originalOrderNumber: { type: Schema.Types.Mixed },
+  branchId: { type: String },
+  employeeId: { type: String },
+  employeeName: { type: String },
+  items: [{
+    coffeeItemId: { type: String },
+    nameAr: { type: String, required: true },
+    nameEn: { type: String },
+    quantity: { type: Number, required: true, default: 1 },
+    unitPrice: { type: Number, required: true, default: 0 },
+    subtotal: { type: Number, required: true, default: 0 },
+  }],
+  refundAmount: { type: Number, required: true },
+  paymentMethod: { type: String, enum: ['cash', 'card', 'split'], required: true },
+  cashAmount: { type: Number, default: 0 },
+  cardAmount: { type: Number, default: 0 },
+  reason: { type: String, required: true },
+  notes: { type: String },
+  status: { type: String, enum: ['completed', 'cancelled'], default: 'completed' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
+
+RefundOrderSchema.index({ tenantId: 1, createdAt: -1 });
+RefundOrderSchema.index({ tenantId: 1, branchId: 1, createdAt: -1 });
+RefundOrderSchema.index({ originalOrderId: 1 });
+
+export const RefundOrderModel = mongoose.models['RefundOrder'] || mongoose.model<IRefundOrder>('RefundOrder', RefundOrderSchema);
+
+export const insertRefundOrderSchema = z.object({
+  id: z.string().optional(),
+  tenantId: z.string().optional(),
+  originalOrderId: z.string().optional(),
+  originalOrderNumber: z.union([z.string(), z.number()]).optional(),
+  branchId: z.string().optional(),
+  employeeId: z.string().optional(),
+  employeeName: z.string().optional(),
+  items: z.array(z.object({
+    coffeeItemId: z.string(),
+    nameAr: z.string(),
+    nameEn: z.string().optional(),
+    quantity: z.number(),
+    unitPrice: z.number(),
+    subtotal: z.number(),
+  })),
+  refundAmount: z.number(),
+  paymentMethod: z.enum(['cash', 'card', 'split']),
+  cashAmount: z.number().optional(),
+  cardAmount: z.number().optional(),
+  reason: z.string(),
+  notes: z.string().optional(),
+  status: z.enum(['completed', 'cancelled']).optional(),
+});

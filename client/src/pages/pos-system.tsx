@@ -15,7 +15,7 @@ import {
   Archive, RefreshCw, Wifi, WifiOff, Loader2,
   Navigation, SplitSquareVertical, Banknote,
   Lock, Bell, BellOff, MonitorSmartphone, ScanLine,
-  PauseCircle, Receipt, Settings, User, Wallet
+  PauseCircle, Receipt, Settings, User, Wallet, RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +44,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import DrinkCustomizationDialog, { type DrinkCustomization } from "@/components/drink-customization-dialog";
 import PrinterSettingsPanel from "@/components/printer-settings-panel";
 import { loadPrinterSettings } from "@/lib/thermal-printer";
+import RefundDialog from "@/components/refund-dialog";
 
 type OrderType = "dine_in" | "takeaway" | "delivery" | "car_pickup";
 type PaymentMethod = "cash" | "card" | "qahwa-card" | "split";
@@ -144,6 +145,7 @@ export default function PosSystem() {
     const saved = localStorage.getItem("pos-zoom");
     return saved ? Number(saved) : 100;
   });
+  const [showRefundDialog, setShowRefundDialog] = useState(false);
 
   const { isConnected: wsConnected, sendMessage: wsSend } = useOrderWebSocket({
     clientType: "pos",
@@ -1202,6 +1204,18 @@ export default function PosSystem() {
                 {openTableOrders.length}
               </Badge>
             )}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowRefundDialog(true)}
+            className="hidden sm:flex gap-1 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-400"
+            data-testid="button-refund-open"
+            title={tc("استرجاع طلب / Refund", "Refund Order")}
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span className="text-xs font-bold">{tc("استرجاع", "Refund")}</span>
           </Button>
 
           <div className="flex items-center gap-2 bg-muted/50 px-2 py-1 rounded-full border">
@@ -2721,6 +2735,16 @@ export default function PosSystem() {
         </DialogContent>
       </Dialog>
 
+      {/* ─── Refund Dialog ───────────────────────────────────────────────────── */}
+      <RefundDialog
+        open={showRefundDialog}
+        onOpenChange={setShowRefundDialog}
+        branchId={employee?.branchId?.toString()}
+        employeeId={employee?.id?.toString()}
+        employeeName={employee?.fullName}
+        tenantId={employee?.tenantId?.toString()}
+      />
+
       {/* ─── Printer Settings Dialog ─────────────────────────────────────────── */}
       <Dialog open={showPrinterSettings} onOpenChange={setShowPrinterSettings}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" dir={dir}>
@@ -2806,14 +2830,14 @@ export default function PosSystem() {
                   variant="outline"
                   size="sm"
                   className="flex-1"
-                  disabled={posZoom <= 60}
-                  onClick={() => setPosZoom(z => Math.max(60, z - 5))}
+                  disabled={posZoom <= 30}
+                  onClick={() => setPosZoom(z => Math.max(30, z - 5))}
                   data-testid="button-zoom-out"
                 >
                   <span className="text-lg font-bold">−</span>
                 </Button>
                 <div className="flex-1 flex justify-center gap-1">
-                  {[70, 80, 90, 100].map(v => (
+                  {[30, 60, 80, 100].map(v => (
                     <Button
                       key={v}
                       variant={posZoom === v ? "default" : "outline"}
