@@ -78,6 +78,7 @@ export interface ICoffeeItem extends Document {
     duration?: string;
     maxGuests?: number;
   }>;
+  salesCount?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -152,6 +153,7 @@ const CoffeeItemSchema = new Schema<ICoffeeItem>({
   }],
   hasRecipe: { type: Number, default: 0 },
   requiresRecipe: { type: Number, default: 1 },
+  salesCount: { type: Number, default: 0 },
   createdByEmployeeId: { type: String },
   createdByBranchId: { type: String },
   publishedBranches: [{ type: String }],
@@ -2035,7 +2037,7 @@ export interface IExpense extends Document {
 }
 
 const ExpenseSchema = new Schema<IExpense>({
-  branchId: { type: String, required: true },
+  branchId: { type: String },
   date: { type: Date, required: true },
   category: { type: String, enum: ['inventory', 'salaries', 'rent', 'utilities', 'marketing', 'maintenance', 'supplies', 'other'], required: true },
   subcategory: { type: String },
@@ -2426,6 +2428,36 @@ export const insertCoffeeItemSchema = z.object({
     selectionType: z.enum(['single', 'multiple']).optional(),
   })).optional(),
   isGiftable: z.boolean().optional(),
+  imageUrls: z.array(z.string()).optional(),
+  bundledItems: z.array(z.object({
+    sectionTitle: z.string(),
+    selectionType: z.enum(['single', 'multiple']).optional(),
+    minSelectable: z.number().optional(),
+    maxSelectable: z.number().optional(),
+    items: z.array(z.object({
+      productId: z.string(),
+      nameAr: z.string(),
+      nameEn: z.string().optional(),
+      imageUrl: z.string().optional(),
+      originalPrice: z.number(),
+      customPrice: z.number(),
+    })).optional(),
+  })).optional(),
+  isReservation: z.boolean().optional(),
+  reservationPackages: z.array(z.object({
+    packageName: z.string(),
+    description: z.string().optional(),
+    price: z.number(),
+    duration: z.string().optional(),
+    maxGuests: z.number().optional(),
+  })).optional(),
+  branchAvailability: z.array(z.object({
+    branchId: z.string(),
+    isAvailable: z.number().optional(),
+  })).optional(),
+  hasRecipe: z.number().optional(),
+  requiresRecipe: z.number().optional(),
+  menuType: z.enum(['drinks', 'food']).optional(),
 });
 
 export const insertEmployeeSchema = z.object({

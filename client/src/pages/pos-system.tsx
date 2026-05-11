@@ -1545,6 +1545,7 @@ export default function PosSystem() {
               {PAYMENT_METHODS.map((method) => (
                 <Button
                   key={method.id}
+                  type="button"
                   variant={paymentMethod === method.id ? "default" : "outline"}
                   size="sm"
                   onClick={() => { setPaymentMethod(method.id as PaymentMethod); setSplitCashAmount(""); }}

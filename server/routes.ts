@@ -1043,6 +1043,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json(serializedOrder);
 
+      // Increment salesCount for each ordered item (async, non-blocking)
+      setImmediate(async () => {
+        try {
+          const orderedItems: any[] = orderData.items || [];
+          for (const item of orderedItems) {
+            const itemId = item.coffeeItemId || item.id;
+            if (itemId) {
+              await CoffeeItemModel.findOneAndUpdate(
+                { id: itemId },
+                { $inc: { salesCount: Number(item.quantity) || 1 } }
+              );
+            }
+          }
+          cache.invalidate('coffee-items:');
+        } catch (err) {
+          console.error('[salesCount] Failed to increment:', err);
+        }
+      });
+
       // === 3-Layer Notifications: Customer + Admins ===
       setImmediate(async () => {
         try {
@@ -6842,6 +6861,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Sort by salesCount descending so best-sellers appear first
+      finalItems.sort((a: any, b: any) => (b.salesCount || 0) - (a.salesCount || 0));
+
       // Store in memory cache for next requests (60 seconds)
       cache.set(ck, finalItems, CACHE_TTL.COFFEE_ITEMS);
       res.json(finalItems);
@@ -6978,6 +7000,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         availableSizes: validatedData.availableSizes || [],
         addons: (validatedData as any).addons || [],
         isGiftable: (validatedData as any).isGiftable || false,
+        bundledItems: (validatedData as any).bundledItems || [],
+        isReservation: (validatedData as any).isReservation || false,
+        reservationPackages: (validatedData as any).reservationPackages || [],
+        menuType: (validatedData as any).menuType || 'drinks',
         branchAvailability: (validatedData.publishedBranches || [branchId]).map(bId => ({
           branchId: bId,
           isAvailable: 1
