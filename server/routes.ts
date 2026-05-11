@@ -2432,17 +2432,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!addon.id) addon.id = nanoid();
           keepAddonIds.push(addon.id);
           try {
+            // Strip _id from the spread to avoid E11000 duplicate key on upsert
+            const { _id: _addonId, __v, ...addonData } = addon;
             await ProductAddonModel.findOneAndUpdate(
               { id: addon.id },
-              { $set: { id: addon.id, ...addon, category: addon.category || 'other', createdAt: addon.createdAt || new Date() } },
-              { upsert: true, new: true }
+              {
+                $set: { ...addonData, id: addon.id, category: addonData.category || 'other' },
+                $setOnInsert: { createdAt: new Date() },
+              },
+              { upsert: true, new: true, runValidators: false }
             );
             await CoffeeItemAddonModel.findOneAndUpdate(
               { coffeeItemId: itemId, addonId: addon.id },
-              { $set: { coffeeItemId: itemId, addonId: addon.id, isDefault: addon.isDefault || 0, minQuantity: addon.minQuantity || 0, maxQuantity: addon.maxQuantity || 10, createdAt: new Date() } },
-              { upsert: true }
+              {
+                $set: { coffeeItemId: itemId, addonId: addon.id, isDefault: addon.isDefault || 0, minQuantity: addon.minQuantity || 0, maxQuantity: addon.maxQuantity || 10 },
+                $setOnInsert: { createdAt: new Date() },
+              },
+              { upsert: true, runValidators: false }
             );
-          } catch (err) {
+          } catch (err: any) {
+            // Ignore duplicate key errors — the document already exists and was already updated
+            if (err?.code === 11000) continue;
             console.error("[PUT /api/coffee-items/:id] Error saving addon:", err);
           }
         }
@@ -2456,7 +2466,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       invalidateCoffeeItemsCache(tenantId);
-      cache.del(cacheKey('with-addons', 'global'));
+      cache.invalidate('with-addons');
       res.json(serializeDoc(updated));
     } catch (error) {
       console.error("[PUT /api/coffee-items/:id] Error:", error);
