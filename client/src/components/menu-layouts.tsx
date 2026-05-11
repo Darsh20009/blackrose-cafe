@@ -16,6 +16,9 @@ interface CoffeeItem {
   isAvailable?: boolean;
   isBestSeller?: boolean;
   isNew?: boolean;
+  badgeAr?: string;
+  badgeEn?: string;
+  salesCount?: number;
   availableSizes?: Array<{ nameAr: string; nameEn?: string; price: number }>;
 }
 
@@ -269,6 +272,11 @@ export function ClassicMenuLayout({ items, onAddItem, lang, currency, favoriteId
                   <h3 className="text-base font-semibold truncate text-foreground">{getItemName(item, lang)}</h3>
                   {item.isBestSeller && <Badge className="bg-primary text-primary-foreground text-[9px] px-1.5 h-4"><Star className="w-2.5 h-2.5 ml-0.5" />الأكثر طلباً</Badge>}
                   {item.isNew && <Badge className="bg-green-500 text-white text-[9px] px-1.5 h-4">جديد</Badge>}
+                  {(item.badgeAr || item.badgeEn) && (
+                    <Badge className="bg-accent text-white text-[9px] px-1.5 h-4 border-0">
+                      {lang === 'ar' ? (item.badgeAr || item.badgeEn) : (item.badgeEn || item.badgeAr)}
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground truncate">{item.description || "مشروب مميز"}</p>
                 <OptionPills item={item} addons={addons} lang={lang} />
@@ -331,6 +339,16 @@ export function CardsMenuLayout({ items, onAddItem, lang, currency, favoriteIds,
                 {item.isNew && (
                   <div className="absolute top-2 left-2 bg-green-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full z-10">جديد</div>
                 )}
+                {!item.isBestSeller && !item.isNew && (item.badgeAr || item.badgeEn) && (
+                  <div className="absolute top-2 right-2 bg-accent text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full z-10">
+                    {lang === 'ar' ? (item.badgeAr || item.badgeEn) : (item.badgeEn || item.badgeAr)}
+                  </div>
+                )}
+                {(item.isBestSeller || item.isNew) && (item.badgeAr || item.badgeEn) && (
+                  <div className="absolute bottom-2 right-2 bg-accent text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full z-10">
+                    {lang === 'ar' ? (item.badgeAr || item.badgeEn) : (item.badgeEn || item.badgeAr)}
+                  </div>
+                )}
                 {onToggleFavorite && (
                   <button
                     className="absolute bottom-2 left-2 w-7 h-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm z-10"
@@ -392,8 +410,13 @@ export function ListMenuLayout({ items, onAddItem, lang, currency, favoriteIds, 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-sm font-semibold text-foreground truncate">{getItemName(item, lang)}</span>
-                  {item.isBestSeller && <Badge className="bg-amber-100 text-amber-700 border-0 text-[9px] px-1 h-3.5"><Star className="w-2 h-2 ml-0.5" />الأكثر</Badge>}
+                  {item.isBestSeller && <Badge className="bg-primary text-primary-foreground border-0 text-[9px] px-1 h-3.5"><Star className="w-2 h-2 ml-0.5" />الأكثر</Badge>}
                   {item.isNew && <Badge className="bg-green-100 text-green-700 border-0 text-[9px] px-1 h-3.5">جديد</Badge>}
+                  {(item.badgeAr || item.badgeEn) && (
+                    <Badge className="bg-accent/90 text-white border-0 text-[9px] px-1 h-3.5">
+                      {lang === 'ar' ? (item.badgeAr || item.badgeEn) : (item.badgeEn || item.badgeAr)}
+                    </Badge>
+                  )}
                 </div>
                 {!hasOptions && (
                   <p className="text-[10px] text-muted-foreground truncate">{item.description || "مشروب مميز"}</p>

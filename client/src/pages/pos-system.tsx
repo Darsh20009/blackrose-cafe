@@ -529,6 +529,11 @@ export default function PosSystem() {
   const filteredItemsList = useMemo(() => {
     if (!productsData) return [];
     const q = searchQuery.toLowerCase();
+    const allCounts = productsData
+      .map((i: any) => i.salesCount || 0)
+      .filter((c: number) => c > 0)
+      .sort((a: number, b: number) => b - a);
+    const bsThreshold = allCounts.length >= 3 ? allCounts[2] : (allCounts[0] || 1);
     return Object.values(groupedItemsMap)
       .filter(group => {
         const rep = group[0];
@@ -541,7 +546,13 @@ export default function PosSystem() {
           return arName.includes(q) || enName.includes(q);
         });
       })
-      .map(group => group[0]);
+      .map(group => {
+        const item = group[0] as any;
+        return {
+          ...item,
+          isBestSeller: (item.salesCount || 0) >= bsThreshold && bsThreshold > 0,
+        };
+      });
   }, [productsData, selectedCategory, searchQuery, groupedItemsMap]);
 
   const visibleCategories = useMemo(() => {
@@ -1342,8 +1353,26 @@ export default function PosSystem() {
                         const groupKey = getGroupingKey(item);
                         const groupCount = (groupedItemsMap[groupKey] || [item]).length;
                         const hasAddonsBadge = itemsWithAddonsSet.has(item.id);
+                        const customBadge = i18n.language === 'ar'
+                          ? (item.badgeAr || item.badgeEn)
+                          : (item.badgeEn || item.badgeAr);
                         return (
                           <div className="absolute top-1.5 right-1.5 flex flex-col gap-1">
+                            {item.isBestSeller && (
+                              <Badge className="text-[9px] sm:text-[10px] px-1.5 py-0.5 bg-primary text-white font-bold">
+                                🔥 {i18n.language === 'ar' ? 'الأكثر طلباً' : 'Best Seller'}
+                              </Badge>
+                            )}
+                            {item.isNewProduct === 1 && (
+                              <Badge className="text-[9px] sm:text-[10px] px-1.5 py-0.5 bg-green-500 text-white font-bold">
+                                {i18n.language === 'ar' ? 'جديد' : 'New'}
+                              </Badge>
+                            )}
+                            {customBadge && (
+                              <Badge className="text-[9px] sm:text-[10px] px-1.5 py-0.5 bg-accent text-white font-bold border-0">
+                                {customBadge}
+                              </Badge>
+                            )}
                             {groupCount > 1 && (
                               <Badge className="text-[9px] sm:text-[10px] px-1.5 py-0.5 bg-primary/90 text-white font-bold">
                                 {groupCount} {i18n.language === 'ar' ? 'خيارات' : 'options'}

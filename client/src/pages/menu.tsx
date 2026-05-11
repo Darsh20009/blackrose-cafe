@@ -457,6 +457,21 @@ export default function MenuPage() {
     return aPos - bPos;
   });
 
+  // Auto-compute isBestSeller (top 3 items by salesCount with at least 1 sale)
+  // and isNew from isNewProduct field
+  const _allSalesCounts = coffeeItems
+    .map(i => (i as any).salesCount || 0)
+    .filter((c: number) => c > 0)
+    .sort((a: number, b: number) => b - a);
+  const _bestSellerThreshold = _allSalesCounts.length >= 3
+    ? _allSalesCounts[2]  // value of 3rd highest
+    : _allSalesCounts[0] || 1;
+  const augmentedItems = sortedFilteredItems.map(item => ({
+    ...item,
+    isBestSeller: ((item as any).salesCount || 0) >= _bestSellerThreshold && _bestSellerThreshold > 0,
+    isNew: (item as any).isNewProduct === 1,
+  }));
+
   const cartHasReservationItem = cartItems.some(ci => (ci.coffeeItem as any)?.isReservation);
   const cartHasNonReservationItem = cartItems.some(ci => !(ci.coffeeItem as any)?.isReservation);
 
@@ -1045,7 +1060,7 @@ export default function MenuPage() {
             </h2>
             {businessConfig?.menuLayout === 'cards' ? (
               <CardsMenuLayout
-                items={sortedFilteredItems as any}
+                items={augmentedItems as any}
                 onAddItem={handleAddToCartDirect as any}
                 lang={i18n.language}
                 currency=<SarIcon />
@@ -1055,7 +1070,7 @@ export default function MenuPage() {
               />
             ) : businessConfig?.menuLayout === 'list' ? (
               <ListMenuLayout
-                items={sortedFilteredItems as any}
+                items={augmentedItems as any}
                 onAddItem={handleAddToCartDirect as any}
                 lang={i18n.language}
                 currency=<SarIcon />
@@ -1065,7 +1080,7 @@ export default function MenuPage() {
               />
             ) : (
               <ClassicMenuLayout
-                items={sortedFilteredItems as any}
+                items={augmentedItems as any}
                 onAddItem={handleAddToCartDirect as any}
                 lang={i18n.language}
                 currency=<SarIcon />
