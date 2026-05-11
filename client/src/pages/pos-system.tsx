@@ -45,6 +45,7 @@ import DrinkCustomizationDialog, { type DrinkCustomization } from "@/components/
 import PrinterSettingsPanel from "@/components/printer-settings-panel";
 import { loadPrinterSettings } from "@/lib/thermal-printer";
 import RefundDialog from "@/components/refund-dialog";
+import { PosShiftBar } from "@/components/pos-shift-bar";
 
 type OrderType = "dine_in" | "takeaway" | "delivery" | "car_pickup";
 type PaymentMethod = "cash" | "card" | "qahwa-card" | "split";
@@ -1248,6 +1249,7 @@ export default function PosSystem() {
           </Button>
         </div>
       </header>
+      <PosShiftBar />
 
       <main className="flex-1 flex overflow-hidden">
 

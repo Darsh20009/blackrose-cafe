@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Shield, Bell, Palette, Database, Plus, Store, Utensils, Coffee, AlertTriangle, Layout, ShieldAlert, Users, Loader2, Trash2, FolderTree, Flame, Snowflake, Star, Cake, Sparkles, GripVertical, Pencil, CreditCard, Wifi, WifiOff, Eye, EyeOff, ExternalLink, CheckCircle, XCircle, Banknote, Smartphone, Gift, Percent, Tag, Ticket, Download, Globe, Package, ChevronDown, ChevronUp, MonitorSmartphone, MapPin, Navigation, FlaskConical, ShoppingBag, Truck, Timer, Car, Clock } from 'lucide-react';
+import { Save, Shield, Bell, Palette, Database, Plus, Store, Utensils, Coffee, AlertTriangle, Layout, ShieldAlert, Users, Loader2, Trash2, FolderTree, Flame, Snowflake, Star, Cake, Sparkles, GripVertical, Pencil, CreditCard, Wifi, WifiOff, Eye, EyeOff, ExternalLink, CheckCircle, XCircle, Banknote, Smartphone, Gift, Percent, Tag, Ticket, Download, Globe, Package, ChevronDown, ChevronUp, MonitorSmartphone, MapPin, Navigation, FlaskConical, ShoppingBag, Truck, Timer, Car, Clock, Zap } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -36,6 +36,129 @@ interface MenuCategory {
   department: 'drinks' | 'food';
   orderIndex: number;
   isSystem?: boolean;
+}
+
+function ShiftTimeSettingsCard() {
+  const { toast } = useToast();
+  const { data: config } = useQuery<any>({ queryKey: ["/api/business-config"] });
+  const [periods, setPeriods] = useState<Array<{start: number; end: number}>>([
+    { start: 6, end: 18 },
+    { start: 18, end: 6 },
+  ]);
+
+  useEffect(() => {
+    if (config?.shiftPeriods) setPeriods(config.shiftPeriods);
+  }, [config]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("PATCH", "/api/business-config", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/business-config"] });
+      toast({ title: "تم الحفظ", description: "تم تحديث أوقات الورديات" });
+    },
+    onError: () => toast({ title: "خطأ", description: "فشل في الحفظ", variant: "destructive" }),
+  });
+
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+
+  return (
+    <Card className="hover-elevate border-primary/10">
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <Zap className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <CardTitle className="text-xl font-bold">أوقات الورديات التلقائية</CardTitle>
+            <CardDescription>حدد بداية ونهاية كل وردية تلقائية (بتوقيت المملكة)</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-3">
+          {periods.map((p, i) => (
+            <div key={i} className="flex items-center gap-3 p-3 bg-muted/40 rounded-lg border">
+              <Zap className="w-4 h-4 text-blue-500 shrink-0" />
+              <span className="text-sm font-medium shrink-0">وردية {i + 1}</span>
+              <div className="flex items-center gap-2 flex-1">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">من</label>
+                  <select
+                    value={p.start}
+                    onChange={e => {
+                      const updated = [...periods];
+                      updated[i] = { ...updated[i], start: Number(e.target.value) };
+                      setPeriods(updated);
+                    }}
+                    className="border rounded px-2 py-1 text-sm bg-background w-20"
+                  >
+                    {hours.map(h => <option key={h} value={h}>{String(h).padStart(2,'0')}:00</option>)}
+                  </select>
+                </div>
+                <span className="text-muted-foreground mt-4">—</span>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">إلى</label>
+                  <select
+                    value={p.end}
+                    onChange={e => {
+                      const updated = [...periods];
+                      updated[i] = { ...updated[i], end: Number(e.target.value) };
+                      setPeriods(updated);
+                    }}
+                    className="border rounded px-2 py-1 text-sm bg-background w-20"
+                  >
+                    {hours.map(h => <option key={h} value={h}>{String(h).padStart(2,'0')}:00</option>)}
+                  </select>
+                </div>
+                {p.end < p.start && (
+                  <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded mt-4">تمتد لليوم التالي</span>
+                )}
+              </div>
+              {periods.length > 1 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-red-500 hover:bg-red-50 shrink-0 mt-4"
+                  onClick={() => setPeriods(periods.filter((_, j) => j !== i))}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setPeriods([...periods, { start: 0, end: 12 }])}
+          >
+            <Plus className="w-4 h-4" />
+            إضافة وردية
+          </Button>
+          <Button
+            size="sm"
+            className="gap-2"
+            disabled={saveMutation.isPending}
+            onClick={() => saveMutation.mutate({ shiftPeriods: periods })}
+          >
+            <Save className="w-4 h-4" />
+            {saveMutation.isPending ? "جاري الحفظ..." : "حفظ الأوقات"}
+          </Button>
+        </div>
+
+        <div className="bg-blue-50 dark:bg-blue-950/20 p-3 rounded-lg text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
+          <Zap className="w-4 h-4 shrink-0 mt-0.5" />
+          <p>الورديات التلقائية تُحسب من الطلبات المُسجَّلة في كل فترة دون الحاجة لفتح وردية يدوية. إذا بدأت وردية تبدأ بعد منتصف الليل (مثال: 18:00 — 06:00) فهي تمتد لليوم التالي.</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function AdminSettings() {
@@ -891,6 +1014,9 @@ export default function AdminSettings() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Shift Time Settings */}
+        <ShiftTimeSettingsCard />
 
         {/* Layout Settings */}
         <Card className="hover-elevate border-primary/10">

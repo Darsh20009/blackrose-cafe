@@ -4504,6 +4504,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── Auto-Shift: compute current 12h window from orders (no DB record needed) ───
+  app.get("/api/shifts/auto-current", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const bizConfig = await BusinessConfigModel.findOne({ tenantId }).lean();
+      const shiftPeriods: Array<{start: number; end: number}> =
+        (bizConfig as any)?.shiftPeriods || [{start: 6, end: 18}, {start: 18, end: 6}];
+
+      // Current Saudi hour (UTC+3)
+      const now = new Date();
+      const currentSaudiHour = (now.getUTCHours() + 3) % 24;
+
+      // Find which period we're in
+      const period = shiftPeriods.find(p => {
+        if (p.end > p.start) return currentSaudiHour >= p.start && currentSaudiHour < p.end;
+        return currentSaudiHour >= p.start || currentSaudiHour < p.end; // overnight
+      }) || shiftPeriods[0] || {start: 6, end: 18};
+
+      // Compute UTC window boundaries
+      const saudiDayStart = getSaudiStartOfDay(now); // UTC equiv of Saudi midnight
+      let windowStartUTC = new Date(saudiDayStart.getTime() + period.start * 3600000);
+      let windowEndUTC: Date;
+      if (period.end > period.start) {
+        windowEndUTC = new Date(saudiDayStart.getTime() + period.end * 3600000);
+      } else {
+        // Overnight: end is next day
+        if (currentSaudiHour >= period.start) {
+          // We're in the first half (e.g., 22:00 in an 18-6 shift)
+          windowEndUTC = new Date(saudiDayStart.getTime() + (period.end + 24) * 3600000);
+        } else {
+          // We're in the second half (e.g., 04:00 in an 18-6 shift) — window started yesterday
+          windowStartUTC = new Date(saudiDayStart.getTime() - (24 - period.start) * 3600000);
+          windowEndUTC = new Date(saudiDayStart.getTime() + period.end * 3600000);
+        }
+      }
+
+      // Query orders in this window
+      const orders = await OrderModel.find({
+        tenantId,
+        createdAt: { $gte: windowStartUTC, $lte: now },
+        status: { $nin: ['cancelled', 'refunded'] },
+      }).select('totalAmount paymentMethod createdAt').lean();
+
+      let totalSales = 0, totalCash = 0, totalCard = 0, totalDigital = 0;
+      for (const o of orders) {
+        const amt = Number((o as any).totalAmount) || 0;
+        totalSales += amt;
+        const method = ((o as any).paymentMethod || 'cash').toLowerCase();
+        if (method === 'cash') totalCash += amt;
+        else if (method === 'qahwa-card' || method === 'loyalty-card') totalDigital += amt;
+        else totalCard += amt;
+      }
+
+      res.json({
+        isAuto: true,
+        windowStart: windowStartUTC.toISOString(),
+        windowEnd: windowEndUTC.toISOString(),
+        totalOrders: orders.length,
+        totalSales,
+        totalCash,
+        totalCard,
+        totalDigital,
+        periodLabel: `${period.start}:00 — ${period.end}:00`,
+      });
+    } catch (error) {
+      console.error('[SHIFT] auto-current error:', error);
+      res.status(500).json({ error: 'فشل في حساب الوردية التلقائية' });
+    }
+  });
+
+  // ─── Auto-Shift Periods: all 12h periods for today with order summaries ──────
+  app.get("/api/shifts/auto-periods", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const bizConfig = await BusinessConfigModel.findOne({ tenantId }).lean();
+      const shiftPeriods: Array<{start: number; end: number}> =
+        (bizConfig as any)?.shiftPeriods || [{start: 6, end: 18}, {start: 18, end: 6}];
+
+      const now = new Date();
+      const saudiDayStart = getSaudiStartOfDay(now);
+      const results = [];
+
+      for (const period of shiftPeriods) {
+        let windowStartUTC = new Date(saudiDayStart.getTime() + period.start * 3600000);
+        let windowEndUTC: Date;
+        if (period.end > period.start) {
+          windowEndUTC = new Date(saudiDayStart.getTime() + period.end * 3600000);
+        } else {
+          windowEndUTC = new Date(saudiDayStart.getTime() + (period.end + 24) * 3600000);
+        }
+        if (windowStartUTC > now) continue; // hasn't started yet
+
+        const effectiveEnd = new Date(Math.min(windowEndUTC.getTime(), now.getTime()));
+        const orders = await OrderModel.find({
+          tenantId,
+          createdAt: { $gte: windowStartUTC, $lte: effectiveEnd },
+          status: { $nin: ['cancelled', 'refunded'] },
+        }).select('totalAmount paymentMethod').lean();
+
+        let totalSales = 0, totalCash = 0, totalCard = 0;
+        for (const o of orders) {
+          const amt = Number((o as any).totalAmount) || 0;
+          totalSales += amt;
+          const method = ((o as any).paymentMethod || 'cash').toLowerCase();
+          if (method === 'cash') totalCash += amt;
+          else totalCard += amt;
+        }
+
+        results.push({
+          periodLabel: `${period.start}:00 — ${period.end}:00`,
+          windowStart: windowStartUTC.toISOString(),
+          windowEnd: windowEndUTC.toISOString(),
+          isOngoing: windowEndUTC > now,
+          totalOrders: orders.length,
+          totalSales,
+          totalCash,
+          totalCard,
+        });
+      }
+
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ error: 'فشل في جلب الورديات التلقائية' });
+    }
+  });
+
   // Temporary test route for email
 
   app.get("/api/pos/hardware-status", requireAuth, (req: AuthRequest, res) => {
