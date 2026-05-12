@@ -37,8 +37,159 @@ import {
   Banknote,
   Zap,
   Layers,
+  Download,
+  Share2,
 } from "lucide-react";
 import { printHtmlInPage, printShiftThermal } from "@/lib/print-utils";
+
+// ── Export helpers ────────────────────────────────────────────────────────────
+function exportPeriodsToExcel(periods: any[], dateLabel: string) {
+  import('xlsx').then(XLSX => {
+    const fmtT = (iso: string) => iso ? new Date(iso).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : '';
+    const fmt = (n: number) => Number((n || 0).toFixed(2));
+
+    // Sheet 1: summary per period
+    const summaryRows = periods.map(p => ({
+      'الفترة':         p.periodLabel || '',
+      'من':             fmtT(p.windowStart),
+      'إلى':            p.isOngoing ? 'جارية' : fmtT(p.windowEnd),
+      'عدد الطلبات':    p.totalOrders || 0,
+      'الإجمالي ر.س':   fmt(p.totalSales),
+      'نقدي ر.س':       fmt(p.totalCash),
+      'شبكة ر.س':       fmt(p.totalCard),
+    }));
+    // Totals row
+    summaryRows.push({
+      'الفترة':         'الإجمالي',
+      'من':             '',
+      'إلى':            '',
+      'عدد الطلبات':    periods.reduce((s, p) => s + (p.totalOrders || 0), 0),
+      'الإجمالي ر.س':   fmt(periods.reduce((s, p) => s + (p.totalSales || 0), 0)),
+      'نقدي ر.س':       fmt(periods.reduce((s, p) => s + (p.totalCash  || 0), 0)),
+      'شبكة ر.س':       fmt(periods.reduce((s, p) => s + (p.totalCard  || 0), 0)),
+    });
+
+    // Sheet 2: products
+    const productRows: any[] = [];
+    periods.forEach(p => {
+      (p.productsByCategory || []).forEach((cat: any) => {
+        cat.items.forEach((item: any) => {
+          productRows.push({
+            'الفترة':     p.periodLabel || '',
+            'الفئة':      cat.categoryNameAr || '',
+            'المنتج':     item.nameAr || '',
+            'الكمية':     item.quantity || 0,
+            'الإجمالي ر.س': fmt(item.totalAmount || 0),
+          });
+        });
+      });
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.json_to_sheet(summaryRows);
+    ws1['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws1, 'ملخص الورديات');
+
+    if (productRows.length > 0) {
+      const ws2 = XLSX.utils.json_to_sheet(productRows);
+      ws2['!cols'] = [{ wch: 16 }, { wch: 16 }, { wch: 24 }, { wch: 10 }, { wch: 14 }];
+      XLSX.utils.book_append_sheet(wb, ws2, 'المنتجات');
+    }
+
+    const filename = `ورديات-${dateLabel}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  });
+}
+
+function exportShiftsHistoryToExcel(shifts: any[]) {
+  import('xlsx').then(XLSX => {
+    const fmtT = (iso: string) => iso ? new Date(iso).toLocaleString('ar-SA') : '';
+    const fmt = (n: number) => Number((n || 0).toFixed(2));
+
+    const rows = shifts.map(s => ({
+      'رقم الوردية':     s.shiftNumber || '',
+      'الكاشير':         s.employeeName || '',
+      'الحالة':          s.status === 'open' ? 'مفتوحة' : 'مغلقة',
+      'فتح الوردية':     fmtT(s.openedAt),
+      'إغلاق الوردية':   fmtT(s.closedAt),
+      'عدد الطلبات':     s.totalOrders || 0,
+      'إجمالي المبيعات': fmt(s.totalSales),
+      'نقدي ر.س':        fmt(s.totalCashSales),
+      'شبكة ر.س':        fmt(s.totalCardSales),
+      'ضريبة القيمة ر.س': fmt(s.totalVAT),
+      'الخصومات ر.س':    fmt(s.totalDiscounts),
+      'المرتجعات ر.س':   fmt(s.totalRefunds),
+      'صافي الإيرادات':  fmt(s.netRevenue),
+      'رصيد الافتتاح':   fmt(s.openingCash),
+      'رصيد الإغلاق':    fmt(s.closingCash),
+      'الفرق':           fmt(s.cashDifference),
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = Array(16).fill({ wch: 18 });
+    XLSX.utils.book_append_sheet(wb, ws, 'سجل الورديات');
+
+    const filename = `سجل-الورديات-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  });
+}
+
+function sharePeriodsToWhatsApp(periods: any[], dateLabel: string) {
+  const fmt = (n: number) => `${(n || 0).toFixed(2)} ر.س`;
+  const fmtT = (iso: string) => iso ? new Date(iso).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : '';
+
+  const totalOrders = periods.reduce((s, p) => s + (p.totalOrders || 0), 0);
+  const totalSales  = periods.reduce((s, p) => s + (p.totalSales  || 0), 0);
+  const totalCash   = periods.reduce((s, p) => s + (p.totalCash   || 0), 0);
+  const totalCard   = periods.reduce((s, p) => s + (p.totalCard   || 0), 0);
+
+  let msg = `📊 *تقرير الورديات — ${dateLabel}*\n`;
+  msg += `━━━━━━━━━━━━━━━━━\n`;
+
+  periods.forEach((p, i) => {
+    msg += `\n🔹 *${p.periodLabel || `وردية ${i + 1}`}*`;
+    if (p.isOngoing) msg += ` 🟢`;
+    msg += `\n`;
+    msg += `   من: ${fmtT(p.windowStart)} — إلى: ${p.isOngoing ? 'جارية' : fmtT(p.windowEnd)}\n`;
+    msg += `   الطلبات: ${p.totalOrders || 0} | الإجمالي: ${fmt(p.totalSales)}\n`;
+    msg += `   نقدي: ${fmt(p.totalCash)} | شبكة: ${fmt(p.totalCard)}\n`;
+  });
+
+  msg += `\n━━━━━━━━━━━━━━━━━\n`;
+  msg += `📦 *الإجمالي اليومي*\n`;
+  msg += `   عدد الطلبات: ${totalOrders}\n`;
+  msg += `   إجمالي المبيعات: ${fmt(totalSales)}\n`;
+  msg += `   نقدي: ${fmt(totalCash)} | شبكة: ${fmt(totalCard)}\n`;
+  msg += `\n_تم التصدير من نظام BLACK ROSE CAFE_`;
+
+  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+function shareShiftToWhatsApp(shift: any) {
+  const fmt = (n: number) => `${(n || 0).toFixed(2)} ر.س`;
+  const fmtT = (iso: string) => iso ? new Date(iso).toLocaleString('ar-SA') : '';
+
+  let msg = `📊 *تقرير وردية — ${shift.shiftNumber || ''}*\n`;
+  msg += `━━━━━━━━━━━━━━━━━\n`;
+  msg += `👤 الكاشير: ${shift.employeeName || ''}\n`;
+  msg += `🕐 فتح: ${fmtT(shift.openedAt)}\n`;
+  if (shift.closedAt) msg += `🕐 إغلاق: ${fmtT(shift.closedAt)}\n`;
+  msg += `\n💰 *ملخص المبيعات*\n`;
+  msg += `   إجمالي: ${fmt(shift.totalSales)}\n`;
+  msg += `   عدد الطلبات: ${shift.totalOrders || 0}\n`;
+  msg += `   نقدي: ${fmt(shift.totalCashSales)} | شبكة: ${fmt(shift.totalCardSales)}\n`;
+  if (shift.totalVAT) msg += `   ضريبة القيمة: ${fmt(shift.totalVAT)}\n`;
+  if (shift.totalRefunds) msg += `   مرتجعات: ${fmt(shift.totalRefunds)}\n`;
+  msg += `   صافي الإيرادات: ${fmt(shift.netRevenue)}\n`;
+  if (shift.cashDifference !== undefined) {
+    const diff = shift.cashDifference || 0;
+    msg += `\n💵 فرق الصندوق: ${diff >= 0 ? '+' : ''}${fmt(diff)}\n`;
+  }
+  msg += `\n_تم التصدير من نظام BLACK ROSE CAFE_`;
+
+  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+}
 
 interface CashierShift {
   _id: string;
@@ -368,7 +519,7 @@ function AutoShiftPeriodsTab() {
           </div>
 
           {/* Action buttons */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {periods.length > 1 && (
               <Button size="sm" variant={mergeMode ? 'default' : 'outline'} className="flex-1 h-8 text-xs gap-1" onClick={toggleMergeMode}>
                 <Layers className="w-3 h-3" />
@@ -378,6 +529,22 @@ function AutoShiftPeriodsTab() {
             <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1" onClick={printFullDay}>
               <Printer className="w-3 h-3" />
               طباعة اليوم
+            </Button>
+          </div>
+
+          {/* Export buttons */}
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline"
+              className="flex-1 h-8 text-xs gap-1 border-green-300 text-green-700 hover:bg-green-50 dark:hover:bg-green-950/20"
+              onClick={() => exportPeriodsToExcel(periods, isToday ? 'اليوم' : selectedDate)}>
+              <Download className="w-3 h-3" />
+              تصدير Excel
+            </Button>
+            <Button size="sm" variant="outline"
+              className="flex-1 h-8 text-xs gap-1 border-emerald-400 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+              onClick={() => sharePeriodsToWhatsApp(periods, isToday ? 'اليوم' : selectedDate)}>
+              <Share2 className="w-3 h-3" />
+              واتساب
             </Button>
           </div>
 
@@ -882,6 +1049,16 @@ export default function ShiftManagement() {
       ) : (
         /* History Tab */
         <div className="space-y-3">
+          {shiftHistory && shiftHistory.length > 0 && (
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline"
+                className="flex-1 h-8 text-xs gap-1 border-green-300 text-green-700 hover:bg-green-50 dark:hover:bg-green-950/20"
+                onClick={() => exportShiftsHistoryToExcel(shiftHistory)}>
+                <Download className="w-3 h-3" />
+                تصدير Excel
+              </Button>
+            </div>
+          )}
           {!shiftHistory || shiftHistory.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center py-12">
@@ -1180,14 +1357,27 @@ export default function ShiftManagement() {
                 </div>
               </div>
 
-              {/* Print Button */}
-              <Button
-                className="w-full gap-2"
-                onClick={() => handlePrintZReport(selectedZReport)}
-              >
-                <Printer className="w-4 h-4" />
-                طباعة تقرير Z
-              </Button>
+              {/* Action Buttons */}
+              <div className="grid grid-cols-1 gap-2">
+                <Button className="w-full gap-2" onClick={() => handlePrintZReport(selectedZReport)}>
+                  <Printer className="w-4 h-4" />
+                  طباعة تقرير Z
+                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant="outline"
+                    className="gap-1 border-green-300 text-green-700 hover:bg-green-50 dark:hover:bg-green-950/20"
+                    onClick={() => exportShiftsHistoryToExcel([selectedZReport])}>
+                    <Download className="w-4 h-4" />
+                    Excel
+                  </Button>
+                  <Button variant="outline"
+                    className="gap-1 border-emerald-400 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+                    onClick={() => shareShiftToWhatsApp(selectedZReport)}>
+                    <Share2 className="w-4 h-4" />
+                    واتساب
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
