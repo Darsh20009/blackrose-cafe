@@ -8751,6 +8751,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       await refundDoc.save();
+
+      // ── Update original order: mark as refunded ──────────────────────────────
+      if (originalOrderId) {
+        try {
+          const { OrderModel } = await import('@shared/schema');
+          const origOrder = await OrderModel.findOne({
+            $or: [{ id: originalOrderId }, { _id: originalOrderId.length === 24 ? originalOrderId : undefined }]
+          }).catch(() => null) || await OrderModel.findById(originalOrderId).catch(() => null);
+
+          if (origOrder) {
+            const prevRefunded = Number((origOrder as any).refundedAmount) || 0;
+            const newRefunded = prevRefunded + Number(refundAmount);
+            const orderTotal = Number((origOrder as any).totalAmount) || 0;
+            const isFullyRefunded = newRefunded >= orderTotal - 0.01;
+
+            const updateFields: any = {
+              refundedAmount: newRefunded,
+              refundedAt: new Date(),
+              isFullyRefunded,
+              updatedAt: new Date(),
+            };
+            if (isFullyRefunded) {
+              updateFields.status = 'refunded';
+              updateFields.paymentStatus = 'refunded';
+            }
+            await OrderModel.updateOne({ _id: (origOrder as any)._id }, { $set: updateFields });
+          }
+        } catch (err) {
+          console.error('[Refund] Failed to update original order:', err);
+        }
+      }
+
+      // ── Update active cashier shift totalRefunds ──────────────────────────────
+      if (employeeId) {
+        try {
+          const { CashierShiftModel } = await import('@shared/schema');
+          await CashierShiftModel.updateOne(
+            { employeeId, status: 'open' },
+            { $inc: { totalRefunds: Number(refundAmount) }, $set: { updatedAt: new Date() } }
+          );
+        } catch (err) {
+          console.error('[Refund] Failed to update shift totalRefunds:', err);
+        }
+      }
+
       res.status(201).json(serializeDoc(refundDoc));
     } catch (error) {
       console.error('[Create Refund]', error);
@@ -15655,7 +15700,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Calculate summary from orders
         const orderQuery: any = {
           createdAt: { $gte: targetDate, $lt: nextDate },
-          status: { $ne: 'cancelled' },
+          status: { $nin: ['cancelled'] },
         };
         if (finalBranchId) orderQuery.branchId = finalBranchId;
         
@@ -15668,8 +15713,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (finalBranchId) expenseQuery.branchId = finalBranchId;
         
         const expenses = await ExpenseModel.find(expenseQuery);
-        
-        const totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+        // Subtract refunds for the same day
+        const { RefundOrderModel: DailyRefundModel } = await import('@shared/schema');
+        const tenantIdForSummary = getTenantIdFromRequest(req) || 'demo-tenant';
+        const dayRefundQuery: any = { tenantId: tenantIdForSummary, createdAt: { $gte: targetDate, $lt: nextDate }, status: 'completed' };
+        if (finalBranchId) dayRefundQuery.branchId = finalBranchId;
+        const dayRefunds = await DailyRefundModel.find(dayRefundQuery);
+        const totalDayRefunds = dayRefunds.reduce((s, r) => s + ((r as any).refundAmount || 0), 0);
+
+        const grossRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+        const totalRevenue = Math.max(0, grossRevenue - totalDayRefunds);
         const totalVat = totalRevenue * VAT_RATE / (1 + VAT_RATE);
         const cashRevenue = orders.filter(o => o.paymentMethod === 'cash').reduce((sum, o) => sum + (o.totalAmount || 0), 0);
         const cardRevenue = orders.filter(o => ['pos', 'stc', 'alinma', 'ur', 'barq', 'rajhi'].includes(o.paymentMethod)).reduce((sum, o) => sum + (o.totalAmount || 0), 0);

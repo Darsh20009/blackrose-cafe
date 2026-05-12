@@ -1957,6 +1957,12 @@ export default function PosSystem() {
                                   {i18n.language === 'ar' ? 'أونلاين' : 'Online'}
                                 </Badge>
                               )}
+                              {(order.status === 'refunded' || (order as any).isFullyRefunded) && (
+                                <Badge className="text-xs bg-red-100 text-red-700 border border-red-300">مسترجع ↩</Badge>
+                              )}
+                              {(order as any).refundedAmount > 0 && !(order as any).isFullyRefunded && order.status !== 'refunded' && (
+                                <Badge className="text-xs bg-orange-100 text-orange-700 border border-orange-300">جزئي ↩</Badge>
+                              )}
                               {order.orderType && (
                                 <Badge variant="outline" className="text-xs">
                                   {order.orderType === 'dine_in' || order.orderType === 'dine-in' ? t('pos.order_type_dine_label') : 

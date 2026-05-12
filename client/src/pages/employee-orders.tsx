@@ -209,7 +209,13 @@ export default function EmployeeOrders() {
 
   const filteredOrders = orders.filter((order) => {
     if (selectedBranchId && order.branchId !== selectedBranchId) return false;
-    if (statusFilter !== "all" && order.status !== statusFilter) return false;
+    if (statusFilter !== "all") {
+      if (statusFilter === "refunded") {
+        if (order.status !== 'refunded' && !(order as any).isFullyRefunded && !((order as any).refundedAmount > 0)) return false;
+      } else {
+        if (order.status !== statusFilter) return false;
+      }
+    }
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       const matchOrder = (order.orderNumber || "").toLowerCase().includes(query);
@@ -222,7 +228,13 @@ export default function EmployeeOrders() {
 
   const newOrdersCount = orders.filter(o => o.status === "pending").length;
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, order?: any) => {
+    if (status === 'refunded' || order?.isFullyRefunded) {
+      return <Badge className="bg-red-100 text-red-700 border border-red-300 font-bold">مسترجع ↩</Badge>;
+    }
+    if (order?.refundedAmount > 0 && !order?.isFullyRefunded) {
+      return <Badge className="bg-orange-100 text-orange-700 border border-orange-300 font-bold">مسترجع جزئياً ↩</Badge>;
+    }
     const config: Record<string, { label: string; variant: "destructive" | "default" | "success" | "outline" | "secondary" }> = {
       pending: { label: 'جديد', variant: 'destructive' },
       payment_confirmed: { label: 'تم الدفع', variant: 'default' },
@@ -340,6 +352,7 @@ export default function EmployeeOrders() {
                     <SelectItem value="ready">{tc("جاهز", "Ready")}</SelectItem>
                     <SelectItem value="completed">{tc("مكتمل", "Completed")}</SelectItem>
                     <SelectItem value="cancelled">{tc("ملغي", "Cancelled")}</SelectItem>
+                    <SelectItem value="refunded">{tc("مسترجع", "Refunded")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -410,7 +423,7 @@ export default function EmployeeOrders() {
                             {order.createdAt ? new Date(order.createdAt).toLocaleString('ar-SA') : 'تاريخ غير معروف'}
                           </div>
                         </div>
-                        {getStatusBadge(order.status)}
+                        {getStatusBadge(order.status, order)}
                       </div>
 
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -486,6 +499,13 @@ export default function EmployeeOrders() {
                       </div>
 
                       <Separator />
+
+                      {(order as any).refundedAmount > 0 && (
+                        <div className="flex items-center justify-between text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+                          <span className="text-red-700 font-semibold flex items-center gap-1">↩ {tc("مبلغ الاسترجاع:", "Refunded:")}</span>
+                          <span className="text-red-700 font-black">{Number((order as any).refundedAmount).toFixed(2)} <SarIcon /></span>
+                        </div>
+                      )}
 
                       <div className="flex justify-between items-center">
                         <span className="font-bold text-primary text-lg">{tc("الإجمالي:", "Total:")} {Number(order.totalAmount).toFixed(2)} <SarIcon /></span>

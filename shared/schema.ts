@@ -1275,6 +1275,9 @@ export interface IOrder extends Document {
   giftCardAmountUsed?: number;
   giftCardRemainingBalance?: number;
   notes?: string;
+  refundedAmount?: number;
+  refundedAt?: Date;
+  isFullyRefunded?: boolean;
   statusHistory?: Array<{
     status: string;
     timestamp: Date;
@@ -1337,6 +1340,9 @@ const OrderSchema = new Schema<IOrder>({
   giftCardCode: { type: String },
   giftCardAmountUsed: { type: Number },
   giftCardRemainingBalance: { type: Number },
+  refundedAmount: { type: Number, default: 0 },
+  refundedAt: { type: Date },
+  isFullyRefunded: { type: Boolean, default: false },
   isProductReservation: { type: Boolean, default: false },
   productReservationDate: { type: String },
   productReservationFromTime: { type: String },
