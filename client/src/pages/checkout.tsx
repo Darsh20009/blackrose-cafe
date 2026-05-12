@@ -179,6 +179,24 @@ function LoyaltyCheckoutCard({
   );
 }
 
+// Helper: returns the correct unit price for a cart item, respecting the selected size and all addons
+function getCartItemUnitPrice(i: any): number {
+  let base = Number(i.coffeeItem?.price) || 0;
+  if (i.selectedSize && i.coffeeItem?.availableSizes) {
+    const size = i.coffeeItem.availableSizes.find((s: any) => s.nameAr === i.selectedSize);
+    if (size) base = Number(size.price) || 0;
+  }
+  const enrichedAddonsPrice = (i.selectedAddons || []).reduce((sum: number, addonId: string) => {
+    if (i.enrichedAddons) {
+      const addon = i.enrichedAddons.find((a: any) => a.id === addonId || a._id === addonId);
+      return sum + (Number(addon?.price) || 0);
+    }
+    return sum;
+  }, 0);
+  const inlineAddonsPrice = ((i as any).selectedItemAddons || []).reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
+  return base + enrichedAddonsPrice + inlineAddonsPrice;
+}
+
 export default function CheckoutPage() {
   const tc = useTranslate();
   const { t, i18n } = useTranslation();
@@ -775,13 +793,13 @@ export default function CheckoutPage() {
       customerEmail,
       items: cartItems.map(i => {
         const inlineAddons = (i as any).selectedItemAddons || [];
-        const addonsExtra = inlineAddons.reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
         return {
           coffeeItemId: i.coffeeItemId,
           quantity: i.quantity,
-          price: (i.coffeeItem?.price || 0) + addonsExtra,
+          price: getCartItemUnitPrice(i),
           nameAr: i.coffeeItem?.nameAr || "",
           nameEn: i.coffeeItem?.nameEn || "",
+          selectedSize: i.selectedSize,
           customization: inlineAddons.length > 0 ? { selectedItemAddons: inlineAddons } : undefined,
         };
       }),
@@ -912,13 +930,13 @@ export default function CheckoutPage() {
       customerEmail: customerEmail,
       items: cartItems.map(i => {
         const inlineAddons = (i as any).selectedItemAddons || [];
-        const addonsExtra = inlineAddons.reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
         return {
           coffeeItemId: i.coffeeItemId,
           quantity: i.quantity,
-          price: (i.coffeeItem?.price || 0) + addonsExtra,
+          price: getCartItemUnitPrice(i),
           nameAr: i.coffeeItem?.nameAr || "",
           nameEn: i.coffeeItem?.nameEn || "",
+          selectedSize: i.selectedSize,
           customization: inlineAddons.length > 0 ? { selectedItemAddons: inlineAddons } : undefined,
         };
       }),
@@ -1324,8 +1342,12 @@ export default function CheckoutPage() {
               <CardContent className="space-y-4">
                 {cartItems.map((item, index) => (
                   <div key={index} className="flex justify-between items-center gap-2 text-sm" data-testid={`cart-item-${index}`}>
-                    <span>{isAr ? item.coffeeItem?.nameAr : item.coffeeItem?.nameEn} × {item.quantity}</span>
-                    <span className="font-bold">{((item.coffeeItem?.price || 0) * item.quantity).toFixed(2)} <SarIcon /></span>
+                    <span>
+                      {isAr ? item.coffeeItem?.nameAr : item.coffeeItem?.nameEn}
+                      {item.selectedSize && item.selectedSize !== 'default' && <span className="text-muted-foreground text-xs"> ({item.selectedSize})</span>}
+                      {' '}× {item.quantity}
+                    </span>
+                    <span className="font-bold">{(getCartItemUnitPrice(item) * item.quantity).toFixed(2)} <SarIcon /></span>
                   </div>
                 ))}
                 {appliedDiscount && (

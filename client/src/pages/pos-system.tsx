@@ -568,11 +568,23 @@ export default function PosSystem() {
       }));
   }, [productsData, menuCategories]);
 
+  // Helper: get the correct unit price for a POS order item, respecting the selected size
+  // Defined here (before calculateTotal) so it can be used in useMemo callbacks
+  const getPosItemUnitPriceEarly = (item: any): number => {
+    let base = Number(item.coffeeItem?.price) || 0;
+    if (item.selectedSize && item.coffeeItem?.availableSizes) {
+      const size = item.coffeeItem.availableSizes.find((s: any) => s.nameAr === item.selectedSize);
+      if (size) base = Number(size.price) || 0;
+    }
+    const addonsPrice = (item.customization?.selectedItemAddons || []).reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
+    return base + addonsPrice;
+  };
+
   const calculateTotal = useMemo(() => {
     return orderItems.reduce((sum, item) => {
-      const addonsPrice = (item.customization?.selectedItemAddons || []).reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
-      return sum + ((Number(item.coffeeItem.price) + addonsPrice) * item.quantity);
+      return sum + (getPosItemUnitPriceEarly(item) * item.quantity);
     }, 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderItems]);
 
   const pointsDiscount = useMemo(() => {
@@ -639,14 +651,14 @@ export default function PosSystem() {
   };
 
   const buildDisplayPayload = (items: any[], event: string, extra?: any) => {
-    const total = items.reduce((s, i) => s + Number(i.coffeeItem.price) * i.quantity, 0);
+    const total = items.reduce((s, i) => s + getPosItemUnitPrice(i) * i.quantity, 0);
     const subtotal = total / 1.15;
     const tax = total - subtotal;
     return {
       event,
       items: items.map(i => ({
         nameAr: i.coffeeItem.nameAr,
-        price: Number(i.coffeeItem.price),
+        price: getPosItemUnitPrice(i),
         quantity: i.quantity,
         lineItemId: i.lineItemId,
       })),
@@ -657,12 +669,15 @@ export default function PosSystem() {
     };
   };
 
-  const addToOrder = (product: CoffeeItem, customization?: { selectedItemAddons: Array<{nameAr: string; nameEn?: string; price: number}> }) => {
+  const getPosItemUnitPrice = getPosItemUnitPriceEarly;
+
+  const addToOrder = (product: CoffeeItem, customization?: { selectedItemAddons: Array<{nameAr: string; nameEn?: string; price: number}> }, selectedSize?: string | null) => {
     const addonKey = JSON.stringify(customization?.selectedItemAddons || []);
-    const existing = orderItems.find(item => item.coffeeItem.id === product.id && JSON.stringify(item.customization?.selectedItemAddons || []) === addonKey);
+    const sizeKey = selectedSize || '';
+    const existing = orderItems.find(item => item.coffeeItem.id === product.id && item.selectedSize === sizeKey && JSON.stringify(item.customization?.selectedItemAddons || []) === addonKey);
     const next = existing
       ? orderItems.map(item =>
-          item.coffeeItem.id === product.id && JSON.stringify(item.customization?.selectedItemAddons || []) === addonKey
+          item.coffeeItem.id === product.id && item.selectedSize === sizeKey && JSON.stringify(item.customization?.selectedItemAddons || []) === addonKey
             ? { ...item, quantity: item.quantity + 1 }
             : item
         )
@@ -670,6 +685,7 @@ export default function PosSystem() {
           lineItemId: Math.random().toString(36).substr(2, 9),
           coffeeItem: product,
           quantity: 1,
+          selectedSize: sizeKey,
           customization: customization || {},
         }];
     setOrderItems(next);
@@ -720,18 +736,18 @@ export default function PosSystem() {
       const pointsUsed = discount > 0 ? Math.round(discount * 50) : 0;
 
       broadcastToDisplay("payment_processing", {
-        items: orderItems.map(i => ({ nameAr: i.coffeeItem.nameAr, price: Number(i.coffeeItem.price), quantity: i.quantity })),
+        items: orderItems.map(i => ({ nameAr: i.coffeeItem.nameAr, price: getPosItemUnitPrice(i), quantity: i.quantity })),
         subtotal, tax, total,
       });
 
       const orderData: any = {
         items: orderItems.map(item => {
-          const addonsPrice = (item.customization?.selectedItemAddons || []).reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
           return {
             coffeeItemId: item.coffeeItem.id,
             name: item.coffeeItem.nameAr,
             nameAr: item.coffeeItem.nameAr,
-            price: Number(item.coffeeItem.price) + addonsPrice,
+            price: getPosItemUnitPrice(item),
+            selectedSize: item.selectedSize || undefined,
             quantity: item.quantity,
             customization: item.customization || {}
           };
@@ -787,12 +803,11 @@ export default function PosSystem() {
           orderNumber: offlineOrderNum,
           date: new Date().toISOString(),
           items: orderItems.map(item => {
-            const addonsPrice = (item.customization?.selectedItemAddons || []).reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
             return {
               coffeeItem: {
                 nameAr: item.coffeeItem.nameAr,
                 nameEn: item.coffeeItem.nameEn,
-                price: String(Number(item.coffeeItem.price) + addonsPrice),
+                price: String(getPosItemUnitPrice(item)),
               },
               quantity: item.quantity,
               customization: item.customization,
@@ -818,13 +833,12 @@ export default function PosSystem() {
             customerName,
             customerPhone,
             items: orderItems.map(item => {
-              const addonsPrice = (item.customization?.selectedItemAddons || []).reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
               const inlineNames = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
               return {
                 coffeeItem: {
                   nameAr: (item.coffeeItem?.nameAr || '') + (inlineNames ? ` (${inlineNames})` : ''),
                   nameEn: item.coffeeItem?.nameEn || '',
-                  price: String(Number(item.coffeeItem?.price || 0) + addonsPrice),
+                  price: String(getPosItemUnitPrice(item)),
                 },
                 quantity: item.quantity,
                 customization: item.customization,
@@ -882,12 +896,11 @@ export default function PosSystem() {
         orderNumber: result.orderNumber || result.dailyNumber || result._id?.slice(-4) || '—',
         date: new Date().toISOString(),
         items: orderItems.map(item => {
-          const addonsPrice = (item.customization?.selectedItemAddons || []).reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
           return {
             coffeeItem: {
               nameAr: item.coffeeItem.nameAr,
               nameEn: item.coffeeItem.nameEn,
-              price: String(Number(item.coffeeItem.price) + addonsPrice),
+              price: String(getPosItemUnitPrice(item)),
             },
             quantity: item.quantity,
             customization: item.customization,
@@ -950,7 +963,7 @@ export default function PosSystem() {
       }
       broadcastToDisplay("payment_success", {
         orderNumber: result.orderNumber || result.dailyNumber || '',
-        items: orderItems.map(i => ({ nameAr: i.coffeeItem.nameAr, price: Number(i.coffeeItem.price), quantity: i.quantity })),
+        items: orderItems.map(i => ({ nameAr: i.coffeeItem.nameAr, price: getPosItemUnitPrice(i), quantity: i.quantity })),
         subtotal, tax, total,
       });
 
@@ -1458,7 +1471,7 @@ export default function PosSystem() {
                         </p>
                       )}
                       <p className="text-primary font-black text-xs mt-0.5">
-                        {((Number(item.coffeeItem.price) + (item.customization?.selectedItemAddons || []).reduce((s: number, a: any) => s + Number(a.price || 0), 0)) * item.quantity).toFixed(2)} {t('pos.currency')}
+                        {(getPosItemUnitPrice(item) * item.quantity).toFixed(2)} {t('pos.currency')}
                       </p>
                     </div>
                     {/* Quantity controls */}
@@ -2115,10 +2128,8 @@ export default function PosSystem() {
           <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3">
             <div className="space-y-2">
               {orderItems.map((item) => {
-                const unitPrice = parseFloat(String(item.coffeeItem.price)) || 0;
-                const itemAddons = item.customization?.selectedItemAddons || [];
-                const addonsTotal = itemAddons.reduce((s: number, a: any) => s + (parseFloat(String(a.price)) || 0), 0);
-                const lineTotal = (unitPrice + addonsTotal) * item.quantity;
+                const unitPrice = getPosItemUnitPrice(item);
+                const lineTotal = unitPrice * item.quantity;
                 return (
                   <div
                     key={item.lineItemId}
@@ -2357,7 +2368,7 @@ export default function PosSystem() {
                       <span className="font-medium">{item.coffeeItem.nameAr}</span>
                       <span className="text-muted-foreground mr-1">x{item.quantity}</span>
                     </div>
-                    <span className="font-bold">{(Number(item.coffeeItem.price) * item.quantity).toFixed(2)} {t('pos.currency')}</span>
+                    <span className="font-bold">{(getPosItemUnitPrice(item) * item.quantity).toFixed(2)} {t('pos.currency')}</span>
                   </div>
                 ))}
               </div>
@@ -2549,7 +2560,7 @@ export default function PosSystem() {
             nameEn: addon.nameAr,
             price: addon.price * addon.quantity,
           }));
-          addToOrder(targetItem, selectedItemAddons.length > 0 ? { selectedItemAddons } : undefined);
+          addToOrder(targetItem, selectedItemAddons.length > 0 ? { selectedItemAddons } : undefined, customization.selectedSize || null);
           setPosCustomizationItem(null);
         }}
       />
