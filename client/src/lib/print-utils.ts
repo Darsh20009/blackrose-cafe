@@ -65,11 +65,21 @@ interface OrderItem {
     price: string;
   };
   quantity: number;
+  selectedSize?: string;
   itemDiscount?: number;
   customization?: {
     selectedItemAddons?: Array<{ nameAr: string; nameEn?: string; price?: number }>;
     [key: string]: any;
   };
+}
+
+/** Returns the correct unit price for an order item.
+ *  Prefers a top-level `price` field (stored in DB after our fix),
+ *  falls back to coffeeItem.price so old orders still display correctly. */
+function getItemUnitPrice(item: OrderItem): number {
+  const stored = parseNumber((item as any).price ?? (item as any).unitPrice);
+  if (stored > 0) return stored;
+  return parseNumber(item.coffeeItem.price);
 }
 
 interface TaxInvoiceData {
@@ -664,13 +674,15 @@ export async function buildReceiptPreviewHtml(data: TaxInvoiceData): Promise<str
   const logoSrc = logoB64 || '/black-rose-logo.png';
 
   const itemsHtml = data.items.map(item => {
-    const up = parseNumber(item.coffeeItem.price);
+    const up = getItemUnitPrice(item);
     const itemDisc = parseNumber(item.itemDiscount);
     const lineTotal = item.quantity * up - itemDisc;
     const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
+    const sizeLabel = item.selectedSize ? `<div style="font-size:14px;color:#2563eb;margin-top:2px;">الحجم: ${item.selectedSize}</div>` : '';
     return `
       <div style="padding:8px 0;">
         <div style="font-weight:700;font-size:19px;">${item.coffeeItem.nameAr}${itemDisc > 0 ? ` <span style="font-size:14px;color:#16a34a;">(-${itemDisc.toFixed(2)})</span>` : ''}</div>
+        ${sizeLabel}
         ${addons ? `<div style="font-size:15px;color:#444;margin-top:3px;">+ ${addons}</div>` : ''}
         <table style="width:100%;margin-top:5px;border-collapse:collapse;border:0;"><tr>
           <td style="font-size:17px;color:#222;border:0;">${item.quantity} × ${up.toFixed(2)} ر.س</td>
@@ -821,9 +833,11 @@ export function buildEmployeeReceiptPreviewHtml(data: TaxInvoiceData): string {
 
   const itemsHtml = data.items.map(item => {
     const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
+    const sizeLabel = item.selectedSize ? `<div style="font-size:15px;color:#555;margin-top:2px;">الحجم: ${item.selectedSize}</div>` : '';
     return `
       <div style="padding:8px 0;">
         <div style="font-size:22px;font-weight:800;line-height:1.4;">${item.quantity} × ${item.coffeeItem.nameAr}</div>
+        ${sizeLabel}
         ${addons ? `<div style="font-size:16px;color:#333;margin-top:3px;">+ ${addons}</div>` : ''}
       </div>`;
   }).join('');
@@ -922,8 +936,11 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
           items: data.items.map(item => ({
             name: item.coffeeItem.nameAr,
             qty: item.quantity,
-            price: parseNumber(item.coffeeItem.price),
-            addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
+            price: getItemUnitPrice(item),
+            addons: [
+              ...(item.selectedSize ? [`الحجم: ${item.selectedSize}`] : []),
+              ...(item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
+            ],
           })),
           subtotal: subtotalThermal,
           vat: vatThermal,
@@ -958,7 +975,10 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
               items: data.items.map(item => ({
                 name: item.coffeeItem.nameAr,
                 qty: item.quantity,
-                addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
+                addons: [
+                  ...(item.selectedSize ? [`الحجم: ${item.selectedSize}`] : []),
+                  ...(item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
+                ],
               })),
               notes: undefined,
               paperWidth: printerSettings.paperWidth,
@@ -1039,7 +1059,8 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
       nameAr: item.coffeeItem.nameAr,
       nameEn: (item.coffeeItem as any).nameEn,
       quantity: item.quantity,
-      price: parseNumber(item.coffeeItem.price),
+      price: getItemUnitPrice(item),
+      selectedSize: item.selectedSize,
       customization: item.customization,
     })),
   });
@@ -1053,7 +1074,10 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
     items: data.items.map(item => ({
       name: item.coffeeItem.nameAr,
       qty: item.quantity,
-      addons: (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
+      addons: [
+        ...(item.selectedSize ? [`الحجم: ${item.selectedSize}`] : []),
+        ...(item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr),
+      ],
     })),
     total: totalAmount,
     orderDate: `${fmtDate} ${fmtTime}`,

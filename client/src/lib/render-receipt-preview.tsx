@@ -12,6 +12,7 @@ export interface PreviewOrderInput {
     nameEn?: string;
     quantity: number;
     price: number | string;
+    selectedSize?: string;
     customization?: { selectedItemAddons?: Array<{ nameAr: string }> };
   }>;
 }
@@ -43,6 +44,7 @@ export async function renderReceiptPreviewToPng(input: PreviewOrderInput): Promi
       nameEn: it.nameEn,
       quantity: it.quantity,
       price: String(it.price),
+      selectedSize: it.selectedSize,
       customization: it.customization,
     })),
   };

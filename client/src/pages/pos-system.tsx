@@ -183,9 +183,10 @@ export default function PosSystem() {
               coffeeItem: {
                 nameAr: item.coffeeItem?.nameAr || item.nameAr || '',
                 nameEn: item.coffeeItem?.nameEn || item.nameEn || '',
-                price: String(item.coffeeItem?.price || item.price || 0),
+                price: String(item.price || item.unitPrice || item.coffeeItem?.price || 0),
               },
               quantity: item.quantity || 1,
+              selectedSize: item.selectedSize || undefined,
               customization: item.customization,
             })),
             subtotal: String(order.subtotal || (Number(order.totalAmount) / 1.15).toFixed(2)),
@@ -895,17 +896,16 @@ export default function PosSystem() {
       setLastOrder({
         orderNumber: result.orderNumber || result.dailyNumber || result._id?.slice(-4) || '—',
         date: new Date().toISOString(),
-        items: orderItems.map(item => {
-          return {
-            coffeeItem: {
-              nameAr: item.coffeeItem.nameAr,
-              nameEn: item.coffeeItem.nameEn,
-              price: String(getPosItemUnitPrice(item)),
-            },
-            quantity: item.quantity,
-            customization: item.customization,
-          };
-        }),
+        items: orderItems.map(item => ({
+          coffeeItem: {
+            nameAr: item.coffeeItem.nameAr,
+            nameEn: item.coffeeItem.nameEn,
+            price: String(getPosItemUnitPrice(item)),
+          },
+          quantity: item.quantity,
+          selectedSize: item.selectedSize || undefined,
+          customization: item.customization,
+        })),
         subtotal,
         tax,
         total,
@@ -922,19 +922,16 @@ export default function PosSystem() {
           orderNumber: result.orderNumber || result.dailyNumber || result._id?.slice(-4) || '—',
           customerName,
           customerPhone,
-          items: orderItems.map(item => {
-            const addonsPrice = (item.customization?.selectedItemAddons || []).reduce((s: number, a: any) => s + (Number(a.price) || 0), 0);
-            const inlineNames = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
-            return {
-              coffeeItem: {
-                nameAr: (item.coffeeItem?.nameAr || '') + (inlineNames ? ` (${inlineNames})` : ''),
-                nameEn: item.coffeeItem?.nameEn || '',
-                price: String(Number(item.coffeeItem?.price || 0) + addonsPrice),
-              },
-              quantity: item.quantity,
-              customization: item.customization,
-            };
-          }),
+          items: orderItems.map(item => ({
+            coffeeItem: {
+              nameAr: item.coffeeItem?.nameAr || '',
+              nameEn: item.coffeeItem?.nameEn || '',
+              price: String(getPosItemUnitPrice(item)),
+            },
+            quantity: item.quantity,
+            selectedSize: item.selectedSize || undefined,
+            customization: item.customization,
+          })),
           subtotal: subtotal.toFixed(2),
           total: total.toFixed(2),
           paymentMethod: PAYMENT_METHOD_LABELS[paymentMethod] || paymentMethod,
@@ -1024,9 +1021,11 @@ export default function PosSystem() {
       coffeeItem: {
         nameAr: item.name || item.nameAr || item.coffeeItem?.nameAr || '',
         nameEn: item.nameEn || item.coffeeItem?.nameEn || '',
-        price: String(item.price || item.unitPrice || 0),
+        price: String(item.price || item.unitPrice || item.coffeeItem?.price || 0),
       },
       quantity: item.quantity || 1,
+      selectedSize: item.selectedSize || undefined,
+      customization: item.customization,
     }));
     printTaxInvoice({
       orderNumber: order.dailyNumber || order.orderNumber || '',

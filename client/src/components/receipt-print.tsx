@@ -11,9 +11,27 @@ interface OrderItem {
     nameAr: string;
     nameEn?: string;
     price: string;
+    availableSizes?: Array<{ nameAr: string; price: number }>;
   };
   quantity: number;
+  selectedSize?: string;
   itemDiscount?: number;
+  customization?: {
+    selectedItemAddons?: Array<{ nameAr: string; nameEn?: string; price?: number }>;
+    [key: string]: any;
+  };
+}
+
+function getItemUnitPriceForReceipt(item: OrderItem): number {
+  const stored = parseNumber((item as any).price ?? (item as any).unitPrice);
+  if (stored > 0) return stored;
+  let base = parseNumber(item.coffeeItem.price);
+  if (item.selectedSize && item.coffeeItem.availableSizes) {
+    const sz = item.coffeeItem.availableSizes.find(s => s.nameAr === item.selectedSize);
+    if (sz) base = Number(sz.price) || base;
+  }
+  const addonsTotal = (item.customization?.selectedItemAddons || []).reduce((s, a) => s + (parseNumber(a.price) || 0), 0);
+  return base + addonsTotal;
 }
 
 interface ReceiptProps {
@@ -210,12 +228,19 @@ export const ReceiptPrint = forwardRef<HTMLDivElement, ReceiptProps>(
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item, index) => (
+                  {items.map((item, index) => {
+                    const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
+                    return (
                     <tr key={index} className="border-b border-gray-300">
-                      <td className="text-right py-2 font-bold">{item.coffeeItem.nameAr}</td>
+                      <td className="text-right py-2 font-bold">
+                        <div>{item.coffeeItem.nameAr}</div>
+                        {item.selectedSize && <div className="text-base font-normal text-gray-600">الحجم: {item.selectedSize}</div>}
+                        {addons && <div className="text-base font-normal text-gray-600">+ {addons}</div>}
+                      </td>
                       <td className="text-center py-2 text-2xl font-black">{item.quantity}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -320,16 +345,23 @@ export const ReceiptPrint = forwardRef<HTMLDivElement, ReceiptProps>(
               </thead>
               <tbody>
                 {items.map((item, index) => {
-                  const unitPrice = parseNumber(item.coffeeItem.price);
+                  const unitPrice = getItemUnitPriceForReceipt(item);
                   const lineTotal = unitPrice * item.quantity;
                   const itemDiscount = parseNumber(item.itemDiscount);
                   const lineAfterDiscount = lineTotal - itemDiscount;
+                  const addons = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr).join('، ');
                   return (
                     <tr key={index} className="border-b border-gray-200">
                       <td className="py-2">
                         <div className="font-medium text-gray-900">{item.coffeeItem.nameAr}</div>
                         {item.coffeeItem.nameEn && (
                           <div className="text-[10px] text-gray-500">{item.coffeeItem.nameEn}</div>
+                        )}
+                        {item.selectedSize && (
+                          <div className="text-[10px] text-blue-600">الحجم: {item.selectedSize}</div>
+                        )}
+                        {addons && (
+                          <div className="text-[10px] text-gray-500">+ {addons}</div>
                         )}
                         {itemDiscount > 0 && (
                           <div className="text-[10px] text-green-600">خصم: {itemDiscount.toFixed(2)}-</div>

@@ -227,6 +227,11 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
                   {itemNameEn && itemNameEn !== itemNameAr && (
                     <div className="text-[16px] mt-1 ltr text-right">{itemNameEn}</div>
                   )}
+                  {(item.selectedSize || item.coffeeItem?.selectedSize) && (
+                    <div className="text-[15px] mt-1 text-blue-600">
+                      الحجم: {item.selectedSize || item.coffeeItem?.selectedSize}
+                    </div>
+                  )}
                   {inlineAddons.length > 0 && (
                     <div className="text-[16px] mt-1 leading-relaxed">
                       + {inlineAddons.map((a: any) => a.nameAr).join('، ')}
