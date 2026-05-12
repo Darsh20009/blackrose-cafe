@@ -400,6 +400,71 @@ export function printHtmlInPage(html: string, paperWidth: string = '80mm'): void
   _drainPrintQueue();
 }
 
+/**
+ * Print a shift / Z-report to the configured thermal printer.
+ * Falls back to browser print (PDF dialog) only when mode='browser'.
+ * `p` is the period/shift object from the shift bar or Z-report.
+ */
+export async function printShiftThermal(p: {
+  periodLabel?: string;
+  isOngoing?: boolean;
+  windowStart?: string;
+  windowEnd?: string;
+  totalOrders: number;
+  totalSales: number;
+  totalCash?: number;
+  totalCard?: number;
+  totalCashSales?: number;
+  totalCardSales?: number;
+  paymentBreakdown?: Record<string, number>;
+  productsByCategory?: Array<{ categoryNameAr: string; items: Array<{ nameAr: string; quantity: number }> }>;
+  // Z-report / manual shift fields
+  shiftNumber?: string;
+  employeeName?: string;
+  openedAt?: string;
+  closedAt?: string;
+  reportTitle?: string;
+}, bizName = 'BLACK ROSE CAFE'): Promise<void> {
+  const { loadPrinterSettings, buildShiftReportEscPos, thermalPrint } = await import('./thermal-printer');
+  const ps = loadPrinterSettings();
+
+  const fmtT = (iso?: string) => iso ? new Date(iso).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : '';
+  const fmtD = (iso?: string) => iso ? new Date(iso).toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+
+  const startIso = p.openedAt || p.windowStart;
+  const endIso   = p.closedAt  || p.windowEnd;
+  const totalCash = p.totalCash ?? p.totalCashSales ?? (p.paymentBreakdown?.cash ?? 0);
+  const totalCard = p.totalCard ?? p.totalCardSales ?? ((p.paymentBreakdown?.card ?? 0) + (p.paymentBreakdown?.network ?? 0));
+  const totalLoyalty = p.paymentBreakdown?.loyalty ?? 0;
+
+  const opts = {
+    shopName: bizName,
+    reportTitle: p.reportTitle ?? (p.shiftNumber ? 'تقرير Z — إغلاق الوردية' : (p.isOngoing ? 'تقرير وردية جارية' : 'تقرير وردية مكتملة')),
+    shiftNumber: p.shiftNumber,
+    dateLabel: fmtD(startIso),
+    periodLabel: p.periodLabel,
+    fromTime: fmtT(startIso),
+    toTime: p.isOngoing ? 'جارية...' : fmtT(endIso),
+    cashierName: p.employeeName,
+    totalOrders: p.totalOrders || 0,
+    totalSales: p.totalSales || 0,
+    totalCash,
+    totalCard,
+    totalLoyalty,
+    productsByCategory: p.productsByCategory,
+    paperWidth: ps.paperWidth as '58mm' | '80mm',
+  };
+
+  const escData = await buildShiftReportEscPos(opts);
+  const result = await thermalPrint(escData, '', ps.paperWidth as '58mm' | '80mm');
+
+  if (!result.success) {
+    // Thermal failed — fall back to browser print
+    const { buildShiftPrintFragment } = await import('@/pages/shift-management');
+    printHtmlInPage(buildShiftPrintFragment(p, bizName));
+  }
+}
+
 export async function printEmployeeCard(data: EmployeePrintData): Promise<void> {
   let qrCodeUrl = "";
   if (data.qrCode) {

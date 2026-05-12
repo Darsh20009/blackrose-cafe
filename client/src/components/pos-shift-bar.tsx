@@ -9,8 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Play, Square, Clock, Banknote, CreditCard, ShoppingCart, AlertTriangle, Zap, History, Printer, ChevronRight, ChevronLeft, Calendar } from "lucide-react";
-import { printHtmlInPage } from "@/lib/print-utils";
-import { buildShiftPrintFragment, buildMergedPrintFragment } from "@/pages/shift-management";
+import { printShiftThermal } from "@/lib/print-utils";
 
 interface CashierShift {
   _id: string;
@@ -152,7 +151,19 @@ function ShiftHistoryDialog({ open, onClose }: { open: boolean; onClose: () => v
         {/* Print full day */}
         {periods.length > 0 && (
           <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1"
-            onClick={() => printHtmlInPage(buildMergedPrintFragment(periods, isToday ? 'اليوم' : fmtDateAr(histDate)))}>
+            onClick={() => {
+              const merged = periods.reduce((acc: any, p: any) => ({
+                totalOrders: (acc.totalOrders || 0) + (p.totalOrders || 0),
+                totalSales:  (acc.totalSales  || 0) + (p.totalSales  || 0),
+                totalCash:   (acc.totalCash   || 0) + (p.totalCash   || 0),
+                totalCard:   (acc.totalCard   || 0) + (p.totalCard   || 0),
+                windowStart: acc.windowStart || p.windowStart,
+                windowEnd:   p.windowEnd,
+                reportTitle: `تقرير اليوم الكامل — ${periods.length} ورديات`,
+                productsByCategory: [],
+              }), {});
+              printShiftThermal(merged);
+            }}>
             <Printer className="w-3 h-3" />
             طباعة يوم كامل ({periods.length} ورديات)
           </Button>
@@ -179,7 +190,7 @@ function ShiftHistoryDialog({ open, onClose }: { open: boolean; onClose: () => v
                     {p.isOngoing && <Badge className="bg-blue-500 text-white text-[9px] px-1 py-0 animate-pulse">جارية</Badge>}
                   </div>
                   <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2"
-                    onClick={() => printHtmlInPage(buildShiftPrintFragment(p))}>
+                    onClick={() => printShiftThermal(p)}>
                     <Printer className="w-2.5 h-2.5" />طباعة
                   </Button>
                 </div>
@@ -297,30 +308,16 @@ export function PosShiftBar() {
 
   const printZReport = (shift: CashierShift) => {
     const pb = shift.paymentBreakdown || {};
-    const html = `<div style="font-family:'Cairo',Arial,sans-serif;font-size:12px;padding:5px 3px;direction:rtl;color:#000;background:#fff;">
-  <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:6px;">
-    <div style="font-size:15px;font-weight:bold;">BLACK ROSE CAFE</div>
-    <div style="font-size:11px;color:#555;">تقرير Z — إغلاق الوردية</div>
-    <div style="font-size:11px;color:#555;">${shift.shiftNumber}</div>
-  </div>
-  <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>الكاشير:</span><span>${shift.employeeName}</span></div>
-  <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>فتح:</span><span>${fmtTime(shift.openedAt)}</span></div>
-  <div style="border-top:1px dashed #aaa;margin:5px 0;padding-top:5px;">
-    <div style="font-weight:bold;color:#2D9B6E;margin-bottom:3px;">ملخص المبيعات</div>
-    <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>الطلبات:</span><span>${shift.totalOrders}</span></div>
-    <div style="display:flex;justify-content:space-between;padding:2px 0;font-weight:bold;border-top:2px solid #000;margin-top:3px;padding-top:3px;"><span>الإجمالي:</span><span>${fmt(shift.totalSales)}</span></div>
-  </div>
-  <div style="border-top:1px dashed #aaa;margin:5px 0;padding-top:5px;">
-    <div style="font-weight:bold;color:#2D9B6E;margin-bottom:3px;">طرق الدفع</div>
-    <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>نقدي:</span><span>${fmt(pb.cash || 0)}</span></div>
-    <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>شبكة:</span><span>${fmt(pb.card || 0)}</span></div>
-    ${(pb.loyalty || 0) > 0 ? `<div style="display:flex;justify-content:space-between;padding:2px 0;"><span>بطاقة:</span><span>${fmt(pb.loyalty)}</span></div>` : ''}
-  </div>
-  <div style="text-align:center;margin-top:8px;border-top:1px dashed #aaa;padding-top:6px;font-size:10px;color:#666;">
-    QIROX Systems — ${new Date().toLocaleString('ar-SA')}
-  </div>
-</div>`;
-    printHtmlInPage(html);
+    printShiftThermal({
+      shiftNumber:  shift.shiftNumber,
+      employeeName: shift.employeeName,
+      openedAt:     shift.openedAt,
+      totalOrders:  shift.totalOrders,
+      totalSales:   shift.totalSales,
+      totalCash:    pb.cash  || shift.totalCashSales  || 0,
+      totalCard:    pb.card  || shift.totalCardSales   || 0,
+      paymentBreakdown: pb,
+    });
   };
 
   // Shared dialogs JSX

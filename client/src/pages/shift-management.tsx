@@ -38,7 +38,7 @@ import {
   Zap,
   Layers,
 } from "lucide-react";
-import { printHtmlInPage } from "@/lib/print-utils";
+import { printHtmlInPage, printShiftThermal } from "@/lib/print-utils";
 
 interface CashierShift {
   _id: string;
@@ -258,15 +258,36 @@ function AutoShiftPeriodsTab() {
 
   const toggleMergeMode = () => { setMergeMode(v => !v); setSelectedIdxs(new Set()); };
 
-  const printPeriod = (p: any) => printHtmlInPage(buildShiftPrintFragment(p));
+  const printPeriod = (p: any) => printShiftThermal(p);
 
   const printMerged = () => {
     const selected = [...selectedIdxs].sort((a, b) => a - b).map(i => periods[i]);
-    printHtmlInPage(buildMergedPrintFragment(selected, isToday ? 'اليوم' : formatDateAr(selectedDate)));
+    const merged = selected.reduce((acc, p) => ({
+      totalOrders: (acc.totalOrders || 0) + (p.totalOrders || 0),
+      totalSales:  (acc.totalSales  || 0) + (p.totalSales  || 0),
+      totalCash:   (acc.totalCash   || 0) + (p.totalCash   || 0),
+      totalCard:   (acc.totalCard   || 0) + (p.totalCard   || 0),
+      windowStart: acc.windowStart || p.windowStart,
+      windowEnd:   p.windowEnd,
+      periodLabel: selected.map(s => s.periodLabel).join(' | '),
+      reportTitle: `تقرير مدمج — ${selected.length} ورديات`,
+      productsByCategory: [],
+    }), {} as any);
+    printShiftThermal(merged);
   };
 
   const printFullDay = () => {
-    printHtmlInPage(buildMergedPrintFragment(periods, isToday ? 'اليوم' : formatDateAr(selectedDate)));
+    const merged = periods.reduce((acc, p) => ({
+      totalOrders: (acc.totalOrders || 0) + (p.totalOrders || 0),
+      totalSales:  (acc.totalSales  || 0) + (p.totalSales  || 0),
+      totalCash:   (acc.totalCash   || 0) + (p.totalCash   || 0),
+      totalCard:   (acc.totalCard   || 0) + (p.totalCard   || 0),
+      windowStart: acc.windowStart || p.windowStart,
+      windowEnd:   p.windowEnd,
+      reportTitle: `تقرير اليوم الكامل — ${periods.length} ورديات`,
+      productsByCategory: [],
+    }), {} as any);
+    printShiftThermal(merged);
   };
 
   const changeDate = (d: string) => { setSelectedDate(d); setExpandedIdx(null); setShowDateList(false); setSelectedIdxs(new Set()); setMergeMode(false); };
