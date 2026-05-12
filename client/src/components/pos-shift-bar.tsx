@@ -8,7 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Play, Square, Clock, Banknote, CreditCard, ShoppingCart, AlertTriangle, Zap } from "lucide-react";
+import { Play, Square, Clock, Banknote, CreditCard, ShoppingCart, AlertTriangle, Zap, History, Printer, ChevronRight, ChevronLeft, Calendar } from "lucide-react";
+import { printHtmlInPage } from "@/lib/print-utils";
+import { buildShiftPrintFragment, buildMergedPrintFragment } from "@/pages/shift-management";
 
 interface CashierShift {
   _id: string;
@@ -51,7 +53,179 @@ function fmtDuration(start: string) {
   const h = Math.floor(mins / 60), m = mins % 60;
   return `${h}:${m.toString().padStart(2, '0')}`;
 }
+function getTodayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtDateAr(s: string) {
+  return new Date(s + 'T00:00:00').toLocaleDateString('ar-SA', { weekday: 'short', month: 'short', day: 'numeric' });
+}
 
+// ── Shift History Dialog (embedded in POS bar) ──────────────────────────────
+function ShiftHistoryDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const todayStr = getTodayStr();
+  const [histDate, setHistDate] = useState(todayStr);
+  const isToday = histDate === todayStr;
+
+  const { data: rawDates } = useQuery<string[]>({
+    queryKey: ['/api/shifts/order-dates'],
+    staleTime: 5 * 60 * 1000,
+    enabled: open,
+  });
+  const orderDates: string[] = Array.isArray(rawDates) ? rawDates : [];
+
+  const { data: rawPeriods, isLoading } = useQuery<any[]>({
+    queryKey: ['/api/shifts/auto-periods', histDate],
+    queryFn: async () => {
+      const params = isToday ? '' : `?date=${histDate}`;
+      const res = await fetch(`/api/shifts/auto-periods${params}`, { credentials: 'include' });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : [];
+    },
+    enabled: open,
+    refetchInterval: isToday ? 60000 : false,
+  });
+  const periods: any[] = Array.isArray(rawPeriods) ? rawPeriods : [];
+
+  const curIdx = orderDates.indexOf(histDate);
+  const hasPrev = curIdx >= 0 && curIdx < orderDates.length - 1;
+  const hasNext = curIdx > 0;
+
+  const changeDate = (d: string) => setHistDate(d);
+
+  const dayTotal  = periods.reduce((s, p) => s + (p.totalSales || 0), 0);
+  const dayOrders = periods.reduce((s, p) => s + (p.totalOrders || 0), 0);
+  const dayCash   = periods.reduce((s, p) => s + (p.totalCash   || 0), 0);
+  const dayCard   = periods.reduce((s, p) => s + (p.totalCard   || 0), 0);
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto" dir="rtl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <History className="w-5 h-5 text-primary" />
+            سجل الورديات
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Date navigator */}
+        <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-2">
+          <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => changeDate(orderDates[curIdx + 1])} disabled={!hasPrev}>
+            <ChevronRight className="w-3 h-3" />
+          </Button>
+          <div className="flex-1 text-center">
+            <div className="font-semibold text-sm flex items-center justify-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+              {isToday ? 'اليوم' : fmtDateAr(histDate)}
+              {isToday && <Badge className="bg-primary text-white text-[9px] px-1 py-0 animate-pulse">مباشر</Badge>}
+            </div>
+            <div className="text-[10px] text-muted-foreground">{histDate}</div>
+          </div>
+          <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => changeDate(orderDates[curIdx - 1])} disabled={!hasNext}>
+            <ChevronLeft className="w-3 h-3" />
+          </Button>
+        </div>
+
+        {/* Day totals */}
+        {dayOrders > 0 && (
+          <div className="grid grid-cols-4 gap-1.5 text-center text-xs">
+            <div className="bg-muted/50 rounded p-1.5">
+              <div className="font-bold text-sm">{dayOrders}</div>
+              <div className="text-muted-foreground text-[10px]">طلب</div>
+            </div>
+            <div className="bg-primary/5 rounded p-1.5">
+              <div className="font-bold text-sm text-primary">{dayTotal.toFixed(0)}</div>
+              <div className="text-muted-foreground text-[10px]">ر.س</div>
+            </div>
+            <div className="bg-green-50 dark:bg-green-950/20 rounded p-1.5">
+              <div className="font-bold text-sm text-green-700">{dayCash.toFixed(0)}</div>
+              <div className="text-muted-foreground text-[10px]">نقدي</div>
+            </div>
+            <div className="bg-purple-50 dark:bg-purple-950/20 rounded p-1.5">
+              <div className="font-bold text-sm text-purple-700">{dayCard.toFixed(0)}</div>
+              <div className="text-muted-foreground text-[10px]">شبكة</div>
+            </div>
+          </div>
+        )}
+
+        {/* Print full day */}
+        {periods.length > 0 && (
+          <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1"
+            onClick={() => printHtmlInPage(buildMergedPrintFragment(periods, isToday ? 'اليوم' : fmtDateAr(histDate)))}>
+            <Printer className="w-3 h-3" />
+            طباعة يوم كامل ({periods.length} ورديات)
+          </Button>
+        )}
+
+        {/* Periods list */}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin w-6 h-6 border-4 border-primary border-t-transparent rounded-full" />
+          </div>
+        ) : periods.length === 0 ? (
+          <div className="text-center py-8 text-sm text-muted-foreground">
+            <Zap className="w-8 h-8 mx-auto mb-2 opacity-40" />
+            لا توجد ورديات لهذا اليوم
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {periods.map((p, i) => (
+              <div key={i} className={`rounded-lg border p-3 ${p.isOngoing ? 'border-blue-200 bg-blue-50/50 dark:bg-blue-950/10' : ''}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-blue-500" />
+                    <span className="font-semibold text-sm">{p.periodLabel}</span>
+                    {p.isOngoing && <Badge className="bg-blue-500 text-white text-[9px] px-1 py-0 animate-pulse">جارية</Badge>}
+                  </div>
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2"
+                    onClick={() => printHtmlInPage(buildShiftPrintFragment(p))}>
+                    <Printer className="w-2.5 h-2.5" />طباعة
+                  </Button>
+                </div>
+                <div className="grid grid-cols-4 gap-1 text-[10px] text-center">
+                  <div className="bg-muted/40 rounded px-1 py-0.5">
+                    <div className="font-bold">{p.totalOrders}</div><div className="text-muted-foreground">طلب</div>
+                  </div>
+                  <div className="bg-primary/5 rounded px-1 py-0.5">
+                    <div className="font-bold text-primary">{(p.totalSales||0).toFixed(0)}</div><div className="text-muted-foreground">ر.س</div>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-950/20 rounded px-1 py-0.5">
+                    <div className="font-bold text-green-700">{(p.totalCash||0).toFixed(0)}</div><div className="text-muted-foreground">نقدي</div>
+                  </div>
+                  <div className="bg-purple-50 dark:bg-purple-950/20 rounded px-1 py-0.5">
+                    <div className="font-bold text-purple-700">{(p.totalCard||0).toFixed(0)}</div><div className="text-muted-foreground">شبكة</div>
+                  </div>
+                </div>
+                {/* Products */}
+                {p.productsByCategory && p.productsByCategory.length > 0 && (
+                  <div className="mt-2 pt-2 border-t space-y-1">
+                    {p.productsByCategory.map((cat: any, ci: number) => (
+                      <div key={ci}>
+                        <div className="text-[10px] font-bold text-primary">{cat.categoryNameAr}</div>
+                        {cat.items.map((item: any, ii: number) => (
+                          <div key={ii} className="flex justify-between text-[10px] px-2 text-muted-foreground">
+                            <span>{item.nameAr}</span><span>× {item.quantity}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" className="w-full" onClick={onClose}>إغلاق</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Main POS Shift Bar ───────────────────────────────────────────────────────
 export function PosShiftBar() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -61,6 +235,7 @@ export function PosShiftBar() {
   const [showOpenDialog, setShowOpenDialog] = useState(false);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [showAutoDialog, setShowAutoDialog] = useState(false);
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const [openingCash, setOpeningCash] = useState("");
   const [openingNotes, setOpeningNotes] = useState("");
   const [closingCash, setClosingCash] = useState("");
@@ -105,7 +280,6 @@ export function PosShiftBar() {
       queryClient.invalidateQueries({ queryKey: ['/api/shifts/auto-current'] });
       setShowCloseDialog(false);
       setClosingCash(""); setClosingNotes("");
-      // Print Z-report automatically
       if (data.shift) printZReport(data.shift);
     },
     onError: (e: any) => {
@@ -123,34 +297,59 @@ export function PosShiftBar() {
 
   const printZReport = (shift: CashierShift) => {
     const pb = shift.paymentBreakdown || {};
-    const win = window.open('', '_blank', 'width=400,height=700');
-    if (!win) return;
-    win.document.write(`<html dir="rtl"><head><title>Z-Report</title>
-    <style>body{font-family:Cairo,Arial,sans-serif;padding:15px;max-width:350px;margin:0 auto;font-size:13px;}
-    .hd{text-align:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:8px;}
-    .row{display:flex;justify-content:space-between;padding:2px 0;}
-    .sec{border-top:1px dashed #999;margin:8px 0;padding-top:8px;}
-    .sec-t{font-weight:bold;color:#2D9B6E;margin-bottom:4px;}
-    .tot{font-weight:bold;border-top:2px solid #000;padding-top:4px;margin-top:4px;}
-    .ft{text-align:center;margin-top:12px;border-top:1px dashed #999;padding-top:8px;font-size:11px;color:#666;}
-    @media print{body{padding:5px;}}
-    </style></head><body>
-    <div class="hd"><h2 style="margin:0">BLACK ROSE</h2><div>تقرير Z — إغلاق الوردية</div><div>${shift.shiftNumber}</div></div>
-    <div class="row"><span>الكاشير:</span><span>${shift.employeeName}</span></div>
-    <div class="row"><span>فتح:</span><span>${fmtTime(shift.openedAt)}</span></div>
-    <div class="sec"><div class="sec-t">ملخص المبيعات</div>
-    <div class="row"><span>الطلبات:</span><span>${shift.totalOrders}</span></div>
-    <div class="row tot"><span>الإجمالي:</span><span>${fmt(shift.totalSales)}</span></div></div>
-    <div class="sec"><div class="sec-t">طرق الدفع</div>
-    <div class="row"><span>نقدي:</span><span>${fmt(pb.cash || 0)}</span></div>
-    <div class="row"><span>شبكة:</span><span>${fmt(pb.card || 0)}</span></div>
-    ${(pb.loyalty || 0) > 0 ? `<div class="row"><span>بطاقة:</span><span>${fmt(pb.loyalty)}</span></div>` : ''}
-    </div>
-    <div class="ft">QIROX Systems — ${new Date().toLocaleString('ar-SA')}</div>
-    </body></html>`);
-    win.document.close();
-    setTimeout(() => win.print(), 500);
+    const html = `<div style="font-family:'Cairo',Arial,sans-serif;font-size:12px;padding:5px 3px;direction:rtl;color:#000;background:#fff;">
+  <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:6px;">
+    <div style="font-size:15px;font-weight:bold;">BLACK ROSE CAFE</div>
+    <div style="font-size:11px;color:#555;">تقرير Z — إغلاق الوردية</div>
+    <div style="font-size:11px;color:#555;">${shift.shiftNumber}</div>
+  </div>
+  <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>الكاشير:</span><span>${shift.employeeName}</span></div>
+  <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>فتح:</span><span>${fmtTime(shift.openedAt)}</span></div>
+  <div style="border-top:1px dashed #aaa;margin:5px 0;padding-top:5px;">
+    <div style="font-weight:bold;color:#2D9B6E;margin-bottom:3px;">ملخص المبيعات</div>
+    <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>الطلبات:</span><span>${shift.totalOrders}</span></div>
+    <div style="display:flex;justify-content:space-between;padding:2px 0;font-weight:bold;border-top:2px solid #000;margin-top:3px;padding-top:3px;"><span>الإجمالي:</span><span>${fmt(shift.totalSales)}</span></div>
+  </div>
+  <div style="border-top:1px dashed #aaa;margin:5px 0;padding-top:5px;">
+    <div style="font-weight:bold;color:#2D9B6E;margin-bottom:3px;">طرق الدفع</div>
+    <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>نقدي:</span><span>${fmt(pb.cash || 0)}</span></div>
+    <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>شبكة:</span><span>${fmt(pb.card || 0)}</span></div>
+    ${(pb.loyalty || 0) > 0 ? `<div style="display:flex;justify-content:space-between;padding:2px 0;"><span>بطاقة:</span><span>${fmt(pb.loyalty)}</span></div>` : ''}
+  </div>
+  <div style="text-align:center;margin-top:8px;border-top:1px dashed #aaa;padding-top:6px;font-size:10px;color:#666;">
+    QIROX Systems — ${new Date().toLocaleString('ar-SA')}
+  </div>
+</div>`;
+    printHtmlInPage(html);
   };
+
+  // Shared dialogs JSX
+  const openDialog = (
+    <Dialog open={showOpenDialog} onOpenChange={setShowOpenDialog}>
+      <DialogContent className="sm:max-w-md" dir="rtl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Play className="w-5 h-5 text-primary" />فتح وردية جديدة</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">رصيد الافتتاح (ر.س)</label>
+            <Input type="number" placeholder="0.00" value={openingCash} onChange={e => setOpeningCash(e.target.value)} className="text-center font-mono text-lg" dir="ltr" />
+            <p className="text-xs text-muted-foreground mt-1">المبلغ الموجود في الصندوق عند بدء الوردية</p>
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">ملاحظات (اختياري)</label>
+            <Textarea placeholder="أي ملاحظات..." value={openingNotes} onChange={e => setOpeningNotes(e.target.value)} rows={2} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setShowOpenDialog(false)}>إلغاء</Button>
+          <Button disabled={openMutation.isPending} onClick={() => openMutation.mutate({ openingCash: Number(openingCash) || 0, notes: openingNotes })}>
+            {openMutation.isPending ? "جاري الفتح..." : "فتح الوردية"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 
   // ─── Active manual shift bar ────────────────────────────────────────────────
   if (activeShift) {
@@ -170,12 +369,12 @@ export function PosShiftBar() {
           <CreditCard className="w-3 h-3 shrink-0" />
           <span className="shrink-0">{fmt((activeShift.paymentBreakdown?.card || 0) + (activeShift.totalDigitalSales || 0))}</span>
           <div className="flex-1" />
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 text-[10px] px-2 border-green-400 text-green-700 hover:bg-green-100 dark:hover:bg-green-900 shrink-0"
-            onClick={() => setShowCloseDialog(true)}
-          >
+          <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 border-green-400 text-green-700 hover:bg-green-100 dark:hover:bg-green-900 shrink-0"
+            onClick={() => setShowHistoryDialog(true)}>
+            <History className="w-3 h-3" />
+          </Button>
+          <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 border-green-400 text-green-700 hover:bg-green-100 dark:hover:bg-green-900 shrink-0"
+            onClick={() => setShowCloseDialog(true)}>
             <Square className="w-3 h-3 ml-1" />
             غلق الوردية
           </Button>
@@ -215,6 +414,8 @@ export function PosShiftBar() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <ShiftHistoryDialog open={showHistoryDialog} onClose={() => setShowHistoryDialog(false)} />
       </>
     );
   }
@@ -235,11 +436,11 @@ export function PosShiftBar() {
           <CreditCard className="w-3 h-3 shrink-0" />
           <span className="shrink-0">{fmt(autoShift.totalCard)}</span>
           <div className="flex-1" />
-          <Button
-            size="sm"
-            className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700 text-white shrink-0"
-            onClick={handleStartShiftClick}
-          >
+          <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 border-blue-400 text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900 shrink-0"
+            onClick={() => setShowHistoryDialog(true)}>
+            <History className="w-3 h-3" />
+          </Button>
+          <Button size="sm" className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700 text-white shrink-0" onClick={handleStartShiftClick}>
             <Play className="w-3 h-3 ml-1" />
             بدأ وردية
           </Button>
@@ -292,7 +493,7 @@ export function PosShiftBar() {
               </div>
             </div>
             <DialogFooter className="gap-2 flex-col sm:flex-row">
-              <Button variant="outline" className="flex-1" onClick={() => { setShowAutoDialog(false); }}>
+              <Button variant="outline" className="flex-1" onClick={() => setShowAutoDialog(false)}>
                 استمرار التلقائية
               </Button>
               <Button className="flex-1" onClick={() => { setShowAutoDialog(false); setShowOpenDialog(true); }}>
@@ -303,32 +504,8 @@ export function PosShiftBar() {
           </DialogContent>
         </Dialog>
 
-        {/* Open shift dialog */}
-        <Dialog open={showOpenDialog} onOpenChange={setShowOpenDialog}>
-          <DialogContent className="sm:max-w-md" dir="rtl">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2"><Play className="w-5 h-5 text-primary" />فتح وردية جديدة</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">رصيد الافتتاح (ر.س)</label>
-                <Input type="number" placeholder="0.00" value={openingCash} onChange={e => setOpeningCash(e.target.value)} className="text-center font-mono text-lg" dir="ltr" />
-                <p className="text-xs text-muted-foreground mt-1">المبلغ الموجود في الصندوق عند بدء الوردية</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">ملاحظات (اختياري)</label>
-                <Textarea placeholder="أي ملاحظات..." value={openingNotes} onChange={e => setOpeningNotes(e.target.value)} rows={2} />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowOpenDialog(false)}>إلغاء</Button>
-              <Button disabled={openMutation.isPending}
-                onClick={() => openMutation.mutate({ openingCash: Number(openingCash) || 0, notes: openingNotes })}>
-                {openMutation.isPending ? "جاري الفتح..." : "فتح الوردية"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {openDialog}
+        <ShiftHistoryDialog open={showHistoryDialog} onClose={() => setShowHistoryDialog(false)} />
       </>
     );
   }
@@ -340,37 +517,17 @@ export function PosShiftBar() {
         <Clock className="w-3 h-3 shrink-0" />
         <span className="shrink-0">لا توجد وردية مفتوحة</span>
         <div className="flex-1" />
+        <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 shrink-0" onClick={() => setShowHistoryDialog(true)}>
+          <History className="w-3 h-3" />
+        </Button>
         <Button size="sm" className="h-6 text-[10px] px-2 shrink-0" onClick={() => setShowOpenDialog(true)}>
           <Play className="w-3 h-3 ml-1" />
           بدأ وردية
         </Button>
       </div>
 
-      <Dialog open={showOpenDialog} onOpenChange={setShowOpenDialog}>
-        <DialogContent className="sm:max-w-md" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Play className="w-5 h-5 text-primary" />فتح وردية جديدة</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">رصيد الافتتاح (ر.س)</label>
-              <Input type="number" placeholder="0.00" value={openingCash} onChange={e => setOpeningCash(e.target.value)} className="text-center font-mono text-lg" dir="ltr" />
-              <p className="text-xs text-muted-foreground mt-1">المبلغ الموجود في الصندوق عند بدء الوردية</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">ملاحظات (اختياري)</label>
-              <Textarea placeholder="أي ملاحظات..." value={openingNotes} onChange={e => setOpeningNotes(e.target.value)} rows={2} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowOpenDialog(false)}>إلغاء</Button>
-            <Button disabled={openMutation.isPending}
-              onClick={() => openMutation.mutate({ openingCash: Number(openingCash) || 0, notes: openingNotes })}>
-              {openMutation.isPending ? "جاري الفتح..." : "فتح الوردية"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {openDialog}
+      <ShiftHistoryDialog open={showHistoryDialog} onClose={() => setShowHistoryDialog(false)} />
     </>
   );
 }

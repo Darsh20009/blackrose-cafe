@@ -36,7 +36,9 @@ import {
   History,
   Banknote,
   Zap,
+  Layers,
 } from "lucide-react";
+import { printHtmlInPage } from "@/lib/print-utils";
 
 interface CashierShift {
   _id: string;
@@ -99,58 +101,112 @@ function formatDuration(start: string, end?: string) {
   return `${hrs}:${m.toString().padStart(2, '0')} ساعة`;
 }
 
-function buildShiftPrintHtml(p: any, businessName = 'BLACK ROSE CAFE') {
+// ── Shared thermal-print fragment builders ────────────────────────────────────
+// These return HTML *fragments* (no <html>/<body>) for use with printHtmlInPage()
+// which feeds them through the same thermal-print queue used by the POS system.
+
+function _receiptRow(label: string, value: string, bold = false) {
+  const w = bold ? 'font-weight:bold;' : '';
+  return `<div style="display:flex;justify-content:space-between;padding:2px 0;${w}"><span>${label}</span><span>${value}</span></div>`;
+}
+
+function _receiptProducts(productsByCategory: any[]): string {
+  if (!productsByCategory || productsByCategory.length === 0) return '';
+  let html = `<div style="border-top:1px dashed #aaa;margin:5px 0;padding-top:5px;">
+    <div style="font-weight:bold;color:#2D9B6E;margin-bottom:4px;font-size:12px;">المنتجات المستهلكة</div>`;
+  for (const cat of productsByCategory) {
+    html += `<div style="font-size:11px;font-weight:bold;color:#2D9B6E;margin-top:3px;">${cat.categoryNameAr || 'أخرى'}</div>`;
+    for (const item of (cat.items || [])) {
+      html += `<div style="display:flex;justify-content:space-between;padding:1px 8px;font-size:11px;">
+        <span>${item.nameAr}</span><span>× ${item.quantity}  <span style="color:#888;">${(item.totalAmount||0).toFixed(1)} ر.س</span></span></div>`;
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+export function buildShiftPrintFragment(p: any, bizName = 'BLACK ROSE CAFE'): string {
   const fmtT = (iso: string) => new Date(iso).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
   const fmtD = (iso: string) => new Date(iso).toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' });
-  const products: Array<{categoryNameAr: string; items: Array<{nameAr: string; quantity: number; totalAmount: number}>}> = p.productsByCategory || [];
+  return `<div style="font-family:'Cairo',Arial,sans-serif;font-size:12px;padding:5px 3px;direction:rtl;color:#000;background:#fff;">
+  <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:6px;">
+    <div style="font-size:15px;font-weight:bold;">${bizName}</div>
+    <div style="font-size:11px;color:#555;">تقرير وردية ${p.isOngoing ? 'جارية' : 'مكتملة'}</div>
+    <div style="font-size:11px;color:#555;">${fmtD(p.windowStart)}</div>
+  </div>
+  ${_receiptRow('الفترة:', p.periodLabel)}
+  ${_receiptRow('من:', fmtT(p.windowStart))}
+  ${_receiptRow('إلى:', p.isOngoing ? 'جارية...' : fmtT(p.windowEnd))}
+  <div style="border-top:1px dashed #aaa;margin:5px 0;padding-top:5px;">
+    <div style="font-weight:bold;color:#2D9B6E;margin-bottom:4px;font-size:12px;">ملخص المبيعات</div>
+    ${_receiptRow('عدد الطلبات:', String(p.totalOrders || 0))}
+    ${_receiptRow('الإجمالي:', `${(p.totalSales||0).toFixed(2)} ر.س`, true)}
+  </div>
+  <div style="border-top:1px dashed #aaa;margin:5px 0;padding-top:5px;">
+    <div style="font-weight:bold;color:#2D9B6E;margin-bottom:4px;font-size:12px;">طرق الدفع</div>
+    ${_receiptRow('نقدي:', `${(p.totalCash||0).toFixed(2)} ر.س`)}
+    ${_receiptRow('شبكة/إلكتروني:', `${(p.totalCard||0).toFixed(2)} ر.س`)}
+  </div>
+  ${_receiptProducts(p.productsByCategory || [])}
+  <div style="text-align:center;margin-top:8px;border-top:1px dashed #aaa;padding-top:6px;font-size:10px;color:#666;">
+    QIROX Systems — ${new Date().toLocaleString('ar-SA')}
+  </div>
+</div>`;
+}
 
-  const productsHtml = products.length > 0 ? `
-    <div class="sec"><div class="sec-t">المنتجات المستهلكة</div>
-    ${products.map((cat: any) => `
-      <div style="margin-top:5px;"><strong style="font-size:12px;color:#2D9B6E;">${cat.categoryNameAr}</strong>
-      ${cat.items.map((item: any) => `
-        <div class="row" style="padding-right:8px;font-size:12px;">
-          <span>${item.nameAr}</span><span>× ${item.quantity}</span>
-        </div>
-      `).join('')}
-      </div>
-    `).join('')}
-    </div>
-  ` : '';
+export function buildMergedPrintFragment(periods: any[], dateLabel: string, bizName = 'BLACK ROSE CAFE'): string {
+  if (periods.length === 0) return '';
+  const totalOrders = periods.reduce((s, p) => s + (p.totalOrders || 0), 0);
+  const totalSales  = periods.reduce((s, p) => s + (p.totalSales  || 0), 0);
+  const totalCash   = periods.reduce((s, p) => s + (p.totalCash   || 0), 0);
+  const totalCard   = periods.reduce((s, p) => s + (p.totalCard   || 0), 0);
 
-  return `<html dir="rtl"><head><title>وردية تلقائية</title>
-  <style>
-    body{font-family:Cairo,Arial,sans-serif;padding:10px;max-width:350px;margin:0 auto;font-size:13px;}
-    .hd{text-align:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:8px;}
-    .hd h2{margin:0;font-size:16px;} .hd p{margin:2px 0;font-size:11px;color:#555;}
-    .row{display:flex;justify-content:space-between;padding:2px 0;}
-    .sec{border-top:1px dashed #999;margin:7px 0;padding-top:7px;}
-    .sec-t{font-weight:bold;color:#2D9B6E;margin-bottom:4px;font-size:13px;}
-    .tot{font-weight:bold;font-size:14px;border-top:2px solid #000;padding-top:4px;margin-top:4px;}
-    .ft{text-align:center;margin-top:10px;border-top:1px dashed #999;padding-top:8px;font-size:11px;color:#666;}
-    @media print{body{padding:4px;} @page{margin:5mm;}}
-  </style></head><body>
-  <div class="hd">
-    <h2>${businessName}</h2>
-    <p>تقرير وردية ${p.isOngoing ? 'جارية' : 'مكتملة'}</p>
-    <p>${fmtD(p.windowStart)}</p>
+  // Merge product lists
+  const catMap = new Map<string, Map<string, { quantity: number; totalAmount: number }>>();
+  for (const p of periods) {
+    for (const cat of (p.productsByCategory || [])) {
+      if (!catMap.has(cat.categoryNameAr)) catMap.set(cat.categoryNameAr, new Map());
+      const itemMap = catMap.get(cat.categoryNameAr)!;
+      for (const item of (cat.items || [])) {
+        const ex = itemMap.get(item.nameAr) || { quantity: 0, totalAmount: 0 };
+        itemMap.set(item.nameAr, { quantity: ex.quantity + item.quantity, totalAmount: ex.totalAmount + item.totalAmount });
+      }
+    }
+  }
+  const mergedProducts = Array.from(catMap.entries()).map(([categoryNameAr, itemMap]) => ({
+    categoryNameAr,
+    items: Array.from(itemMap.entries()).map(([nameAr, d]) => ({ nameAr, ...d })),
+  }));
+
+  const periodLabels = periods.map(p => p.periodLabel).join(' | ');
+  const fmtT = (iso: string) => new Date(iso).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+  const timeRange = periods.length > 0
+    ? `${fmtT(periods[0].windowStart)} — ${fmtT(periods[periods.length - 1].windowEnd)}`
+    : '';
+
+  return `<div style="font-family:'Cairo',Arial,sans-serif;font-size:12px;padding:5px 3px;direction:rtl;color:#000;background:#fff;">
+  <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:6px;">
+    <div style="font-size:15px;font-weight:bold;">${bizName}</div>
+    <div style="font-size:11px;color:#555;">تقرير مدمج — ${periods.length} ورديات</div>
+    <div style="font-size:11px;color:#555;">${dateLabel}</div>
   </div>
-  <div class="row"><span>الفترة:</span><span>${p.periodLabel}</span></div>
-  <div class="row"><span>من:</span><span>${fmtT(p.windowStart)}</span></div>
-  <div class="row"><span>إلى:</span><span>${p.isOngoing ? 'جارية...' : fmtT(p.windowEnd)}</span></div>
-  <div class="sec">
-    <div class="sec-t">ملخص المبيعات</div>
-    <div class="row"><span>عدد الطلبات:</span><span>${p.totalOrders}</span></div>
-    <div class="row tot"><span>الإجمالي:</span><span>${(p.totalSales||0).toFixed(2)} ر.س</span></div>
+  ${_receiptRow('الورديات:', periodLabels)}
+  ${_receiptRow('الفترة:', timeRange)}
+  <div style="border-top:1px dashed #aaa;margin:5px 0;padding-top:5px;">
+    <div style="font-weight:bold;color:#2D9B6E;margin-bottom:4px;font-size:12px;">ملخص المبيعات</div>
+    ${_receiptRow('عدد الطلبات:', String(totalOrders))}
+    ${_receiptRow('الإجمالي:', `${totalSales.toFixed(2)} ر.س`, true)}
   </div>
-  <div class="sec">
-    <div class="sec-t">طرق الدفع</div>
-    <div class="row"><span>نقدي:</span><span>${(p.totalCash||0).toFixed(2)} ر.س</span></div>
-    <div class="row"><span>شبكة/إلكتروني:</span><span>${(p.totalCard||0).toFixed(2)} ر.س</span></div>
+  <div style="border-top:1px dashed #aaa;margin:5px 0;padding-top:5px;">
+    <div style="font-weight:bold;color:#2D9B6E;margin-bottom:4px;font-size:12px;">طرق الدفع</div>
+    ${_receiptRow('نقدي:', `${totalCash.toFixed(2)} ر.س`)}
+    ${_receiptRow('شبكة/إلكتروني:', `${totalCard.toFixed(2)} ر.س`)}
   </div>
-  ${productsHtml}
-  <div class="ft">QIROX Systems — ${new Date().toLocaleString('ar-SA')}</div>
-  </body></html>`;
+  ${_receiptProducts(mergedProducts)}
+  <div style="text-align:center;margin-top:8px;border-top:1px dashed #aaa;padding-top:6px;font-size:10px;color:#666;">
+    QIROX Systems — ${new Date().toLocaleString('ar-SA')}
+  </div>
+</div>`;
 }
 
 function getTodayLocalStr() {
@@ -169,6 +225,8 @@ function AutoShiftPeriodsTab() {
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [showDateList, setShowDateList] = useState(false);
+  const [mergeMode, setMergeMode] = useState(false);
+  const [selectedIdxs, setSelectedIdxs] = useState<Set<number>>(new Set());
 
   const isToday = selectedDate === todayStr;
 
@@ -190,42 +248,37 @@ function AutoShiftPeriodsTab() {
     refetchInterval: isToday ? 60000 : false,
   });
   const periods: any[] = Array.isArray(rawPeriods) ? rawPeriods : [];
-
   const isLoading = datesLoading || periodsLoading;
 
-  const printPeriod = (p: any) => {
-    const win = window.open('', '_blank', 'width=400,height=700');
-    if (!win) return;
-    win.document.write(buildShiftPrintHtml(p));
-    win.document.close();
-    setTimeout(() => win.print(), 500);
+  const toggleSelect = (i: number) => setSelectedIdxs(prev => {
+    const next = new Set(prev);
+    next.has(i) ? next.delete(i) : next.add(i);
+    return next;
+  });
+
+  const toggleMergeMode = () => { setMergeMode(v => !v); setSelectedIdxs(new Set()); };
+
+  const printPeriod = (p: any) => printHtmlInPage(buildShiftPrintFragment(p));
+
+  const printMerged = () => {
+    const selected = [...selectedIdxs].sort((a, b) => a - b).map(i => periods[i]);
+    printHtmlInPage(buildMergedPrintFragment(selected, isToday ? 'اليوم' : formatDateAr(selectedDate)));
   };
 
-  const goToPrevDate = () => {
-    const idx = orderDates.indexOf(selectedDate);
-    if (idx >= 0 && idx < orderDates.length - 1) {
-      setSelectedDate(orderDates[idx + 1]);
-      setExpandedIdx(null);
-    }
+  const printFullDay = () => {
+    printHtmlInPage(buildMergedPrintFragment(periods, isToday ? 'اليوم' : formatDateAr(selectedDate)));
   };
 
-  const goToNextDate = () => {
-    const idx = orderDates.indexOf(selectedDate);
-    if (idx > 0) {
-      setSelectedDate(orderDates[idx - 1]);
-      setExpandedIdx(null);
-    }
-  };
+  const changeDate = (d: string) => { setSelectedDate(d); setExpandedIdx(null); setShowDateList(false); setSelectedIdxs(new Set()); setMergeMode(false); };
 
   const currentIdx = orderDates.indexOf(selectedDate);
   const hasPrev = currentIdx >= 0 && currentIdx < orderDates.length - 1;
   const hasNext = currentIdx > 0;
 
-  // Daily totals across all periods
-  const dayTotal = periods.reduce((s, p) => s + (p.totalSales || 0), 0);
+  const dayTotal  = periods.reduce((s, p) => s + (p.totalSales || 0), 0);
   const dayOrders = periods.reduce((s, p) => s + (p.totalOrders || 0), 0);
-  const dayCash = periods.reduce((s, p) => s + (p.totalCash || 0), 0);
-  const dayCard = periods.reduce((s, p) => s + (p.totalCard || 0), 0);
+  const dayCash   = periods.reduce((s, p) => s + (p.totalCash   || 0), 0);
+  const dayCard   = periods.reduce((s, p) => s + (p.totalCard   || 0), 0);
 
   return (
     <div className="space-y-3">
@@ -233,34 +286,24 @@ function AutoShiftPeriodsTab() {
       <Card>
         <CardContent className="py-3 px-4">
           <div className="flex items-center justify-between gap-3">
-            <Button size="sm" variant="outline" className="h-8 px-2" onClick={goToPrevDate} disabled={!hasPrev}>
+            <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => changeDate(orderDates[currentIdx + 1])} disabled={!hasPrev}>
               <ChevronRight className="w-4 h-4" />
             </Button>
-
             <div className="flex-1 text-center">
               <div className="flex items-center justify-center gap-2">
                 <Calendar className="w-4 h-4 text-muted-foreground" />
-                <span className="font-semibold text-sm">
-                  {isToday ? 'اليوم' : formatDateAr(selectedDate)}
-                </span>
+                <span className="font-semibold text-sm">{isToday ? 'اليوم' : formatDateAr(selectedDate)}</span>
                 {isToday && <Badge className="bg-primary text-white text-[10px] px-1.5 py-0 animate-pulse">مباشر</Badge>}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">{selectedDate}</div>
             </div>
-
-            <Button size="sm" variant="outline" className="h-8 px-2" onClick={goToNextDate} disabled={!hasNext}>
+            <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => changeDate(orderDates[currentIdx - 1])} disabled={!hasNext}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
           </div>
 
-          {/* Date list dropdown */}
           <div className="mt-2 border-t pt-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full text-xs text-muted-foreground h-6 gap-1"
-              onClick={() => setShowDateList(v => !v)}
-            >
+            <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground h-6 gap-1" onClick={() => setShowDateList(v => !v)}>
               <Calendar className="w-3 h-3" />
               كل الأيام التي بها طلبات ({orderDates.length} يوم)
               <ChevronRight className={`w-3 h-3 transition-transform ${showDateList ? 'rotate-90' : ''}`} />
@@ -268,18 +311,10 @@ function AutoShiftPeriodsTab() {
             {showDateList && (
               <div className="mt-2 flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
                 {orderDates.map(d => (
-                  <div
-                    key={d}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => { setSelectedDate(d); setExpandedIdx(null); setShowDateList(false); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setSelectedDate(d); setExpandedIdx(null); setShowDateList(false); } }}
-                    className={`cursor-pointer text-xs px-2 py-1 rounded border transition-colors select-none ${
-                      d === selectedDate
-                        ? 'bg-primary text-white border-primary'
-                        : 'bg-background hover:bg-muted border-border'
-                    }`}
-                  >
+                  <div key={d} role="button" tabIndex={0}
+                    onClick={() => changeDate(d)}
+                    onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && changeDate(d)}
+                    className={`cursor-pointer text-xs px-2 py-1 rounded border transition-colors select-none ${d === selectedDate ? 'bg-primary text-white border-primary' : 'bg-background hover:bg-muted border-border'}`}>
                     {d === todayStr ? 'اليوم' : d}
                   </div>
                 ))}
@@ -289,25 +324,56 @@ function AutoShiftPeriodsTab() {
         </CardContent>
       </Card>
 
-      {/* ── Daily summary bar ── */}
+      {/* ── Daily summary + action bar ── */}
       {dayOrders > 0 && (
-        <div className="grid grid-cols-4 gap-2 text-sm">
-          <div className="bg-muted/50 rounded-lg p-2 text-center">
-            <div className="text-base font-bold">{dayOrders}</div>
-            <div className="text-[10px] text-muted-foreground">إجمالي الطلبات</div>
+        <div className="space-y-2">
+          <div className="grid grid-cols-4 gap-2 text-sm">
+            <div className="bg-muted/50 rounded-lg p-2 text-center">
+              <div className="text-base font-bold">{dayOrders}</div>
+              <div className="text-[10px] text-muted-foreground">إجمالي الطلبات</div>
+            </div>
+            <div className="bg-primary/5 rounded-lg p-2 text-center">
+              <div className="text-base font-bold text-primary">{dayTotal.toFixed(0)}</div>
+              <div className="text-[10px] text-muted-foreground">إجمالي ر.س</div>
+            </div>
+            <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-2 text-center">
+              <div className="text-base font-bold text-green-700">{dayCash.toFixed(0)}</div>
+              <div className="text-[10px] text-muted-foreground">نقدي</div>
+            </div>
+            <div className="bg-purple-50 dark:bg-purple-950/20 rounded-lg p-2 text-center">
+              <div className="text-base font-bold text-purple-700">{dayCard.toFixed(0)}</div>
+              <div className="text-[10px] text-muted-foreground">شبكة</div>
+            </div>
           </div>
-          <div className="bg-primary/5 rounded-lg p-2 text-center">
-            <div className="text-base font-bold text-primary">{dayTotal.toFixed(0)}</div>
-            <div className="text-[10px] text-muted-foreground">إجمالي ر.س</div>
+
+          {/* Action buttons */}
+          <div className="flex gap-2">
+            {periods.length > 1 && (
+              <Button size="sm" variant={mergeMode ? 'default' : 'outline'} className="flex-1 h-8 text-xs gap-1" onClick={toggleMergeMode}>
+                <Layers className="w-3 h-3" />
+                {mergeMode ? 'إلغاء الدمج' : 'دمج ورديات'}
+              </Button>
+            )}
+            <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1" onClick={printFullDay}>
+              <Printer className="w-3 h-3" />
+              طباعة اليوم
+            </Button>
           </div>
-          <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-2 text-center">
-            <div className="text-base font-bold text-green-700">{dayCash.toFixed(0)}</div>
-            <div className="text-[10px] text-muted-foreground">نقدي</div>
-          </div>
-          <div className="bg-purple-50 dark:bg-purple-950/20 rounded-lg p-2 text-center">
-            <div className="text-base font-bold text-purple-700">{dayCard.toFixed(0)}</div>
-            <div className="text-[10px] text-muted-foreground">شبكة</div>
-          </div>
+
+          {/* Merge selection bar */}
+          {mergeMode && (
+            <div className={`flex items-center gap-2 rounded-lg p-2 border transition-all ${selectedIdxs.size >= 2 ? 'bg-primary/10 border-primary/30' : 'bg-muted/40 border-border'}`}>
+              <span className="text-xs flex-1">
+                {selectedIdxs.size === 0 ? 'اختر ورديتين أو أكثر للدمج' : `تم تحديد ${selectedIdxs.size} ورديات`}
+              </span>
+              {selectedIdxs.size >= 2 && (
+                <Button size="sm" className="h-7 text-xs gap-1" onClick={printMerged}>
+                  <Printer className="w-3 h-3" />
+                  دمج وطباعة
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -320,24 +386,37 @@ function AutoShiftPeriodsTab() {
           <CardContent className="flex flex-col items-center py-12">
             <Zap className="w-12 h-12 text-muted-foreground mb-3" />
             <p className="text-muted-foreground">لا توجد بيانات لهذا اليوم</p>
+            {orderDates.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">جرب تصفح الأيام السابقة</p>
+            )}
           </CardContent>
         </Card>
       ) : (
         periods.map((p, i) => (
-          <Card key={i} className={p.isOngoing ? 'border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/10' : ''}>
+          <Card key={i} className={`transition-all ${p.isOngoing ? 'border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/10' : ''} ${mergeMode && selectedIdxs.has(i) ? 'border-primary ring-2 ring-primary/30' : ''}`}>
             <CardContent className="py-3 px-4">
-              <div className="flex items-center justify-between mb-3 cursor-pointer" onClick={() => setExpandedIdx(expandedIdx === i ? null : i)}>
+              <div className="flex items-center justify-between mb-3 cursor-pointer"
+                onClick={() => mergeMode ? toggleSelect(i) : setExpandedIdx(expandedIdx === i ? null : i)}>
                 <div className="flex items-center gap-2">
+                  {mergeMode && (
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${selectedIdxs.has(i) ? 'bg-primary border-primary' : 'border-muted-foreground'}`}>
+                      {selectedIdxs.has(i) && <span className="text-white text-[9px] font-bold">✓</span>}
+                    </div>
+                  )}
                   <Zap className="w-4 h-4 text-blue-500" />
                   <span className="font-semibold">{p.periodLabel}</span>
                   {p.isOngoing && <Badge className="bg-blue-500 text-white text-[10px] px-1.5 py-0 animate-pulse">جارية</Badge>}
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={e => { e.stopPropagation(); printPeriod(p); }}>
-                    <Printer className="w-3 h-3" />
-                    طباعة
-                  </Button>
-                  <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${expandedIdx === i ? 'rotate-90' : ''}`} />
+                  {!mergeMode && (
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                      onClick={e => { e.stopPropagation(); printPeriod(p); }}>
+                      <Printer className="w-3 h-3" />طباعة
+                    </Button>
+                  )}
+                  {!mergeMode && (
+                    <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${expandedIdx === i ? 'rotate-90' : ''}`} />
+                  )}
                 </div>
               </div>
 
@@ -360,16 +439,14 @@ function AutoShiftPeriodsTab() {
                 </div>
               </div>
 
-              {/* Expanded: products per category */}
-              {expandedIdx === i && (
+              {!mergeMode && expandedIdx === i && (
                 <div className="mt-3 border-t pt-3 space-y-3">
                   {(!p.productsByCategory || p.productsByCategory.length === 0) ? (
                     <p className="text-xs text-muted-foreground text-center py-2">لا توجد بيانات منتجات</p>
                   ) : (
                     <>
                       <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                        <ShoppingCart className="w-3 h-3" />
-                        المنتجات المستهلكة
+                        <ShoppingCart className="w-3 h-3" />المنتجات المستهلكة
                       </div>
                       {p.productsByCategory.map((cat: any, ci: number) => (
                         <div key={ci} className="rounded-lg border overflow-hidden">
@@ -485,94 +562,60 @@ export default function ShiftManagement() {
   });
 
   const handlePrintZReport = useCallback((shift: CashierShift) => {
-    const printWindow = window.open('', '_blank', 'width=400,height=800');
-    if (!printWindow) return;
-
-    const cashIn = (shift.cashMovements || []).filter(m => m.type === 'cash_in' || m.type === 'paid_in').reduce((s, m) => s + m.amount, 0);
+    const cashIn  = (shift.cashMovements || []).filter(m => m.type === 'cash_in'  || m.type === 'paid_in' ).reduce((s, m) => s + m.amount, 0);
     const cashOut = (shift.cashMovements || []).filter(m => m.type === 'cash_out' || m.type === 'paid_out').reduce((s, m) => s + m.amount, 0);
     const pb = shift.paymentBreakdown || {};
-    const ob = shift.orderTypeBreakdown || {};
+    const ob = (shift as any).orderTypeBreakdown || {};
+    const diff = shift.cashDifference || 0;
+    const row = (label: string, value: string, bold = false) =>
+      `<div style="display:flex;justify-content:space-between;padding:2px 0;${bold ? 'font-weight:bold;' : ''}"><span>${label}</span><span>${value}</span></div>`;
+    const sec = (title: string, body: string) =>
+      `<div style="border-top:1px dashed #aaa;margin:5px 0;padding-top:5px;"><div style="font-weight:bold;color:#2D9B6E;margin-bottom:3px;font-size:12px;">${title}</div>${body}</div>`;
 
-    printWindow.document.write(`
-      <html dir="rtl"><head><title>Z-Report - ${shift.shiftNumber}</title>
-      <style>
-        body { font-family: 'Cairo', Arial, sans-serif; padding: 15px; max-width: 350px; margin: 0 auto; font-size: 13px; }
-        .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
-        .header h1 { font-size: 18px; margin: 5px 0; }
-        .header h2 { font-size: 14px; color: #2D9B6E; margin: 3px 0; }
-        .row { display: flex; justify-content: space-between; padding: 3px 0; }
-        .section { border-top: 1px dashed #999; margin: 8px 0; padding-top: 8px; }
-        .section-title { font-weight: bold; font-size: 14px; margin-bottom: 5px; color: #2D9B6E; }
-        .total-row { font-weight: bold; font-size: 15px; border-top: 2px solid #000; padding-top: 5px; margin-top: 5px; }
-        .diff-positive { color: #2D9B6E; }
-        .diff-negative { color: #dc2626; }
-        .footer { text-align: center; margin-top: 15px; border-top: 1px dashed #999; padding-top: 10px; font-size: 11px; color: #666; }
-        @media print { body { padding: 5px; } }
-      </style></head><body>
-        <div class="header">
-          <h1>BLACK ROSE CAFE</h1>
-          <h2>تقرير Z - إغلاق الوردية</h2>
-          <div>${shift.shiftNumber}</div>
-        </div>
-        <div class="row"><span>الكاشير:</span><span>${shift.employeeName}</span></div>
-        <div class="row"><span>الفرع:</span><span>${shift.branchName || 'الرئيسي'}</span></div>
-        <div class="row"><span>فتح الوردية:</span><span>${formatTime(shift.openedAt)}</span></div>
-        <div class="row"><span>إغلاق الوردية:</span><span>${shift.closedAt ? formatTime(shift.closedAt) : '-'}</span></div>
-        <div class="row"><span>المدة:</span><span>${formatDuration(shift.openedAt, shift.closedAt)}</span></div>
-
-        <div class="section">
-          <div class="section-title">ملخص المبيعات</div>
-          <div class="row"><span>إجمالي المبيعات:</span><span>${formatCurrency(shift.totalSales)}</span></div>
-          <div class="row"><span>عدد الطلبات:</span><span>${shift.totalOrders}</span></div>
-          <div class="row"><span>ضريبة القيمة المضافة:</span><span>${formatCurrency(shift.totalVAT)}</span></div>
-          <div class="row"><span>الخصومات:</span><span>${formatCurrency(shift.totalDiscounts)}</span></div>
-          <div class="row"><span>المرتجعات:</span><span>${formatCurrency(shift.totalRefunds)}</span></div>
-          <div class="row"><span>الطلبات الملغاة:</span><span>${shift.totalCancelledOrders}</span></div>
-          <div class="total-row row"><span>صافي الإيرادات:</span><span>${formatCurrency(shift.netRevenue)}</span></div>
-        </div>
-
-        <div class="section">
-          <div class="section-title">طرق الدفع</div>
-          <div class="row"><span>نقدي:</span><span>${formatCurrency(pb.cash || 0)}</span></div>
-          <div class="row"><span>شبكة:</span><span>${formatCurrency(pb.card || 0)}</span></div>
-          ${(pb.loyalty || 0) > 0 ? `<div class="row"><span>بطاقة بلاك روز:</span><span>${formatCurrency(pb.loyalty)}</span></div>` : ''}
-        </div>
-
-        <div class="section">
-          <div class="section-title">أنواع الطلبات</div>
-          ${(ob.dine_in || 0) > 0 ? `<div class="row"><span>محلي:</span><span>${ob.dine_in}</span></div>` : ''}
-          ${(ob.takeaway || 0) > 0 ? `<div class="row"><span>سفري:</span><span>${ob.takeaway}</span></div>` : ''}
-          ${(ob.car_pickup || 0) > 0 ? `<div class="row"><span>سيارة:</span><span>${ob.car_pickup}</span></div>` : ''}
-          ${(ob.delivery || 0) > 0 ? `<div class="row"><span>توصيل:</span><span>${ob.delivery}</span></div>` : ''}
-          ${(ob.online || 0) > 0 ? `<div class="row"><span>أونلاين:</span><span>${ob.online}</span></div>` : ''}
-        </div>
-
-        <div class="section">
-          <div class="section-title">حركة الصندوق</div>
-          <div class="row"><span>رصيد الافتتاح:</span><span>${formatCurrency(shift.openingCash)}</span></div>
-          ${cashIn > 0 ? `<div class="row"><span>إيداعات نقدية:</span><span>${formatCurrency(cashIn)}</span></div>` : ''}
-          ${cashOut > 0 ? `<div class="row"><span>سحوبات نقدية:</span><span>${formatCurrency(cashOut)}</span></div>` : ''}
-          <div class="row"><span>المبيعات النقدية:</span><span>${formatCurrency(shift.totalCashSales)}</span></div>
-          <div class="row"><span>الرصيد المتوقع:</span><span>${formatCurrency(shift.expectedCash || 0)}</span></div>
-          <div class="row"><span>الرصيد الفعلي:</span><span>${formatCurrency(shift.closingCash || 0)}</span></div>
-          <div class="total-row row">
-            <span>الفرق:</span>
-            <span class="${(shift.cashDifference || 0) >= 0 ? 'diff-positive' : 'diff-negative'}">
-              ${formatCurrency(shift.cashDifference || 0)}
-            </span>
-          </div>
-        </div>
-
-        ${shift.closingNotes ? `<div class="section"><div class="section-title">ملاحظات</div><p>${shift.closingNotes}</p></div>` : ''}
-
-        <div class="footer">
-          <div>BLACK ROSE SYSTEMS v3.0</div>
-          <div>${new Date().toLocaleString('ar-SA')}</div>
-        </div>
-      </body></html>
-    `);
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 500);
+    const html = `<div style="font-family:'Cairo',Arial,sans-serif;font-size:12px;padding:5px 3px;direction:rtl;color:#000;background:#fff;">
+  <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:6px;">
+    <div style="font-size:15px;font-weight:bold;">BLACK ROSE CAFE</div>
+    <div style="font-size:11px;color:#555;">تقرير Z — إغلاق الوردية</div>
+    <div style="font-size:11px;color:#555;">${shift.shiftNumber}</div>
+  </div>
+  ${row('الكاشير:', shift.employeeName)}
+  ${row('الفرع:', (shift as any).branchName || 'الرئيسي')}
+  ${row('فتح الوردية:', formatTime(shift.openedAt))}
+  ${row('إغلاق الوردية:', shift.closedAt ? formatTime(shift.closedAt) : '-')}
+  ${row('المدة:', formatDuration(shift.openedAt, shift.closedAt))}
+  ${sec('ملخص المبيعات',
+    row('إجمالي المبيعات:', formatCurrency(shift.totalSales)) +
+    row('عدد الطلبات:', String(shift.totalOrders)) +
+    row('ضريبة القيمة المضافة:', formatCurrency(shift.totalVAT)) +
+    row('الخصومات:', formatCurrency(shift.totalDiscounts)) +
+    row('المرتجعات:', formatCurrency(shift.totalRefunds)) +
+    row('صافي الإيرادات:', formatCurrency(shift.netRevenue), true)
+  )}
+  ${sec('طرق الدفع',
+    row('نقدي:', formatCurrency(pb.cash || 0)) +
+    row('شبكة:', formatCurrency(pb.card || 0)) +
+    ((pb.loyalty || 0) > 0 ? row('بطاقة:', formatCurrency(pb.loyalty)) : '')
+  )}
+  ${(ob.dine_in || ob.takeaway || ob.delivery) ? sec('أنواع الطلبات',
+    ((ob.dine_in  || 0) > 0 ? row('محلي:',   String(ob.dine_in))  : '') +
+    ((ob.takeaway || 0) > 0 ? row('سفري:',   String(ob.takeaway)) : '') +
+    ((ob.delivery || 0) > 0 ? row('توصيل:',  String(ob.delivery)) : '')
+  ) : ''}
+  ${sec('حركة الصندوق',
+    row('رصيد الافتتاح:', formatCurrency(shift.openingCash)) +
+    (cashIn  > 0 ? row('إيداعات نقدية:', formatCurrency(cashIn))  : '') +
+    (cashOut > 0 ? row('سحوبات نقدية:', formatCurrency(cashOut)) : '') +
+    row('المبيعات النقدية:', formatCurrency(shift.totalCashSales)) +
+    row('الرصيد المتوقع:', formatCurrency(shift.expectedCash || 0)) +
+    row('الرصيد الفعلي:', formatCurrency(shift.closingCash || 0)) +
+    `<div style="display:flex;justify-content:space-between;padding:2px 0;font-weight:bold;border-top:2px solid #000;margin-top:3px;padding-top:3px;"><span>الفرق:</span><span style="color:${diff >= 0 ? '#2D9B6E' : '#dc2626'}">${formatCurrency(diff)}</span></div>`
+  )}
+  ${shift.closingNotes ? sec('ملاحظات', `<p style="margin:0;font-size:11px;">${shift.closingNotes}</p>`) : ''}
+  <div style="text-align:center;margin-top:8px;border-top:1px dashed #aaa;padding-top:6px;font-size:10px;color:#666;">
+    QIROX Systems — ${new Date().toLocaleString('ar-SA')}
+  </div>
+</div>`;
+    printHtmlInPage(html);
   }, []);
 
   if (loadingShift) {
