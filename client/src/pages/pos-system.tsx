@@ -2129,6 +2129,7 @@ export default function PosSystem() {
               {orderItems.map((item) => {
                 const unitPrice = getPosItemUnitPrice(item);
                 const lineTotal = unitPrice * item.quantity;
+                const itemAddons = item.customization?.selectedItemAddons || [];
                 return (
                   <div
                     key={item.lineItemId}
@@ -2140,6 +2141,9 @@ export default function PosSystem() {
                       <p className="font-bold text-sm leading-snug">{item.coffeeItem.nameAr}</p>
                       {item.coffeeItem.nameEn && (
                         <p className="text-xs text-muted-foreground">{item.coffeeItem.nameEn}</p>
+                      )}
+                      {item.selectedSize && (
+                        <p className="text-[10px] text-blue-600 mt-0.5">الحجم: {item.selectedSize}</p>
                       )}
                       {itemAddons.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
