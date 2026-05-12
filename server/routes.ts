@@ -4126,6 +4126,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== CASHIER SHIFT MANAGEMENT ====================
 
+  // ─── Helper: aggregate order items into productsByCategory ──────────────────
+  async function aggregateShiftProducts(tenantId: string, orders: any[]): Promise<Array<{categoryNameAr: string; items: Array<{nameAr: string; quantity: number; totalAmount: number}>}>> {
+    try {
+      const categories = await MenuCategoryModel.find({ tenantId }).select('id nameAr').lean();
+      const categoryMap = new Map<string, string>(categories.map((c: any) => [c.id, c.nameAr]));
+
+      const productMap = new Map<string, {nameAr: string; categoryId: string; categoryNameAr: string; quantity: number; totalAmount: number}>();
+
+      for (const order of orders) {
+        let items: any[] = [];
+        try {
+          items = Array.isArray((order as any).items) ? (order as any).items : JSON.parse((order as any).items || '[]');
+        } catch { continue; }
+
+        for (const item of items) {
+          const nameAr = item.coffeeItem?.nameAr || item.nameAr || item.name || 'منتج';
+          const qty = Number(item.quantity) || 1;
+          const price = Number(item.price) || 0;
+          const categoryId = item.category || item.coffeeItem?.category || '';
+          const categoryNameAr = categoryMap.get(categoryId) || 'أخرى';
+          const key = `${categoryId}::${nameAr}`;
+          if (productMap.has(key)) {
+            const ex = productMap.get(key)!;
+            ex.quantity += qty;
+            ex.totalAmount += qty * price;
+          } else {
+            productMap.set(key, { nameAr, categoryId, categoryNameAr, quantity: qty, totalAmount: qty * price });
+          }
+        }
+      }
+
+      const grouped = new Map<string, {categoryNameAr: string; items: any[]}>();
+      for (const p of productMap.values()) {
+        if (!grouped.has(p.categoryId)) grouped.set(p.categoryId, { categoryNameAr: p.categoryNameAr, items: [] });
+        grouped.get(p.categoryId)!.items.push({ nameAr: p.nameAr, quantity: p.quantity, totalAmount: p.totalAmount });
+      }
+      return Array.from(grouped.values())
+        .map(cat => ({ ...cat, items: cat.items.sort((a: any, b: any) => b.quantity - a.quantity) }))
+        .sort((a, b) => a.categoryNameAr.localeCompare(b.categoryNameAr, 'ar'));
+    } catch { return []; }
+  }
+
+  // ─── Helper: get start-of-day UTC for a given local offset ─────────────────
+  function getLocalStartOfDay(now: Date, tzOffset: number): Date {
+    const localDate = new Date(now.getTime() + tzOffset * 3600000);
+    const localMidnight = new Date(Date.UTC(localDate.getUTCFullYear(), localDate.getUTCMonth(), localDate.getUTCDate(), 0, 0, 0, 0));
+    return new Date(localMidnight.getTime() - tzOffset * 3600000);
+  }
+
   // Open a new cashier shift
   app.post("/api/shifts/open", requireAuth, async (req: AuthRequest, res) => {
     try {
@@ -4512,40 +4561,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const shiftPeriods: Array<{start: number; end: number}> =
         (bizConfig as any)?.shiftPeriods || [{start: 6, end: 18}, {start: 18, end: 6}];
 
-      // Current Saudi hour (UTC+3)
+      // Use configured timezone offset (default +3 for Saudi Arabia)
+      const tzOffset: number = Number((bizConfig as any)?.timezoneOffsetHours ?? 3);
       const now = new Date();
-      const currentSaudiHour = (now.getUTCHours() + 3) % 24;
+      const currentLocalHour = (now.getUTCHours() + tzOffset) % 24;
 
       // Find which period we're in
       const period = shiftPeriods.find(p => {
-        if (p.end > p.start) return currentSaudiHour >= p.start && currentSaudiHour < p.end;
-        return currentSaudiHour >= p.start || currentSaudiHour < p.end; // overnight
+        if (p.end > p.start) return currentLocalHour >= p.start && currentLocalHour < p.end;
+        return currentLocalHour >= p.start || currentLocalHour < p.end; // overnight
       }) || shiftPeriods[0] || {start: 6, end: 18};
 
-      // Compute UTC window boundaries
-      const saudiDayStart = getSaudiStartOfDay(now); // UTC equiv of Saudi midnight
-      let windowStartUTC = new Date(saudiDayStart.getTime() + period.start * 3600000);
+      // Compute UTC window boundaries using configured offset
+      const dayStartUTC = getLocalStartOfDay(now, tzOffset);
+      let windowStartUTC = new Date(dayStartUTC.getTime() + period.start * 3600000);
       let windowEndUTC: Date;
       if (period.end > period.start) {
-        windowEndUTC = new Date(saudiDayStart.getTime() + period.end * 3600000);
+        windowEndUTC = new Date(dayStartUTC.getTime() + period.end * 3600000);
       } else {
-        // Overnight: end is next day
-        if (currentSaudiHour >= period.start) {
-          // We're in the first half (e.g., 22:00 in an 18-6 shift)
-          windowEndUTC = new Date(saudiDayStart.getTime() + (period.end + 24) * 3600000);
+        if (currentLocalHour >= period.start) {
+          windowEndUTC = new Date(dayStartUTC.getTime() + (period.end + 24) * 3600000);
         } else {
-          // We're in the second half (e.g., 04:00 in an 18-6 shift) — window started yesterday
-          windowStartUTC = new Date(saudiDayStart.getTime() - (24 - period.start) * 3600000);
-          windowEndUTC = new Date(saudiDayStart.getTime() + period.end * 3600000);
+          windowStartUTC = new Date(dayStartUTC.getTime() - (24 - period.start) * 3600000);
+          windowEndUTC = new Date(dayStartUTC.getTime() + period.end * 3600000);
         }
       }
 
-      // Query orders in this window
+      // Query orders in this window (include items for product aggregation)
       const orders = await OrderModel.find({
         tenantId,
         createdAt: { $gte: windowStartUTC, $lte: now },
         status: { $nin: ['cancelled', 'refunded'] },
-      }).select('totalAmount paymentMethod createdAt').lean();
+      }).select('totalAmount paymentMethod createdAt items').lean();
 
       let totalSales = 0, totalCash = 0, totalCard = 0, totalDigital = 0;
       for (const o of orders) {
@@ -4557,6 +4604,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         else totalCard += amt;
       }
 
+      const productsByCategory = await aggregateShiftProducts(tenantId, orders);
+
       res.json({
         isAuto: true,
         windowStart: windowStartUTC.toISOString(),
@@ -4567,6 +4616,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalCard,
         totalDigital,
         periodLabel: `${period.start}:00 — ${period.end}:00`,
+        productsByCategory,
       });
     } catch (error) {
       console.error('[SHIFT] auto-current error:', error);
@@ -4574,7 +4624,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ─── Auto-Shift Periods: all 12h periods for today with order summaries ──────
+  // ─── Auto-Shift Periods: all periods for today with order summaries ──────────
   app.get("/api/shifts/auto-periods", requireAuth, async (req: AuthRequest, res) => {
     try {
       const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
@@ -4582,17 +4632,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const shiftPeriods: Array<{start: number; end: number}> =
         (bizConfig as any)?.shiftPeriods || [{start: 6, end: 18}, {start: 18, end: 6}];
 
+      // Use configured timezone offset (default +3 for Saudi Arabia)
+      const tzOffset: number = Number((bizConfig as any)?.timezoneOffsetHours ?? 3);
       const now = new Date();
-      const saudiDayStart = getSaudiStartOfDay(now);
+      const dayStartUTC = getLocalStartOfDay(now, tzOffset);
       const results = [];
 
       for (const period of shiftPeriods) {
-        let windowStartUTC = new Date(saudiDayStart.getTime() + period.start * 3600000);
+        let windowStartUTC = new Date(dayStartUTC.getTime() + period.start * 3600000);
         let windowEndUTC: Date;
         if (period.end > period.start) {
-          windowEndUTC = new Date(saudiDayStart.getTime() + period.end * 3600000);
+          windowEndUTC = new Date(dayStartUTC.getTime() + period.end * 3600000);
         } else {
-          windowEndUTC = new Date(saudiDayStart.getTime() + (period.end + 24) * 3600000);
+          windowEndUTC = new Date(dayStartUTC.getTime() + (period.end + 24) * 3600000);
         }
         if (windowStartUTC > now) continue; // hasn't started yet
 
@@ -4601,7 +4653,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tenantId,
           createdAt: { $gte: windowStartUTC, $lte: effectiveEnd },
           status: { $nin: ['cancelled', 'refunded'] },
-        }).select('totalAmount paymentMethod').lean();
+        }).select('totalAmount paymentMethod items').lean();
 
         let totalSales = 0, totalCash = 0, totalCard = 0;
         for (const o of orders) {
@@ -4612,6 +4664,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           else totalCard += amt;
         }
 
+        const productsByCategory = await aggregateShiftProducts(tenantId, orders);
+
         results.push({
           periodLabel: `${period.start}:00 — ${period.end}:00`,
           windowStart: windowStartUTC.toISOString(),
@@ -4621,6 +4675,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           totalSales,
           totalCash,
           totalCard,
+          productsByCategory,
         });
       }
 

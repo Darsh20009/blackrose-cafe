@@ -24,6 +24,11 @@ interface CashierShift {
   status: string;
 }
 
+interface ProductCategory {
+  categoryNameAr: string;
+  items: Array<{ nameAr: string; quantity: number; totalAmount: number }>;
+}
+
 interface AutoShift {
   isAuto: true;
   windowStart: string;
@@ -34,6 +39,7 @@ interface AutoShift {
   totalCard: number;
   totalDigital: number;
   periodLabel: string;
+  productsByCategory?: ProductCategory[];
 }
 
 function fmt(n: number) { return `${(n || 0).toFixed(2)} ر.س`; }
@@ -241,7 +247,7 @@ export function PosShiftBar() {
 
         {/* Auto-shift dialog: resume or start new */}
         <Dialog open={showAutoDialog} onOpenChange={setShowAutoDialog}>
-          <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto" dir="rtl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-500" />
@@ -250,8 +256,37 @@ export function PosShiftBar() {
             </DialogHeader>
             <div className="py-3 space-y-3">
               <p className="text-sm text-muted-foreground">
-                الوردية التلقائية تعمل منذ الساعة <span className="font-bold text-foreground">{fmtTime(autoShift.windowStart)}</span> وبها {autoShift.totalOrders} طلبات بإجمالي <span className="font-bold text-primary">{fmt(autoShift.totalSales)}</span>.
+                الوردية التلقائية تعمل منذ الساعة <span className="font-bold text-foreground">{fmtTime(autoShift.windowStart)}</span> وبها <span className="font-bold">{autoShift.totalOrders}</span> طلبات بإجمالي <span className="font-bold text-primary">{fmt(autoShift.totalSales)}</span>.
               </p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-green-50 dark:bg-green-950/20 rounded p-2 text-center">
+                  <div className="font-bold text-green-700">{fmt(autoShift.totalCash)}</div>
+                  <div className="text-muted-foreground">نقدي</div>
+                </div>
+                <div className="bg-purple-50 dark:bg-purple-950/20 rounded p-2 text-center">
+                  <div className="font-bold text-purple-700">{fmt(autoShift.totalCard)}</div>
+                  <div className="text-muted-foreground">شبكة</div>
+                </div>
+              </div>
+              {autoShift.productsByCategory && autoShift.productsByCategory.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                    <ShoppingCart className="w-3 h-3" />
+                    المنتجات المستهلكة
+                  </div>
+                  {autoShift.productsByCategory.map((cat, ci) => (
+                    <div key={ci} className="rounded border text-xs overflow-hidden">
+                      <div className="bg-primary/5 px-2 py-1 font-semibold text-primary">{cat.categoryNameAr}</div>
+                      {cat.items.map((item, ii) => (
+                        <div key={ii} className="flex justify-between items-center px-2 py-1 border-t">
+                          <span>{item.nameAr}</span>
+                          <span className="font-mono text-muted-foreground">× {item.quantity}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 dark:text-amber-300">
                 هل تريد فتح وردية يدوية جديدة، أم الاستمرار في تتبع الوردية التلقائية؟
               </div>

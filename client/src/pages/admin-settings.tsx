@@ -45,9 +45,13 @@ function ShiftTimeSettingsCard() {
     { start: 6, end: 18 },
     { start: 18, end: 6 },
   ]);
+  const [tzOffset, setTzOffset] = useState<number>(3);
+  const [manualLocalTime, setManualLocalTime] = useState("");
+  const [computedOffset, setComputedOffset] = useState<number | null>(null);
 
   useEffect(() => {
     if (config?.shiftPeriods) setPeriods(config.shiftPeriods);
+    if (config?.timezoneOffsetHours !== undefined) setTzOffset(Number(config.timezoneOffsetHours));
   }, [config]);
 
   const saveMutation = useMutation({
@@ -57,12 +61,33 @@ function ShiftTimeSettingsCard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/business-config"] });
-      toast({ title: "تم الحفظ", description: "تم تحديث أوقات الورديات" });
+      toast({ title: "تم الحفظ", description: "تم تحديث إعدادات الورديات" });
     },
     onError: () => toast({ title: "خطأ", description: "فشل في الحفظ", variant: "destructive" }),
   });
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
+
+  // Current server UTC time
+  const nowUtc = new Date();
+  const currentComputedLocal = new Date(nowUtc.getTime() + tzOffset * 3600000);
+  const computedLocalStr = currentComputedLocal.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+  const handleComputeOffset = () => {
+    if (!manualLocalTime) return;
+    const [hStr, mStr] = manualLocalTime.split(':');
+    const localH = Number(hStr);
+    const localM = Number(mStr) || 0;
+    const utcH = nowUtc.getUTCHours();
+    const utcM = nowUtc.getUTCMinutes();
+    let diff = (localH * 60 + localM) - (utcH * 60 + utcM);
+    if (diff > 14 * 60) diff -= 24 * 60;
+    if (diff < -14 * 60) diff += 24 * 60;
+    const offsetHours = Math.round(diff / 60 * 2) / 2;
+    setComputedOffset(offsetHours);
+    setTzOffset(offsetHours);
+    toast({ title: "تم الحساب", description: `فارق التوقيت: UTC+${offsetHours}` });
+  };
 
   return (
     <Card className="hover-elevate border-primary/10">
@@ -72,13 +97,76 @@ function ShiftTimeSettingsCard() {
             <Zap className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <CardTitle className="text-xl font-bold">أوقات الورديات التلقائية</CardTitle>
-            <CardDescription>حدد بداية ونهاية كل وردية تلقائية (بتوقيت المملكة)</CardDescription>
+            <CardTitle className="text-xl font-bold">إعدادات الورديات التلقائية</CardTitle>
+            <CardDescription>حدد أوقات الورديات وضبط التوقيت المحلي للمكان</CardDescription>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5">
+
+        {/* ── Timezone Offset Section ── */}
+        <div className="border rounded-lg p-4 space-y-3 bg-amber-50/30 dark:bg-amber-950/10 border-amber-200 dark:border-amber-800">
+          <div className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
+            <Clock className="w-4 h-4" />
+            ضبط التوقيت المحلي
+          </div>
+          <p className="text-xs text-muted-foreground">إذا كانت حسابات الوردية تظهر في وقت خاطئ، أدخل الوقت الحالي في مكانك لضبط الفارق تلقائياً.</p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">فارق التوقيت الحالي (ساعات)</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  step="0.5"
+                  min="-12"
+                  max="14"
+                  value={tzOffset}
+                  onChange={e => setTzOffset(Number(e.target.value))}
+                  className="w-24 text-center font-mono"
+                  dir="ltr"
+                />
+                <span className="text-xs text-muted-foreground">UTC +</span>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">الوقت المحلي المحسوب الآن</label>
+              <div className="flex items-center gap-2 h-10 border rounded-md px-3 bg-muted/30 font-mono text-sm text-foreground">
+                {computedLocalStr}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <label className="text-xs text-muted-foreground block mb-1">الوقت الحالي في مكانك (أدخله لحساب الفارق)</label>
+              <Input
+                type="time"
+                value={manualLocalTime}
+                onChange={e => setManualLocalTime(e.target.value)}
+                className="font-mono"
+                dir="ltr"
+              />
+            </div>
+            <Button size="sm" variant="outline" onClick={handleComputeOffset} className="gap-1 shrink-0">
+              <Clock className="w-3 h-3" />
+              حساب الفارق
+            </Button>
+          </div>
+
+          {computedOffset !== null && (
+            <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 rounded p-2 text-xs text-green-700 dark:text-green-300">
+              ✓ الفارق المحسوب: UTC+{computedOffset} — سيُطبَّق على الورديات التلقائية عند الحفظ
+            </div>
+          )}
+        </div>
+
+        {/* ── Shift Periods ── */}
         <div className="space-y-3">
+          <div className="text-sm font-semibold flex items-center gap-2">
+            <Zap className="w-4 h-4 text-blue-500" />
+            فترات الورديات
+          </div>
           {periods.map((p, i) => (
             <div key={i} className="flex items-center gap-3 p-3 bg-muted/40 rounded-lg border">
               <Zap className="w-4 h-4 text-blue-500 shrink-0" />
@@ -145,16 +233,16 @@ function ShiftTimeSettingsCard() {
             size="sm"
             className="gap-2"
             disabled={saveMutation.isPending}
-            onClick={() => saveMutation.mutate({ shiftPeriods: periods })}
+            onClick={() => saveMutation.mutate({ shiftPeriods: periods, timezoneOffsetHours: tzOffset })}
           >
             <Save className="w-4 h-4" />
-            {saveMutation.isPending ? "جاري الحفظ..." : "حفظ الأوقات"}
+            {saveMutation.isPending ? "جاري الحفظ..." : "حفظ الإعدادات"}
           </Button>
         </div>
 
         <div className="bg-blue-50 dark:bg-blue-950/20 p-3 rounded-lg text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
           <Zap className="w-4 h-4 shrink-0 mt-0.5" />
-          <p>الورديات التلقائية تُحسب من الطلبات المُسجَّلة في كل فترة دون الحاجة لفتح وردية يدوية. إذا بدأت وردية تبدأ بعد منتصف الليل (مثال: 18:00 — 06:00) فهي تمتد لليوم التالي.</p>
+          <p>الورديات التلقائية تُحسب من الطلبات المُسجَّلة في كل فترة. ضبط التوقيت يضمن أن الوردية تبدأ وتنتهي في الوقت الصحيح حسب موقعك.</p>
         </div>
       </CardContent>
     </Card>

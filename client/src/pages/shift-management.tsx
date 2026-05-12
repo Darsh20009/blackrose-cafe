@@ -99,32 +99,71 @@ function formatDuration(start: string, end?: string) {
   return `${hrs}:${m.toString().padStart(2, '0')} ساعة`;
 }
 
+function buildShiftPrintHtml(p: any, businessName = 'BLACK ROSE CAFE') {
+  const fmtT = (iso: string) => new Date(iso).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+  const fmtD = (iso: string) => new Date(iso).toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' });
+  const products: Array<{categoryNameAr: string; items: Array<{nameAr: string; quantity: number; totalAmount: number}>}> = p.productsByCategory || [];
+
+  const productsHtml = products.length > 0 ? `
+    <div class="sec"><div class="sec-t">المنتجات المستهلكة</div>
+    ${products.map((cat: any) => `
+      <div style="margin-top:5px;"><strong style="font-size:12px;color:#2D9B6E;">${cat.categoryNameAr}</strong>
+      ${cat.items.map((item: any) => `
+        <div class="row" style="padding-right:8px;font-size:12px;">
+          <span>${item.nameAr}</span><span>× ${item.quantity}</span>
+        </div>
+      `).join('')}
+      </div>
+    `).join('')}
+    </div>
+  ` : '';
+
+  return `<html dir="rtl"><head><title>وردية تلقائية</title>
+  <style>
+    body{font-family:Cairo,Arial,sans-serif;padding:10px;max-width:350px;margin:0 auto;font-size:13px;}
+    .hd{text-align:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:8px;}
+    .hd h2{margin:0;font-size:16px;} .hd p{margin:2px 0;font-size:11px;color:#555;}
+    .row{display:flex;justify-content:space-between;padding:2px 0;}
+    .sec{border-top:1px dashed #999;margin:7px 0;padding-top:7px;}
+    .sec-t{font-weight:bold;color:#2D9B6E;margin-bottom:4px;font-size:13px;}
+    .tot{font-weight:bold;font-size:14px;border-top:2px solid #000;padding-top:4px;margin-top:4px;}
+    .ft{text-align:center;margin-top:10px;border-top:1px dashed #999;padding-top:8px;font-size:11px;color:#666;}
+    @media print{body{padding:4px;} @page{margin:5mm;}}
+  </style></head><body>
+  <div class="hd">
+    <h2>${businessName}</h2>
+    <p>تقرير وردية ${p.isOngoing ? 'جارية' : 'مكتملة'}</p>
+    <p>${fmtD(p.windowStart)}</p>
+  </div>
+  <div class="row"><span>الفترة:</span><span>${p.periodLabel}</span></div>
+  <div class="row"><span>من:</span><span>${fmtT(p.windowStart)}</span></div>
+  <div class="row"><span>إلى:</span><span>${p.isOngoing ? 'جارية...' : fmtT(p.windowEnd)}</span></div>
+  <div class="sec">
+    <div class="sec-t">ملخص المبيعات</div>
+    <div class="row"><span>عدد الطلبات:</span><span>${p.totalOrders}</span></div>
+    <div class="row tot"><span>الإجمالي:</span><span>${(p.totalSales||0).toFixed(2)} ر.س</span></div>
+  </div>
+  <div class="sec">
+    <div class="sec-t">طرق الدفع</div>
+    <div class="row"><span>نقدي:</span><span>${(p.totalCash||0).toFixed(2)} ر.س</span></div>
+    <div class="row"><span>شبكة/إلكتروني:</span><span>${(p.totalCard||0).toFixed(2)} ر.س</span></div>
+  </div>
+  ${productsHtml}
+  <div class="ft">QIROX Systems — ${new Date().toLocaleString('ar-SA')}</div>
+  </body></html>`;
+}
+
 function AutoShiftPeriodsTab() {
   const { data: periods = [], isLoading } = useQuery<any[]>({
     queryKey: ['/api/shifts/auto-periods'],
     refetchInterval: 60000,
   });
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   const printPeriod = (p: any) => {
-    const win = window.open('', '_blank', 'width=400,height=600');
+    const win = window.open('', '_blank', 'width=400,height=700');
     if (!win) return;
-    win.document.write(`<html dir="rtl"><head><title>وردية تلقائية</title>
-    <style>body{font-family:Cairo,Arial,sans-serif;padding:15px;max-width:350px;margin:0 auto;font-size:13px;}
-    .hd{text-align:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:8px;}
-    .row{display:flex;justify-content:space-between;padding:3px 0;}
-    .ft{text-align:center;margin-top:12px;border-top:1px dashed #999;padding-top:8px;font-size:11px;color:#666;}
-    @media print{body{padding:4px;}}
-    </style></head><body>
-    <div class="hd"><h2 style="margin:0">BLACK ROSE</h2><div>تقرير وردية تلقائية</div></div>
-    <div class="row"><span>الفترة:</span><span>${p.periodLabel}</span></div>
-    <div class="row"><span>من:</span><span>${new Date(p.windowStart).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</span></div>
-    <div class="row"><span>إلى:</span><span>${p.isOngoing ? 'جارية...' : new Date(p.windowEnd).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</span></div>
-    <div class="row" style="border-top:1px dashed #ccc;margin-top:6px;padding-top:6px"><span>الطلبات:</span><span>${p.totalOrders}</span></div>
-    <div class="row"><span>المبيعات الإجمالية:</span><span>${(p.totalSales||0).toFixed(2)} ر.س</span></div>
-    <div class="row"><span>نقدي:</span><span>${(p.totalCash||0).toFixed(2)} ر.س</span></div>
-    <div class="row"><span>شبكة/إلكتروني:</span><span>${(p.totalCard||0).toFixed(2)} ر.س</span></div>
-    <div class="ft">QIROX Systems — ${new Date().toLocaleString('ar-SA')}</div>
-    </body></html>`);
+    win.document.write(buildShiftPrintHtml(p));
     win.document.close();
     setTimeout(() => win.print(), 500);
   };
@@ -137,7 +176,7 @@ function AutoShiftPeriodsTab() {
     <div className="space-y-3">
       <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm text-blue-800 dark:text-blue-300 flex items-start gap-2">
         <Zap className="w-4 h-4 shrink-0 mt-0.5" />
-        <p>الورديات التلقائية تُحسب تلقائياً استناداً إلى الطلبات المُسجَّلة خلال كل فترة زمنية دون الحاجة لفتح وردية يدوية.</p>
+        <p>الورديات التلقائية تُحسب من الطلبات المُسجَّلة في كل فترة. اضغط على الوردية لعرض التفاصيل والمنتجات.</p>
       </div>
 
       {periods.length === 0 ? (
@@ -151,17 +190,21 @@ function AutoShiftPeriodsTab() {
         periods.map((p, i) => (
           <Card key={i} className={p.isOngoing ? 'border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/10' : ''}>
             <CardContent className="py-3 px-4">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-3 cursor-pointer" onClick={() => setExpandedIdx(expandedIdx === i ? null : i)}>
                 <div className="flex items-center gap-2">
                   <Zap className="w-4 h-4 text-blue-500" />
                   <span className="font-semibold">{p.periodLabel}</span>
                   {p.isOngoing && <Badge className="bg-blue-500 text-white text-[10px] px-1.5 py-0 animate-pulse">جارية</Badge>}
                 </div>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => printPeriod(p)}>
-                  <Printer className="w-3 h-3" />
-                  طباعة
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={e => { e.stopPropagation(); printPeriod(p); }}>
+                    <Printer className="w-3 h-3" />
+                    طباعة
+                  </Button>
+                  <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${expandedIdx === i ? 'rotate-90' : ''}`} />
+                </div>
               </div>
+
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                 <div className="bg-muted/50 rounded p-2 text-center">
                   <div className="text-lg font-bold">{p.totalOrders}</div>
@@ -180,6 +223,38 @@ function AutoShiftPeriodsTab() {
                   <div className="text-xs text-muted-foreground">شبكة ر.س</div>
                 </div>
               </div>
+
+              {/* Expanded: products per category */}
+              {expandedIdx === i && (
+                <div className="mt-3 border-t pt-3 space-y-3">
+                  {(!p.productsByCategory || p.productsByCategory.length === 0) ? (
+                    <p className="text-xs text-muted-foreground text-center py-2">لا توجد بيانات منتجات</p>
+                  ) : (
+                    <>
+                      <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                        <ShoppingCart className="w-3 h-3" />
+                        المنتجات المستهلكة
+                      </div>
+                      {p.productsByCategory.map((cat: any, ci: number) => (
+                        <div key={ci} className="rounded-lg border overflow-hidden">
+                          <div className="bg-primary/5 px-3 py-1.5 text-xs font-bold text-primary">{cat.categoryNameAr || 'أخرى'}</div>
+                          <div className="divide-y">
+                            {cat.items.map((item: any, ii: number) => (
+                              <div key={ii} className="flex justify-between items-center px-3 py-1.5 text-xs">
+                                <span>{item.nameAr}</span>
+                                <div className="flex items-center gap-3">
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">× {item.quantity}</Badge>
+                                  <span className="text-muted-foreground font-mono">{(item.totalAmount||0).toFixed(1)} ر.س</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         ))
