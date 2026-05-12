@@ -172,20 +172,24 @@ function AutoShiftPeriodsTab() {
 
   const isToday = selectedDate === todayStr;
 
-  const { data: orderDates = [], isLoading: datesLoading } = useQuery<string[]>({
+  const { data: rawOrderDates, isLoading: datesLoading } = useQuery<string[]>({
     queryKey: ['/api/shifts/order-dates'],
     staleTime: 5 * 60 * 1000,
   });
+  const orderDates: string[] = Array.isArray(rawOrderDates) ? rawOrderDates : [];
 
-  const { data: periods = [], isLoading: periodsLoading } = useQuery<any[]>({
+  const { data: rawPeriods, isLoading: periodsLoading } = useQuery<any[]>({
     queryKey: ['/api/shifts/auto-periods', selectedDate],
     queryFn: async () => {
       const params = isToday ? '' : `?date=${selectedDate}`;
       const res = await fetch(`/api/shifts/auto-periods${params}`, { credentials: 'include' });
-      return res.json();
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : [];
     },
     refetchInterval: isToday ? 60000 : false,
   });
+  const periods: any[] = Array.isArray(rawPeriods) ? rawPeriods : [];
 
   const isLoading = datesLoading || periodsLoading;
 
@@ -199,7 +203,7 @@ function AutoShiftPeriodsTab() {
 
   const goToPrevDate = () => {
     const idx = orderDates.indexOf(selectedDate);
-    if (idx < orderDates.length - 1) {
+    if (idx >= 0 && idx < orderDates.length - 1) {
       setSelectedDate(orderDates[idx + 1]);
       setExpandedIdx(null);
     }
@@ -214,7 +218,7 @@ function AutoShiftPeriodsTab() {
   };
 
   const currentIdx = orderDates.indexOf(selectedDate);
-  const hasPrev = currentIdx < orderDates.length - 1;
+  const hasPrev = currentIdx >= 0 && currentIdx < orderDates.length - 1;
   const hasNext = currentIdx > 0;
 
   // Daily totals across all periods
@@ -264,17 +268,20 @@ function AutoShiftPeriodsTab() {
             {showDateList && (
               <div className="mt-2 flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
                 {orderDates.map(d => (
-                  <button
+                  <div
                     key={d}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => { setSelectedDate(d); setExpandedIdx(null); setShowDateList(false); }}
-                    className={`text-xs px-2 py-1 rounded border transition-colors ${
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setSelectedDate(d); setExpandedIdx(null); setShowDateList(false); } }}
+                    className={`cursor-pointer text-xs px-2 py-1 rounded border transition-colors select-none ${
                       d === selectedDate
                         ? 'bg-primary text-white border-primary'
                         : 'bg-background hover:bg-muted border-border'
                     }`}
                   >
                     {d === todayStr ? 'اليوم' : d}
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
