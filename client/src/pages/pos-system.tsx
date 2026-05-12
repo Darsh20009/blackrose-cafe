@@ -985,6 +985,7 @@ export default function PosSystem() {
       setUsePoints(false);
       
       queryClient.invalidateQueries({ queryKey: ["/api/orders/live"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts/active"] });
     } catch (error) {
       console.error("Checkout error:", error);
       toast({ 

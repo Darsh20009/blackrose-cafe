@@ -1062,6 +1062,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
 
+      // === Update active cashier shift totals (non-blocking) ===
+      setImmediate(async () => {
+        try {
+          const shiftEmployeeId = orderData.employeeId || (req as any).employee?._id?.toString() || (req as any).employee?.id;
+          if (shiftEmployeeId && orderData.status !== 'awaiting_payment') {
+            const activeShift = await CashierShiftModel.findOne({ employeeId: shiftEmployeeId, status: 'open' });
+            if (activeShift) {
+              const amount = Number(orderData.totalAmount) || 0;
+              const method = ((orderData as any).paymentMethod || 'cash').toLowerCase();
+              activeShift.totalSales += amount;
+              activeShift.totalOrders += 1;
+              activeShift.netRevenue += amount;
+              const ordId = serializedOrder.id || serializedOrder._id?.toString();
+              if (ordId && !activeShift.orderIds.includes(ordId)) activeShift.orderIds.push(ordId);
+              if (method === 'cash') {
+                activeShift.totalCashSales += amount;
+                activeShift.paymentBreakdown.cash = (activeShift.paymentBreakdown.cash || 0) + amount;
+              } else if (method === 'qahwa-card' || method === 'loyalty-card') {
+                activeShift.totalDigitalSales += amount;
+                activeShift.paymentBreakdown.loyalty = (activeShift.paymentBreakdown.loyalty || 0) + amount;
+              } else {
+                activeShift.totalCardSales += amount;
+                activeShift.paymentBreakdown.card = (activeShift.paymentBreakdown.card || 0) + amount;
+              }
+              const type = ((orderData as any).orderType || 'takeaway').toLowerCase();
+              if (type === 'dine_in' || type === 'dine-in') activeShift.orderTypeBreakdown.dine_in = (activeShift.orderTypeBreakdown.dine_in || 0) + 1;
+              else if (type === 'car_pickup' || type === 'car-pickup') activeShift.orderTypeBreakdown.car_pickup = (activeShift.orderTypeBreakdown.car_pickup || 0) + 1;
+              else if (type === 'delivery') activeShift.orderTypeBreakdown.delivery = (activeShift.orderTypeBreakdown.delivery || 0) + 1;
+              else activeShift.orderTypeBreakdown.takeaway = (activeShift.orderTypeBreakdown.takeaway || 0) + 1;
+              await activeShift.save();
+            }
+          }
+        } catch (err) {
+          console.error('[SHIFT] Failed to update active shift on order creation:', err);
+        }
+      });
+
       // === 3-Layer Notifications: Customer + Admins ===
       setImmediate(async () => {
         try {
@@ -4238,15 +4275,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get active shift for current employee
   app.get("/api/shifts/active", requireAuth, async (req: AuthRequest, res) => {
     try {
-      const employeeId = (req.employee as any)?._id?.toString() || (req.employee as any)?.id;
-      if (!employeeId) return res.json(null);
+      const empMongo = (req.employee as any)?._id?.toString();
+      const empNano  = (req.employee as any)?.id;
+      if (!empMongo && !empNano) return res.json(null);
 
-      const activeShift = await CashierShiftModel.findOne({ 
-        employeeId, 
-        status: 'open' 
-      }).lean();
+      // Try both id formats
+      const activeShift = await CashierShiftModel.findOne({
+        employeeId: { $in: [empMongo, empNano].filter(Boolean) },
+        status: 'open',
+      }).lean() as any;
 
-      res.json(activeShift || null);
+      if (!activeShift) return res.json(null);
+
+      // ── Real-time recalculation from orders placed since shift opened ──────
+      try {
+        const { OrderModel: OM } = await import('@shared/schema');
+        const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+        const shiftOrders = await OM.find({
+          tenantId,
+          employeeId: { $in: [empMongo, empNano].filter(Boolean) },
+          createdAt: { $gte: new Date(activeShift.openedAt) },
+          status: { $nin: ['cancelled', 'awaiting_payment'] },
+        }).lean();
+
+        let totalOrders = shiftOrders.length;
+        let totalSales = 0, totalCashSales = 0, totalCardSales = 0, totalDigitalSales = 0;
+        const paymentBreakdown: Record<string, number> = { cash: 0, card: 0, loyalty: 0 };
+
+        for (const o of shiftOrders) {
+          const amt = Number((o as any).totalAmount) || 0;
+          totalSales += amt;
+          const m = ((o as any).paymentMethod || 'cash').toLowerCase();
+          if (m === 'cash') { totalCashSales += amt; paymentBreakdown.cash += amt; }
+          else if (m === 'qahwa-card' || m === 'loyalty-card') { totalDigitalSales += amt; paymentBreakdown.loyalty += amt; }
+          else { totalCardSales += amt; paymentBreakdown.card += amt; }
+        }
+
+        return res.json({
+          ...activeShift,
+          totalOrders,
+          totalSales: Math.round(totalSales * 100) / 100,
+          totalCashSales: Math.round(totalCashSales * 100) / 100,
+          totalCardSales: Math.round(totalCardSales * 100) / 100,
+          totalDigitalSales: Math.round(totalDigitalSales * 100) / 100,
+          paymentBreakdown,
+        });
+      } catch (_) {
+        // Fallback to stored values if recalculation fails
+        return res.json(activeShift);
+      }
     } catch (error) {
       console.error("[SHIFT] Error getting active shift:", error);
       res.status(500).json({ error: "فشل في جلب الوردية النشطة" });

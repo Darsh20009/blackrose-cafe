@@ -243,7 +243,7 @@ export function PosShiftBar() {
 
   const { data: activeShift } = useQuery<CashierShift | null>({
     queryKey: ['/api/shifts/active'],
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   });
 
   const { data: autoShift } = useQuery<AutoShift | null>({
