@@ -4632,36 +4632,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const shiftPeriods: Array<{start: number; end: number}> =
         (bizConfig as any)?.shiftPeriods || [{start: 6, end: 18}, {start: 18, end: 6}];
 
-      // Use configured timezone offset (default +3 for Saudi Arabia)
       const tzOffset: number = Number((bizConfig as any)?.timezoneOffsetHours ?? 3);
       const now = new Date();
 
       // Support optional ?date=YYYY-MM-DD for historical queries
       let targetDate: Date;
       if (req.query.date && typeof req.query.date === 'string') {
-        // Parse as local date in the configured timezone
         const [y, m, d] = req.query.date.split('-').map(Number);
-        // Create a UTC date that represents midnight in the local timezone
         targetDate = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0) - tzOffset * 3600000);
       } else {
         targetDate = now;
       }
 
-      const isHistorical = req.query.date && req.query.date !== new Date(now.getTime() + tzOffset * 3600000).toISOString().slice(0, 10);
+      const isHistorical = !!(req.query.date && req.query.date !== new Date(now.getTime() + tzOffset * 3600000).toISOString().slice(0, 10));
       const dayStartUTC = getLocalStartOfDay(targetDate, tzOffset);
-      const results = [];
+      const prevDayStartUTC = new Date(dayStartUTC.getTime() - 24 * 3600000);
+      const results: any[] = [];
+
+      // Build all candidate windows for the requested date.
+      // For overnight periods (end < start) we check TWO instances:
+      //   - "prev instance": started previous calendar day, ends this calendar day (early morning)
+      //   - "cur instance":  starts this calendar day (evening), ends next calendar day
+      // This ensures orders made between midnight and the first shift start are captured.
+      type Window = { windowStartUTC: Date; windowEndUTC: Date; label: string };
+      const windows: Window[] = [];
 
       for (const period of shiftPeriods) {
-        let windowStartUTC = new Date(dayStartUTC.getTime() + period.start * 3600000);
-        let windowEndUTC: Date;
-        if (period.end > period.start) {
-          windowEndUTC = new Date(dayStartUTC.getTime() + period.end * 3600000);
-        } else {
-          windowEndUTC = new Date(dayStartUTC.getTime() + (period.end + 24) * 3600000);
-        }
+        const isOvernight = period.end <= period.start;
 
-        // For today: skip future periods. For historical dates: include all periods.
+        if (!isOvernight) {
+          // Normal same-day period (e.g. 06:00–18:00)
+          windows.push({
+            windowStartUTC: new Date(dayStartUTC.getTime() + period.start * 3600000),
+            windowEndUTC:   new Date(dayStartUTC.getTime() + period.end   * 3600000),
+            label: `${String(period.start).padStart(2,'0')}:00 — ${String(period.end).padStart(2,'0')}:00`,
+          });
+        } else {
+          // Overnight period (e.g. 18:00–06:00).
+          // Instance that started YESTERDAY and ends TODAY (early morning):
+          const prevStart = new Date(prevDayStartUTC.getTime() + period.start * 3600000);
+          const prevEnd   = new Date(dayStartUTC.getTime()     + period.end   * 3600000);
+          windows.push({ windowStartUTC: prevStart, windowEndUTC: prevEnd, label: `${String(period.start).padStart(2,'0')}:00 — ${String(period.end).padStart(2,'0')}:00` });
+
+          // Instance that STARTS TODAY and ends tomorrow:
+          const curStart = new Date(dayStartUTC.getTime()     + period.start * 3600000);
+          const curEnd   = new Date(dayStartUTC.getTime()     + (period.end + 24) * 3600000);
+          windows.push({ windowStartUTC: curStart, windowEndUTC: curEnd, label: `${String(period.start).padStart(2,'0')}:00 — ${String(period.end).padStart(2,'0')}:00` });
+        }
+      }
+
+      for (const { windowStartUTC, windowEndUTC, label } of windows) {
+        // For today: skip periods that haven't started yet
         if (!isHistorical && windowStartUTC > now) continue;
+        // Skip windows entirely before the requested calendar day (to avoid double-counting previous days)
+        if (windowEndUTC <= prevDayStartUTC) continue;
 
         const effectiveEnd = isHistorical
           ? windowEndUTC
@@ -4673,7 +4697,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: { $nin: ['cancelled', 'refunded'] },
         }).select('totalAmount paymentMethod items').lean();
 
-        if (isHistorical && orders.length === 0) continue; // skip empty historical periods
+        if (orders.length === 0) continue; // always skip empty windows
 
         let totalSales = 0, totalCash = 0, totalCard = 0;
         for (const o of orders) {
@@ -4687,7 +4711,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const productsByCategory = await aggregateShiftProducts(tenantId, orders);
 
         results.push({
-          periodLabel: `${period.start}:00 — ${period.end}:00`,
+          periodLabel: label,
           windowStart: windowStartUTC.toISOString(),
           windowEnd: windowEndUTC.toISOString(),
           isOngoing: !isHistorical && windowEndUTC > now,
@@ -4699,8 +4723,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Sort by window start time ascending
+      results.sort((a, b) => new Date(a.windowStart).getTime() - new Date(b.windowStart).getTime());
+
       res.json(results);
     } catch (error) {
+      console.error('[SHIFT] auto-periods error:', error);
       res.status(500).json({ error: 'فشل في جلب الورديات التلقائية' });
     }
   });
