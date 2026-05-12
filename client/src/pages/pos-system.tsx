@@ -2371,16 +2371,24 @@ export default function PosSystem() {
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                {lastOrder.items.map((item: any, idx: number) => (
-                  <div key={idx} className="flex justify-between items-center text-sm" data-testid={`receipt-item-${idx}`}>
-                    <div className="flex-1">
-                      <span className="font-medium">{item.coffeeItem.nameAr}</span>
-                      <span className="text-muted-foreground mr-1">x{item.quantity}</span>
+              <div className="space-y-2">
+                {lastOrder.items.map((item: any, idx: number) => {
+                  const sz = item.selectedSize || item.customization?.selectedSize;
+                  const addons: string[] = (item.customization?.selectedItemAddons || []).map((a: any) => a.nameAr);
+                  return (
+                    <div key={idx} className="flex justify-between items-start text-sm gap-2" data-testid={`receipt-item-${idx}`}>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1">
+                          <span className="font-medium">{item.coffeeItem.nameAr}</span>
+                          <span className="text-muted-foreground">x{item.quantity}</span>
+                        </div>
+                        {sz && <p className="text-xs text-blue-600 mt-0.5">الحجم: {sz}</p>}
+                        {addons.length > 0 && <p className="text-xs text-muted-foreground mt-0.5">+ {addons.join('، ')}</p>}
+                      </div>
+                      <span className="font-bold shrink-0">{(getPosItemUnitPrice(item) * item.quantity).toFixed(2)} {t('pos.currency')}</span>
                     </div>
-                    <span className="font-bold">{(getPosItemUnitPrice(item) * item.quantity).toFixed(2)} {t('pos.currency')}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <Separator />

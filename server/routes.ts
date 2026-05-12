@@ -4291,12 +4291,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const { OrderModel: OM } = await import('@shared/schema');
         const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
-        const shiftOrders = await OM.find({
+        const empBranchId = (req.employee as any)?.branchId;
+        // Build a flexible query — match by employeeId (any format) OR channel=pos in the same branch
+        const shiftQuery: any = {
           tenantId,
-          employeeId: { $in: [empMongo, empNano].filter(Boolean) },
           createdAt: { $gte: new Date(activeShift.openedAt) },
           status: { $nin: ['cancelled', 'awaiting_payment'] },
-        }).lean();
+        };
+        if (empBranchId) {
+          // Only count POS orders from this branch during the shift window
+          shiftQuery.branchId = empBranchId;
+          shiftQuery.channel = 'pos';
+        } else {
+          // Fallback: filter by employeeId in any format
+          const empIds = [empMongo, empNano].filter(Boolean);
+          if (empIds.length) shiftQuery.employeeId = { $in: empIds };
+        }
+        const shiftOrders = await OM.find(shiftQuery).lean();
 
         let totalOrders = shiftOrders.length;
         let totalSales = 0, totalCashSales = 0, totalCardSales = 0, totalDigitalSales = 0;
