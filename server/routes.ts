@@ -4624,7 +4624,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ─── Auto-Shift Periods: all periods for today with order summaries ──────────
+  // ─── Auto-Shift Periods: all periods for a given date (or today) ─────────────
   app.get("/api/shifts/auto-periods", requireAuth, async (req: AuthRequest, res) => {
     try {
       const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
@@ -4635,7 +4635,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use configured timezone offset (default +3 for Saudi Arabia)
       const tzOffset: number = Number((bizConfig as any)?.timezoneOffsetHours ?? 3);
       const now = new Date();
-      const dayStartUTC = getLocalStartOfDay(now, tzOffset);
+
+      // Support optional ?date=YYYY-MM-DD for historical queries
+      let targetDate: Date;
+      if (req.query.date && typeof req.query.date === 'string') {
+        // Parse as local date in the configured timezone
+        const [y, m, d] = req.query.date.split('-').map(Number);
+        // Create a UTC date that represents midnight in the local timezone
+        targetDate = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0) - tzOffset * 3600000);
+      } else {
+        targetDate = now;
+      }
+
+      const isHistorical = req.query.date && req.query.date !== new Date(now.getTime() + tzOffset * 3600000).toISOString().slice(0, 10);
+      const dayStartUTC = getLocalStartOfDay(targetDate, tzOffset);
       const results = [];
 
       for (const period of shiftPeriods) {
@@ -4646,14 +4659,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else {
           windowEndUTC = new Date(dayStartUTC.getTime() + (period.end + 24) * 3600000);
         }
-        if (windowStartUTC > now) continue; // hasn't started yet
 
-        const effectiveEnd = new Date(Math.min(windowEndUTC.getTime(), now.getTime()));
+        // For today: skip future periods. For historical dates: include all periods.
+        if (!isHistorical && windowStartUTC > now) continue;
+
+        const effectiveEnd = isHistorical
+          ? windowEndUTC
+          : new Date(Math.min(windowEndUTC.getTime(), now.getTime()));
+
         const orders = await OrderModel.find({
           tenantId,
           createdAt: { $gte: windowStartUTC, $lte: effectiveEnd },
           status: { $nin: ['cancelled', 'refunded'] },
         }).select('totalAmount paymentMethod items').lean();
+
+        if (isHistorical && orders.length === 0) continue; // skip empty historical periods
 
         let totalSales = 0, totalCash = 0, totalCard = 0;
         for (const o of orders) {
@@ -4670,7 +4690,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           periodLabel: `${period.start}:00 — ${period.end}:00`,
           windowStart: windowStartUTC.toISOString(),
           windowEnd: windowEndUTC.toISOString(),
-          isOngoing: windowEndUTC > now,
+          isOngoing: !isHistorical && windowEndUTC > now,
           totalOrders: orders.length,
           totalSales,
           totalCash,
@@ -4682,6 +4702,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(results);
     } catch (error) {
       res.status(500).json({ error: 'فشل في جلب الورديات التلقائية' });
+    }
+  });
+
+  // ─── Dates with orders (for historical navigation) ───────────────────────────
+  app.get("/api/shifts/order-dates", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const bizConfig = await BusinessConfigModel.findOne({ tenantId }).lean();
+      const tzOffset: number = Number((bizConfig as any)?.timezoneOffsetHours ?? 3);
+
+      // Get distinct dates from orders (last 365 days)
+      const since = new Date(Date.now() - 365 * 24 * 3600000);
+      const orders = await OrderModel.find({
+        tenantId,
+        createdAt: { $gte: since },
+        status: { $nin: ['cancelled', 'refunded'] },
+      }).select('createdAt').lean();
+
+      // Convert each order's createdAt to a local date string YYYY-MM-DD
+      const dateSet = new Set<string>();
+      for (const o of orders) {
+        const localDate = new Date((o as any).createdAt.getTime() + tzOffset * 3600000);
+        const dateStr = localDate.toISOString().slice(0, 10);
+        dateSet.add(dateStr);
+      }
+
+      // Return sorted desc
+      const dates = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
+      res.json(dates);
+    } catch (error) {
+      res.status(500).json({ error: 'فشل في جلب التواريخ' });
     }
   });
 

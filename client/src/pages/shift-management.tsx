@@ -153,12 +153,41 @@ function buildShiftPrintHtml(p: any, businessName = 'BLACK ROSE CAFE') {
   </body></html>`;
 }
 
+function getTodayLocalStr() {
+  // returns YYYY-MM-DD for client's local date
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function formatDateAr(dateStr: string) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+
 function AutoShiftPeriodsTab() {
-  const { data: periods = [], isLoading } = useQuery<any[]>({
-    queryKey: ['/api/shifts/auto-periods'],
-    refetchInterval: 60000,
-  });
+  const todayStr = getTodayLocalStr();
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const [showDateList, setShowDateList] = useState(false);
+
+  const isToday = selectedDate === todayStr;
+
+  const { data: orderDates = [], isLoading: datesLoading } = useQuery<string[]>({
+    queryKey: ['/api/shifts/order-dates'],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: periods = [], isLoading: periodsLoading } = useQuery<any[]>({
+    queryKey: ['/api/shifts/auto-periods', selectedDate],
+    queryFn: async () => {
+      const params = isToday ? '' : `?date=${selectedDate}`;
+      const res = await fetch(`/api/shifts/auto-periods${params}`, { credentials: 'include' });
+      return res.json();
+    },
+    refetchInterval: isToday ? 60000 : false,
+  });
+
+  const isLoading = datesLoading || periodsLoading;
 
   const printPeriod = (p: any) => {
     const win = window.open('', '_blank', 'width=400,height=700');
@@ -168,18 +197,118 @@ function AutoShiftPeriodsTab() {
     setTimeout(() => win.print(), 500);
   };
 
-  if (isLoading) {
-    return <div className="flex items-center justify-center py-16"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
-  }
+  const goToPrevDate = () => {
+    const idx = orderDates.indexOf(selectedDate);
+    if (idx < orderDates.length - 1) {
+      setSelectedDate(orderDates[idx + 1]);
+      setExpandedIdx(null);
+    }
+  };
+
+  const goToNextDate = () => {
+    const idx = orderDates.indexOf(selectedDate);
+    if (idx > 0) {
+      setSelectedDate(orderDates[idx - 1]);
+      setExpandedIdx(null);
+    }
+  };
+
+  const currentIdx = orderDates.indexOf(selectedDate);
+  const hasPrev = currentIdx < orderDates.length - 1;
+  const hasNext = currentIdx > 0;
+
+  // Daily totals across all periods
+  const dayTotal = periods.reduce((s, p) => s + (p.totalSales || 0), 0);
+  const dayOrders = periods.reduce((s, p) => s + (p.totalOrders || 0), 0);
+  const dayCash = periods.reduce((s, p) => s + (p.totalCash || 0), 0);
+  const dayCard = periods.reduce((s, p) => s + (p.totalCard || 0), 0);
 
   return (
     <div className="space-y-3">
-      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm text-blue-800 dark:text-blue-300 flex items-start gap-2">
-        <Zap className="w-4 h-4 shrink-0 mt-0.5" />
-        <p>الورديات التلقائية تُحسب من الطلبات المُسجَّلة في كل فترة. اضغط على الوردية لعرض التفاصيل والمنتجات.</p>
-      </div>
+      {/* ── Date Navigator ── */}
+      <Card>
+        <CardContent className="py-3 px-4">
+          <div className="flex items-center justify-between gap-3">
+            <Button size="sm" variant="outline" className="h-8 px-2" onClick={goToPrevDate} disabled={!hasPrev}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
 
-      {periods.length === 0 ? (
+            <div className="flex-1 text-center">
+              <div className="flex items-center justify-center gap-2">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
+                <span className="font-semibold text-sm">
+                  {isToday ? 'اليوم' : formatDateAr(selectedDate)}
+                </span>
+                {isToday && <Badge className="bg-primary text-white text-[10px] px-1.5 py-0 animate-pulse">مباشر</Badge>}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">{selectedDate}</div>
+            </div>
+
+            <Button size="sm" variant="outline" className="h-8 px-2" onClick={goToNextDate} disabled={!hasNext}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+          </div>
+
+          {/* Date list dropdown */}
+          <div className="mt-2 border-t pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs text-muted-foreground h-6 gap-1"
+              onClick={() => setShowDateList(v => !v)}
+            >
+              <Calendar className="w-3 h-3" />
+              كل الأيام التي بها طلبات ({orderDates.length} يوم)
+              <ChevronRight className={`w-3 h-3 transition-transform ${showDateList ? 'rotate-90' : ''}`} />
+            </Button>
+            {showDateList && (
+              <div className="mt-2 flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                {orderDates.map(d => (
+                  <button
+                    key={d}
+                    onClick={() => { setSelectedDate(d); setExpandedIdx(null); setShowDateList(false); }}
+                    className={`text-xs px-2 py-1 rounded border transition-colors ${
+                      d === selectedDate
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-background hover:bg-muted border-border'
+                    }`}
+                  >
+                    {d === todayStr ? 'اليوم' : d}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Daily summary bar ── */}
+      {dayOrders > 0 && (
+        <div className="grid grid-cols-4 gap-2 text-sm">
+          <div className="bg-muted/50 rounded-lg p-2 text-center">
+            <div className="text-base font-bold">{dayOrders}</div>
+            <div className="text-[10px] text-muted-foreground">إجمالي الطلبات</div>
+          </div>
+          <div className="bg-primary/5 rounded-lg p-2 text-center">
+            <div className="text-base font-bold text-primary">{dayTotal.toFixed(0)}</div>
+            <div className="text-[10px] text-muted-foreground">إجمالي ر.س</div>
+          </div>
+          <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-2 text-center">
+            <div className="text-base font-bold text-green-700">{dayCash.toFixed(0)}</div>
+            <div className="text-[10px] text-muted-foreground">نقدي</div>
+          </div>
+          <div className="bg-purple-50 dark:bg-purple-950/20 rounded-lg p-2 text-center">
+            <div className="text-base font-bold text-purple-700">{dayCard.toFixed(0)}</div>
+            <div className="text-[10px] text-muted-foreground">شبكة</div>
+          </div>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+        </div>
+      ) : periods.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center py-12">
             <Zap className="w-12 h-12 text-muted-foreground mb-3" />
