@@ -922,13 +922,13 @@ export function buildEmployeeReceiptPreviewHtml(data: TaxInvoiceData): string {
     const addons = getItemAddons(item).map((a: any) => a.nameAr).join('، ');
     const sz2 = getItemSelectedSize(item);
     return `
-      <div style="padding:12px 0;${idx > 0 ? 'border-top:1px dashed #ccc;' : ''}">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-          <div style="font-size:20px;font-weight:800;line-height:1.4;flex:1;">${item.coffeeItem.nameAr}</div>
+      <div style="padding:16px 0 12px 0;${idx > 0 ? 'border-top:2px dashed #bbb;margin-top:4px;' : ''}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">
+          <div style="font-size:20px;font-weight:800;line-height:1.6;flex:1;">${item.coffeeItem.nameAr}</div>
           <div style="font-size:28px;font-weight:900;background:#111;color:#fff;padding:4px 14px;border-radius:8px;flex-shrink:0;">×${item.quantity}</div>
         </div>
-        ${sz2 ? `<div style="font-size:15px;color:#2563eb;margin-top:5px;padding-right:4px;">▸ الحجم: ${sz2}</div>` : ''}
-        ${addons ? `<div style="font-size:15px;color:#555;margin-top:4px;padding-right:4px;">▸ إضافات: ${addons}</div>` : ''}
+        ${sz2 ? `<div style="font-size:16px;color:#2563eb;margin-top:8px;margin-bottom:6px;padding-right:6px;line-height:1.8;">▸ الحجم: ${sz2}</div>` : ''}
+        ${addons ? `<div style="font-size:16px;color:#444;margin-top:8px;padding-right:6px;line-height:1.8;">▸ إضافات: ${addons}</div>` : ''}
       </div>`;
   }).join('');
 
@@ -941,8 +941,8 @@ body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e
 .tape{height:14px;background:repeating-linear-gradient(90deg,#fff 0,#fff 12px,#e8e6e0 12px,#e8e6e0 24px);}
 .body{padding:18px 16px;}
 .c{text-align:center;}
-.gap{height:8px;}
-.row{display:flex;justify-content:space-between;padding:5px 0;font-size:15px;border-bottom:1px solid #f0f0f0;}
+.gap{height:10px;}
+.row{display:flex;justify-content:space-between;padding:10px 0;font-size:16px;border-bottom:1px solid #eee;line-height:1.8;}
 @media print{
   @page{size:80mm auto;margin:0;}
   *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;border:0!important;}
