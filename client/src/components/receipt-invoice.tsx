@@ -157,6 +157,20 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
     return methods[method] || method;
   };
 
+  const getOrderTypeLabel = () => {
+    const raw = (safeOrder as any).deliveryType || (safeOrder as any).orderType || '';
+    if (raw === 'dine_in' || raw === 'dine-in') {
+      return safeOrder.tableNumber ? `محلي — طاولة رقم ${safeOrder.tableNumber}` : 'محلي';
+    }
+    if (raw === 'takeaway' || raw === 'pickup') return 'سفري';
+    if (raw === 'car_pickup' || raw === 'car-pickup') return 'استلام بالسيارة';
+    if (raw === 'delivery') return 'توصيل';
+    return '';
+  };
+  const orderTypeLabel = getOrderTypeLabel();
+  const isDineIn = (safeOrder as any).deliveryType === 'dine_in' || (safeOrder as any).deliveryType === 'dine-in' ||
+    (safeOrder as any).orderType === 'dine_in' || (safeOrder as any).orderType === 'dine-in';
+
   // Early return if no valid order
   if (!order || !order.orderNumber) {
     return null;
@@ -183,6 +197,17 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
           <p className="text-[20px] font-bold uppercase tracking-tight mt-1">Tax Invoice - فاتورة ضريبية</p>
         </div>
 
+        {/* Order type badge */}
+        {orderTypeLabel && (
+          <div className="text-center mb-2">
+            <span className={`inline-block text-white text-[16px] font-bold px-4 py-1 rounded-full ${
+              (safeOrder as any).deliveryType === 'car_pickup' || (safeOrder as any).orderType === 'car_pickup' || (safeOrder as any).deliveryType === 'car-pickup' ? 'bg-red-600' :
+              (safeOrder as any).deliveryType === 'delivery' || (safeOrder as any).orderType === 'delivery' ? 'bg-blue-600' :
+              isDineIn ? 'bg-purple-600' : 'bg-gray-800'
+            }`}>{orderTypeLabel}</span>
+          </div>
+        )}
+
         {/* Order Info */}
         <div className="grid grid-cols-2 gap-2 mb-3 text-[20px]">
           <div className="space-y-2">
@@ -200,7 +225,7 @@ export function ReceiptInvoice({ order, variant = "button" }: ReceiptInvoiceProp
               <span>:الوقت</span>
               <span>{new Date(order.createdAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
-            {order.tableNumber && (
+            {order.tableNumber && !isDineIn && (
               <div className="flex justify-between flex-row-reverse gap-2">
                 <span>:الطاولة</span>
                 <span className="font-bold">#{order.tableNumber}</span>

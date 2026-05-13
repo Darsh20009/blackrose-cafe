@@ -335,6 +335,7 @@ export default function KitchenDisplay() {
     delayedCount,
     scheduledOrders,
     needsPrepNowOrders,
+    preWarningOrders,
   } = useMemo(() => {
     void tick;
     const filteredOrders = filterByDeliveryType(orders);
@@ -354,9 +355,26 @@ export default function KitchenDisplay() {
         new Date(o.preparationHoldUntil).getTime() <= now
       );
 
+    const isPreWarning = (o: Order) =>
+      !!(
+        o.scheduledPickupTime &&
+        o.preparationHoldUntil &&
+        new Date(o.preparationHoldUntil).getTime() > now &&
+        new Date(o.preparationHoldUntil).getTime() - now <= 10 * 60 * 1000
+      );
+
     const scheduled = filteredOrders.filter(
       (o) =>
         isOnHold(o) &&
+        !isPreWarning(o) &&
+        (o.status === "pending" ||
+          o.status === "payment_confirmed" ||
+          o.status === "confirmed")
+    );
+
+    const preWarning = filteredOrders.filter(
+      (o) =>
+        isPreWarning(o) &&
         (o.status === "pending" ||
           o.status === "payment_confirmed" ||
           o.status === "confirmed")
@@ -397,6 +415,7 @@ export default function KitchenDisplay() {
       delayedCount: delayed.length,
       scheduledOrders: scheduled,
       needsPrepNowOrders: needsPrepNow,
+      preWarningOrders: preWarning,
     };
   }, [orders, filterByDeliveryType, tick]);
 
@@ -413,6 +432,27 @@ export default function KitchenDisplay() {
       description: `${newAlerts.length} ${tc("طلب مجدول يحتاج للتحضير الآن", "scheduled order(s) need preparation now")}`,
     });
   }, [needsPrepNowOrders, soundEnabled, tc, toast]);
+
+  const alertedPreWarningIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (preWarningOrders.length === 0) return;
+    const newWarnings = preWarningOrders.filter(
+      (o) => !alertedPreWarningIds.current.has(o.id)
+    );
+    if (newWarnings.length === 0) return;
+    newWarnings.forEach((o) => alertedPreWarningIds.current.add(o.id));
+    if (soundEnabled) playNotificationSound("cashierOrder", 0.7);
+    newWarnings.forEach((o) => {
+      const minsLeft = Math.ceil((new Date(o.preparationHoldUntil!).getTime() - Date.now()) / 60000);
+      toast({
+        title: tc(`⏰ تنبيه مسبق — الطلب #${o.orderNumber}`, `⏰ Pre-Alert — Order #${o.orderNumber}`),
+        description: tc(
+          `باقي ${minsLeft} دقيقة للموعد — ابدأ التحضير قريباً!`,
+          `${minsLeft} min to scheduled time — start preparing soon!`
+        ),
+      });
+    });
+  }, [preWarningOrders, soundEnabled, tc, toast]);
 
   const getFilteredOrders = (): Order[] => {
     switch (activeTab) {
@@ -480,6 +520,12 @@ export default function KitchenDisplay() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {preWarningOrders.length > 0 && (
+                <Badge className="bg-yellow-500 text-black animate-pulse font-bold">
+                  <AlertTriangle className="h-3 w-3 ml-1" />
+                  {tc(`⏰ ${preWarningOrders.length} موعد خلال 10 دقائق!`, `⏰ ${preWarningOrders.length} appt. in 10 min!`)}
+                </Badge>
+              )}
               {needsPrepNowOrders.length > 0 && (
                 <Badge className="bg-orange-500 text-white animate-pulse">
                   <AlertTriangle className="h-3 w-3 ml-1" />
@@ -610,6 +656,34 @@ export default function KitchenDisplay() {
           </div>
         </div>
       </header>
+
+      {/* ─── 10-minute pre-warning banner ─────────────────────────────────── */}
+      {preWarningOrders.length > 0 && (
+        <div className="bg-yellow-400 border-b-2 border-yellow-600 px-4 py-2" dir="rtl">
+          <div className="container mx-auto flex items-center gap-3 flex-wrap">
+            <AlertTriangle className="h-5 w-5 text-yellow-900 flex-shrink-0 animate-pulse" />
+            <span className="font-bold text-yellow-900 text-sm">
+              {tc("⏰ تنبيه مسبق — الطلبات التالية موعدها خلال 10 دقائق:", "⏰ Pre-Alert — following orders due in 10 minutes:")}
+            </span>
+            <div className="flex gap-2 flex-wrap">
+              {preWarningOrders.map((o) => {
+                const minsLeft = Math.ceil((new Date(o.preparationHoldUntil!).getTime() - Date.now()) / 60000);
+                return (
+                  <span
+                    key={o.id}
+                    className="bg-yellow-900 text-yellow-100 text-xs font-black px-3 py-1 rounded-full"
+                  >
+                    #{o.orderNumber} ({minsLeft}{tc("د", "m")})
+                  </span>
+                );
+              })}
+            </div>
+            <span className="text-yellow-900 text-xs font-semibold mr-auto">
+              {tc("ابدأ التحضير الآن!", "Start preparing now!")}
+            </span>
+          </div>
+        </div>
+      )}
 
       <main className="container mx-auto px-4 py-4">
         <Tabs

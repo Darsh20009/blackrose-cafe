@@ -501,6 +501,40 @@ export default function PosSystem() {
     );
   }, [liveOrders]);
 
+  // ── 10-minute pre-warning for scheduled orders (car pickup / pre-paid table) ──
+  const { data: kitchenOrdersForAlert = [] } = useQuery<any[]>({
+    queryKey: ["/api/orders/kitchen"],
+    refetchInterval: 30000,
+    staleTime: 15000,
+    select: (orders: any[]) =>
+      (orders || []).filter((o: any) => o.scheduledPickupTime && o.preparationHoldUntil),
+  });
+
+  const alertedPosPreWarningIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!kitchenOrdersForAlert.length) return;
+    const now = Date.now();
+    const newWarnings = kitchenOrdersForAlert.filter((o: any) => {
+      if (!o.preparationHoldUntil) return false;
+      const holdTime = new Date(o.preparationHoldUntil).getTime();
+      return (
+        holdTime > now &&
+        holdTime - now <= 10 * 60 * 1000 &&
+        !alertedPosPreWarningIds.current.has(o.id || o._id)
+      );
+    });
+    if (!newWarnings.length) return;
+    newWarnings.forEach((o: any) => alertedPosPreWarningIds.current.add(o.id || o._id));
+    newWarnings.forEach((o: any) => {
+      const minsLeft = Math.ceil((new Date(o.preparationHoldUntil).getTime() - now) / 60000);
+      toast({
+        title: `⏰ تنبيه موعد — طلب #${o.orderNumber}`,
+        description: `باقي ${minsLeft} دقيقة للموعد — ابدأ التحضير الآن!`,
+        variant: "destructive",
+      });
+    });
+  }, [kitchenOrdersForAlert, toast]);
+
   const getItemDisplayName = useCallback((item: any) => {
     if (i18n.language === 'en') return item.nameEn || item.nameAr || '';
     return item.nameAr || item.nameEn || '';

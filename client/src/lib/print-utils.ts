@@ -906,21 +906,29 @@ export function buildEmployeeReceiptPreviewHtml(data: TaxInvoiceData): string {
 
   const orderTypeStr = (data.orderTypeName || (data.orderType as string) || '');
   const orderTypeLabel =
-    orderTypeStr === 'dine_in' || orderTypeStr === 'dine-in' ? 'طاولة' :
-    orderTypeStr === 'takeaway' || orderTypeStr === 'pickup' ? 'سفري' :
-    orderTypeStr === 'delivery' ? 'توصيل' :
-    orderTypeStr === 'car_pickup' || orderTypeStr === 'car-pickup' ? 'سيارة' :
-    orderTypeStr;
+    orderTypeStr === 'dine_in' || orderTypeStr === 'dine-in'
+      ? (data.tableNumber ? `محلي — طاولة رقم ${data.tableNumber}` : 'محلي')
+      : orderTypeStr === 'takeaway' || orderTypeStr === 'pickup' ? 'سفري'
+      : orderTypeStr === 'delivery' ? 'توصيل'
+      : orderTypeStr === 'car_pickup' || orderTypeStr === 'car-pickup' ? 'استلام بالسيارة'
+      : orderTypeStr;
 
-  const itemsHtml = data.items.map(item => {
+  const orderTypeBg =
+    orderTypeStr === 'car_pickup' || orderTypeStr === 'car-pickup' ? '#dc2626' :
+    orderTypeStr === 'delivery' ? '#2563eb' :
+    orderTypeStr === 'dine_in' || orderTypeStr === 'dine-in' ? '#7c3aed' : '#111';
+
+  const itemsHtml = data.items.map((item, idx) => {
     const addons = getItemAddons(item).map((a: any) => a.nameAr).join('، ');
     const sz2 = getItemSelectedSize(item);
-    const sizeLabel = sz2 ? `<div style="font-size:15px;color:#555;margin-top:2px;">الحجم: ${sz2}</div>` : '';
     return `
-      <div style="padding:8px 0;">
-        <div style="font-size:22px;font-weight:800;line-height:1.4;">${item.quantity} × ${item.coffeeItem.nameAr}</div>
-        ${sizeLabel}
-        ${addons ? `<div style="font-size:16px;color:#333;margin-top:3px;">+ ${addons}</div>` : ''}
+      <div style="padding:12px 0;${idx > 0 ? 'border-top:1px dashed #ccc;' : ''}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <div style="font-size:20px;font-weight:800;line-height:1.4;flex:1;">${item.coffeeItem.nameAr}</div>
+          <div style="font-size:28px;font-weight:900;background:#111;color:#fff;padding:4px 14px;border-radius:8px;flex-shrink:0;">×${item.quantity}</div>
+        </div>
+        ${sz2 ? `<div style="font-size:15px;color:#2563eb;margin-top:5px;padding-right:4px;">▸ الحجم: ${sz2}</div>` : ''}
+        ${addons ? `<div style="font-size:15px;color:#555;margin-top:4px;padding-right:4px;">▸ إضافات: ${addons}</div>` : ''}
       </div>`;
   }).join('');
 
@@ -933,7 +941,8 @@ body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e
 .tape{height:14px;background:repeating-linear-gradient(90deg,#fff 0,#fff 12px,#e8e6e0 12px,#e8e6e0 24px);}
 .body{padding:18px 16px;}
 .c{text-align:center;}
-.gap{height:10px;}
+.gap{height:8px;}
+.row{display:flex;justify-content:space-between;padding:5px 0;font-size:15px;border-bottom:1px solid #f0f0f0;}
 @media print{
   @page{size:80mm auto;margin:0;}
   *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;border:0!important;}
@@ -946,11 +955,28 @@ body{font-family:'Cairo',Tahoma,Arial,sans-serif;direction:rtl;background:#e8e6e
 </style></head><body><div class="paper">
 <div class="tape"></div>
 <div class="body">
-  <div class="c" style="font-size:24px;font-weight:900;">نسخة الموظف</div>
+
+  <!-- Header -->
+  <div class="c" style="font-size:20px;font-weight:900;padding-bottom:8px;border-bottom:3px double #000;">📋 نسخة الموظف / المطبخ</div>
   <div class="gap"></div>
-  <div class="c" style="font-size:48px;font-weight:900;letter-spacing:4px;">#${orderNumDisplay}</div>
-  <div class="gap"></div>
+  <div class="c" style="font-size:54px;font-weight:900;letter-spacing:4px;margin:6px 0;">#${orderNumDisplay}</div>
+
+  <!-- Order type badge -->
+  ${orderTypeLabel ? `<div class="c" style="margin:6px 0;"><span style="display:inline-block;background:${orderTypeBg};color:#fff;font-size:16px;font-weight:700;padding:5px 18px;border-radius:20px;">${orderTypeLabel}</span></div>` : ''}
+
+  <div style="border-top:2px solid #000;margin:10px 0;"></div>
+
+  <!-- Info rows -->
+  <div class="row"><span style="color:#666;">الوقت:</span><span style="font-weight:700;">${fmtTime} — ${fmtDate}</span></div>
+  ${data.employeeName ? `<div class="row"><span style="color:#666;">الكاشير:</span><span style="font-weight:700;">${data.employeeName}</span></div>` : ''}
+  ${data.tableNumber && !(orderTypeStr === 'dine_in' || orderTypeStr === 'dine-in') ? `<div class="row"><span style="color:#666;">الطاولة:</span><span style="font-weight:900;font-size:18px;">رقم ${data.tableNumber}</span></div>` : ''}
+
+  <div style="border-top:2px solid #000;margin:10px 0;"></div>
+
+  <!-- Items -->
+  <div style="font-size:15px;font-weight:700;color:#666;margin-bottom:4px;">الأصناف (${data.items.length} صنف):</div>
   ${itemsHtml}
+
 </div>
 <div class="tape"></div>
 </div></body></html>`;
