@@ -139,6 +139,7 @@ const HardwareManagement = lazy(() => import("@/pages/hardware-management"));
 const B2BMarketplace = lazy(() => import("@/pages/b2b-marketplace"));
 const PartnerProgram = lazy(() => import("@/pages/partner-program"));
 const DriveThroughPage = lazy(() => import("@/pages/drive-through"));
+const TahalyliPage = lazy(() => import("@/pages/tahalyli"));
 import blackroseLogo from "@assets/blackrose-logo.png";
 import blackroseLogoStaff from "@assets/blackrose-logo.png";
 
@@ -317,6 +318,7 @@ function AppRouter() {
       <Route path="/manager/unified-reports"><AuthGuard userType="manager"><UnifiedReports /></AuthGuard></Route>
       <Route path="/manager/bi-analytics"><AuthGuard userType="manager"><BIAnalytics /></AuthGuard></Route>
       <Route path="/manager/ai"><AuthGuard userType="manager"><ManagerAI /></AuthGuard></Route>
+      <Route path="/manager/tahalyli"><AuthGuard userType="manager"><TahalyliPage /></AuthGuard></Route>
       {/* Owner protected routes */}
       <Route path="/owner/dashboard"><AuthGuard userType="manager" allowedRoles={["owner", "admin"]}><OwnerDashboard /></AuthGuard></Route>
       <Route path="/executive"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><ExecutiveDashboard /></AuthGuard></Route>

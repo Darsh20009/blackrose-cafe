@@ -103,6 +103,7 @@ export default function EmployeeAttendance() {
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const [distanceError, setDistanceError] = useState<DistanceError | null>(null);
   const [now, setNow] = useState(new Date());
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -186,14 +187,26 @@ export default function EmployeeAttendance() {
   useEffect(() => { getLocation(); }, [getLocation]);
 
   const startCamera = async () => {
+    setCameraError(null);
     setIsCapturing(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("no-support");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
       streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-    } catch (_) {
-      toast({ title: tc("خطأ", "Error"), description: tc("لا يمكن فتح الكاميرا", "Cannot access camera"), variant: "destructive" });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
+      }
+    } catch (err: any) {
       setIsCapturing(false);
+      const msg = err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError"
+        ? tc("تم رفض إذن الكاميرا — اسمح للمتصفح باستخدام الكاميرا من الإعدادات", "Camera permission denied — allow it in browser settings")
+        : err?.name === "NotFoundError"
+          ? tc("لا توجد كاميرا على هذا الجهاز", "No camera found on this device")
+          : tc("تعذّر فتح الكاميرا — يمكنك التحضير بدون صورة", "Camera unavailable — you can still check in without a photo");
+      setCameraError(msg);
     }
   };
 
@@ -534,38 +547,72 @@ export default function EmployeeAttendance() {
               <CardTitle className="text-primary flex items-center gap-2 text-sm">
                 <Camera className="w-4 h-4" />
                 {tc("صورة الحضور", "Attendance Photo")}
-                <Badge variant="outline" className="text-xs text-muted-foreground border-muted-foreground/30 mr-1">{tc("اختياري", "Optional")}</Badge>
+                <Badge variant="outline" className="text-xs text-muted-foreground border-muted-foreground/30 mr-1">
+                  {tc("اختياري", "Optional")}
+                </Badge>
               </CardTitle>
-              <CardDescription className="text-xs">{tc("التقط سيلفي للتوثيق (غير إلزامي)", "Take a selfie for verification (optional)")}</CardDescription>
+              <CardDescription className="text-xs">
+                {tc("التقط سيلفي للتوثيق — الصورة غير إلزامية، يمكن التحضير بدونها", "Take a selfie for documentation — photo is not required")}
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-2">
               {isCapturing ? (
                 <div className="space-y-3">
-                  <video ref={videoRef} autoPlay playsInline muted className="w-full rounded-xl" />
-                  <Button onClick={capturePhoto} className="w-full bg-primary hover:bg-primary/90" data-testid="button-capture">
-                    <Camera className="w-4 h-4 ml-2" />
-                    {tc("التقاط الصورة", "Capture")}
-                  </Button>
+                  <video ref={videoRef} autoPlay playsInline muted className="w-full rounded-xl bg-black" />
+                  <div className="flex gap-2">
+                    <Button onClick={capturePhoto} className="flex-1 bg-primary hover:bg-primary/90" data-testid="button-capture">
+                      <Camera className="w-4 h-4 ml-2" />
+                      {tc("التقاط الصورة", "Capture")}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => {
+                      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+                      setIsCapturing(false);
+                      setCameraError(null);
+                    }} className="border-gray-300" data-testid="button-cancel-camera">
+                      {tc("إلغاء", "Cancel")}
+                    </Button>
+                  </div>
                 </div>
               ) : capturedPhoto ? (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <img src={capturedPhoto} alt="Captured" className="w-full rounded-xl" />
                   <div className="flex items-center gap-2">
                     <Button variant="outline" onClick={retakePhoto} className="flex-1 border-primary/50 text-primary" size="sm" data-testid="button-retake">
-                      {tc("إعادة", "Retake")}
+                      {tc("إعادة التصوير", "Retake")}
                     </Button>
-                    {photoUrl && (
-                      <div className="flex items-center gap-1 text-green-600 text-xs">
+                    {photoUrl ? (
+                      <div className="flex items-center gap-1 text-green-600 text-xs font-medium">
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        {tc("تم الرفع", "Uploaded")}
+                        {tc("✅ تم رفع الصورة", "✅ Photo uploaded")}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 text-amber-600 text-xs">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        {tc("جاري الرفع...", "Uploading...")}
                       </div>
                     )}
                   </div>
                 </div>
+              ) : cameraError ? (
+                <div className="space-y-2">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                      <p className="text-amber-700 text-xs">{cameraError}</p>
+                    </div>
+                  </div>
+                  <Button onClick={startCamera} variant="outline" className="w-full border-primary/50 text-primary" size="sm" data-testid="button-retry-camera">
+                    <RefreshCw className="w-4 h-4 ml-2" />
+                    {tc("إعادة المحاولة", "Retry Camera")}
+                  </Button>
+                  <p className="text-xs text-center text-green-600 font-medium">
+                    {tc("✅ يمكنك التحضير بدون صورة", "✅ You can still check in without a photo")}
+                  </p>
+                </div>
               ) : (
                 <Button onClick={startCamera} variant="outline" className="w-full border-primary/50 text-primary" size="sm" data-testid="button-start-camera">
                   <Camera className="w-4 h-4 ml-2" />
-                  {tc("فتح الكاميرا", "Open Camera")}
+                  {tc("فتح الكاميرا (اختياري)", "Open Camera (Optional)")}
                 </Button>
               )}
               <canvas ref={canvasRef} className="hidden" />

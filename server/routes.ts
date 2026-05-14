@@ -12889,10 +12889,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "الموقع مطلوب للتحضير" });
       }
 
-      // Selfie photo is REQUIRED for check-in
-      if (!photoUrl || typeof photoUrl !== 'string' || photoUrl.trim().length === 0) {
-        return res.status(400).json({ error: "صورة السلفي مطلوبة للتحضير. الرجاء التقاط صورة قبل تسجيل الحضور." });
-      }
+      // Selfie photo is optional — check-in is allowed without it
 
       // Get employee details
       const employee = await EmployeeModel.findOne({ 
