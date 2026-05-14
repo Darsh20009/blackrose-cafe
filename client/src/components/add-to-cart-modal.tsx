@@ -221,18 +221,19 @@ export function AddToCartModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && resetModal()}>
-      <DialogContent className="max-w-sm bg-background border border-border rounded-2xl p-0 overflow-hidden">
-        <div className="relative h-32 bg-gradient-to-br from-primary/20 to-accent/10 flex items-center justify-center">
+      <DialogContent className="max-w-sm bg-background border border-border rounded-2xl p-0 overflow-hidden flex flex-col max-h-[92vh]">
+        <div className="relative h-28 flex-shrink-0 bg-gradient-to-br from-primary/20 to-accent/10 flex items-center justify-center">
           {activeItem.imageUrl && (
             <img 
               src={activeItem.imageUrl.startsWith('/') ? activeItem.imageUrl : `/${activeItem.imageUrl}`} 
               alt={isAr ? activeItem.nameAr : activeItem.nameEn || activeItem.nameAr} 
-              className="w-24 h-24 rounded-xl object-cover border-4 border-background shadow-lg"
+              className="w-20 h-20 rounded-xl object-cover border-4 border-background shadow-lg"
             />
           )}
         </div>
         
-        <div className="px-4 pb-4 space-y-4">
+        <div className="flex-1 overflow-y-auto overscroll-contain">
+        <div className="px-4 pb-2 space-y-4">
           <DialogHeader className="pt-2">
             <DialogTitle className="text-xl font-bold text-center text-foreground">
               {isAr ? activeItem.nameAr : activeItem.nameEn || activeItem.nameAr}
@@ -593,22 +594,26 @@ export function AddToCartModal({
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2">
-            <div>
-              <span className="text-xs text-muted-foreground">{isAr ? "الإجمالي" : "Total"}</span>
-              <div className="text-2xl font-bold text-primary">
-                {totalPrice.toFixed(2)} <span className="text-sm"><SarIcon /></span>
-              </div>
+        </div>
+        </div>
+        </div>
+
+        {/* ── Fixed footer: total + add button ── */}
+        <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t bg-background">
+          <div>
+            <span className="text-xs text-muted-foreground">{isAr ? "الإجمالي" : "Total"}</span>
+            <div className="text-2xl font-bold text-primary">
+              {totalPrice.toFixed(2)} <span className="text-sm"><SarIcon /></span>
             </div>
-            <Button
-              onClick={handleAddToCart}
-              className="bg-primary hover:bg-primary/90 text-white px-6 py-5 rounded-xl font-bold shadow-lg"
-              data-testid="button-add-to-cart"
-            >
-              <ShoppingCart className="w-4 h-4 ml-2" />
-              {isAr ? "إضافة" : "Add"}
-            </Button>
           </div>
+          <Button
+            onClick={handleAddToCart}
+            className="bg-primary hover:bg-primary/90 text-white px-6 py-5 rounded-xl font-bold shadow-lg"
+            data-testid="button-add-to-cart"
+          >
+            <ShoppingCart className="w-4 h-4 ml-2" />
+            {isAr ? "إضافة" : "Add"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

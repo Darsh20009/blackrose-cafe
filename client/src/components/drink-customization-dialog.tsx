@@ -321,7 +321,7 @@ export default function DrinkCustomizationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose} modal={modal}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col" data-testid="dialog-customization">
+      <DialogContent className="max-w-lg max-h-[92vh] overflow-hidden flex flex-col" data-testid="dialog-customization">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-right">
             <Coffee className="w-5 h-5" />
@@ -334,7 +334,7 @@ export default function DrinkCustomizationDialog({
             <Loader2 className="w-6 h-6 animate-spin" />
           </div>
         ) : (
-          <ScrollArea className="flex-1 max-h-[50vh]">
+          <ScrollArea className="flex-1 min-h-0" style={{maxHeight:'calc(92vh - 160px)'}}>
             <div className="space-y-4 p-1">
               {variants.length > 1 && (
                 <div className="space-y-2">
