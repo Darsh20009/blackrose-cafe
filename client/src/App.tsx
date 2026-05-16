@@ -126,6 +126,7 @@ const GiftCardsManagement = lazy(() => import("@/pages/gift-cards-management"));
 const PromotionsManagement = lazy(() => import("@/pages/promotions-management"));
 const ApiManagement = lazy(() => import("@/pages/api-management"));
 const KioskPage = lazy(() => import("@/pages/kiosk"));
+const OrderReceiptPage = lazy(() => import("@/pages/order-receipt"));
 const PayrollManagement = lazy(() => import("@/pages/payroll-management"));
 const ManagerReviews = lazy(() => import("@/pages/manager-reviews"));
 const SupplierManagement = lazy(() => import("@/pages/supplier-management"));
@@ -325,6 +326,7 @@ function AppRouter() {
       <Route path="/kiosk/:branchId"><KioskPage /></Route>
       <Route path="/order"><KioskPage /></Route>
       <Route path="/order/:branchId"><KioskPage /></Route>
+      <Route path="/order-receipt/:id"><OrderReceiptPage /></Route>
       <Route path="/manager/payroll"><AuthGuard userType="manager"><PayrollManagement /></AuthGuard></Route>
       <Route path="/manager/reviews"><AuthGuard userType="manager"><ManagerReviews /></AuthGuard></Route>
       <Route path="/manager/suppliers"><AuthGuard userType="manager"><SupplierManagement /></AuthGuard></Route>
