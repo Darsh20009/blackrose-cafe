@@ -21275,6 +21275,365 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
     }
   });
 
+  // ════════════════════════════════════════════════════════════════════════
+  //  PHASE 7 — ECOSYSTEM (Open APIs · Webhooks · Integrations)
+  // ════════════════════════════════════════════════════════════════════════
+  const { requireApiKey, generateApiKey, hashKey, publishEvent, INTEGRATION_CATALOG, ECOSYSTEM_EVENTS, API_SCOPES } = await import("./ecosystem");
+
+  // ─── API KEYS MANAGEMENT (manager) ──────────────────────────────────────
+  app.get("/api/ecosystem/api-keys", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { ApiKeyModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const keys = await ApiKeyModel.find({ $or: [{ tenantId }, { tenantId: { $exists: false } }] }).sort({ createdAt: -1 }).lean();
+      res.json(keys.map((k: any) => ({ ...k, keyHash: undefined })));
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/ecosystem/api-keys", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { ApiKeyModel } = await import("@shared/schema");
+      const { name, scopes, environment = 'live', rateLimit = 100, expiresAt } = req.body;
+      if (!name || !Array.isArray(scopes) || scopes.length === 0) return res.status(400).json({ error: "name and scopes required" });
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const { plain, prefix, hash } = generateApiKey(environment);
+      const key = await ApiKeyModel.create({
+        id: nanoid(), tenantId, name, keyHash: hash, keyPrefix: prefix,
+        scopes, environment, rateLimit, expiresAt: expiresAt ? new Date(expiresAt) : undefined,
+        createdBy: req.employee?.id, isActive: true,
+      });
+      res.json({ ...key.toObject(), keyHash: undefined, plainKey: plain });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.patch("/api/ecosystem/api-keys/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { ApiKeyModel } = await import("@shared/schema");
+      const updated = await ApiKeyModel.findOneAndUpdate({ id: req.params.id }, { $set: req.body }, { new: true }).lean();
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/ecosystem/api-keys/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { ApiKeyModel } = await import("@shared/schema");
+      await ApiKeyModel.deleteOne({ id: req.params.id });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ─── WEBHOOKS MANAGEMENT ────────────────────────────────────────────────
+  app.get("/api/ecosystem/webhooks", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { WebhookModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const hooks = await WebhookModel.find({ $or: [{ tenantId }, { tenantId: { $exists: false } }] }).sort({ createdAt: -1 }).lean();
+      res.json(hooks);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/ecosystem/webhooks", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { WebhookModel } = await import("@shared/schema");
+      const { name, url, events, secret } = req.body;
+      if (!name || !url || !Array.isArray(events) || !events.length) return res.status(400).json({ error: "name, url, events required" });
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const webhookSecret = secret || crypto.randomBytes(24).toString("hex");
+      const hook = await WebhookModel.create({
+        id: nanoid(), tenantId, name, url, events, secret: webhookSecret, isActive: true, failureCount: 0,
+      });
+      res.json(hook);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.patch("/api/ecosystem/webhooks/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { WebhookModel } = await import("@shared/schema");
+      const updated = await WebhookModel.findOneAndUpdate({ id: req.params.id }, { $set: req.body }, { new: true }).lean();
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/ecosystem/webhooks/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { WebhookModel } = await import("@shared/schema");
+      await WebhookModel.deleteOne({ id: req.params.id });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/ecosystem/webhooks/:id/test", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { WebhookModel } = await import("@shared/schema");
+      const hook: any = await WebhookModel.findOne({ id: req.params.id }).lean();
+      if (!hook) return res.status(404).json({ error: "Webhook not found" });
+      await publishEvent("webhook.test", { message: "This is a test event from QIROX", timestamp: new Date().toISOString() }, hook.tenantId);
+      res.json({ success: true, message: "Test event dispatched" });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/ecosystem/webhooks/:id/deliveries", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { WebhookDeliveryModel } = await import("@shared/schema");
+      const deliveries = await WebhookDeliveryModel.find({ webhookId: req.params.id }).sort({ createdAt: -1 }).limit(50).lean();
+      res.json(deliveries);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ─── INTEGRATIONS CATALOG + CRUD ────────────────────────────────────────
+  app.get("/api/ecosystem/catalog", requireAuth, requireManager, async (_req, res) => {
+    res.json({ integrations: INTEGRATION_CATALOG, events: ECOSYSTEM_EVENTS, scopes: API_SCOPES });
+  });
+
+  app.get("/api/ecosystem/integrations", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EcosystemIntegrationModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const items = await EcosystemIntegrationModel.find({ $or: [{ tenantId }, { tenantId: { $exists: false } }] }).sort({ createdAt: -1 }).lean();
+      // Mask sensitive config values
+      const masked = items.map((it: any) => {
+        const masked = { ...it };
+        if (it.config && typeof it.config === 'object') {
+          masked.config = Object.fromEntries(Object.entries(it.config).map(([k, v]: any) => {
+            const sensitive = /key|secret|token|password/i.test(k);
+            return [k, sensitive && typeof v === 'string' && v.length > 6 ? v.slice(0, 4) + '••••' + v.slice(-3) : v];
+          }));
+        }
+        return masked;
+      });
+      res.json(masked);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/ecosystem/integrations", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EcosystemIntegrationModel } = await import("@shared/schema");
+      const { type, name, config = {} } = req.body;
+      const meta = INTEGRATION_CATALOG.find(i => i.type === type);
+      if (!meta) return res.status(400).json({ error: "Unknown integration type" });
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const item = await EcosystemIntegrationModel.create({
+        id: nanoid(), tenantId, type, name: name || meta.nameAr, category: meta.category,
+        config, status: 'pending', isActive: true,
+      });
+      res.json(item);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.patch("/api/ecosystem/integrations/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EcosystemIntegrationModel } = await import("@shared/schema");
+      const updated = await EcosystemIntegrationModel.findOneAndUpdate(
+        { id: req.params.id }, { $set: { ...req.body, updatedAt: new Date() } }, { new: true }
+      ).lean();
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/ecosystem/integrations/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EcosystemIntegrationModel } = await import("@shared/schema");
+      await EcosystemIntegrationModel.deleteOne({ id: req.params.id });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/ecosystem/integrations/:id/test", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EcosystemIntegrationModel } = await import("@shared/schema");
+      const it: any = await EcosystemIntegrationModel.findOne({ id: req.params.id }).lean();
+      if (!it) return res.status(404).json({ error: "Integration not found" });
+      // Lightweight ping: try the URL-like config field if present
+      const url = it.config?.url || it.config?.shopUrl || it.config?.apiUrl;
+      let status = 'connected';
+      let lastError: string | null = null;
+      if (url) {
+        try {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 5000);
+          const r = await fetch(url, { method: "HEAD", signal: ctrl.signal });
+          clearTimeout(t);
+          if (!r.ok && r.status !== 405) { status = 'error'; lastError = `HTTP ${r.status}`; }
+        } catch (e: any) { status = 'error'; lastError = e.message; }
+      }
+      await EcosystemIntegrationModel.updateOne({ id: req.params.id }, { $set: { status, lastError, lastSyncAt: new Date(), updatedAt: new Date() } });
+      res.json({ status, lastError });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/ecosystem/stats", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { ApiKeyModel, WebhookModel, WebhookDeliveryModel, EcosystemIntegrationModel, ApiMetricModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const since = new Date(Date.now() - 24 * 3600 * 1000);
+      const tFilter: any = { $or: [{ tenantId }, { tenantId: { $exists: false } }] };
+      const [apiKeysActive, webhooksActive, integrationsConnected, deliveries24h, deliveriesFailed, apiCalls24h] = await Promise.all([
+        ApiKeyModel.countDocuments({ ...tFilter, isActive: true }),
+        WebhookModel.countDocuments({ ...tFilter, isActive: true }),
+        EcosystemIntegrationModel.countDocuments({ ...tFilter, status: 'connected' }),
+        WebhookDeliveryModel.countDocuments({ ...tFilter, createdAt: { $gte: since } }),
+        WebhookDeliveryModel.countDocuments({ ...tFilter, createdAt: { $gte: since }, success: false }),
+        ApiMetricModel.countDocuments({ path: { $regex: '^/api/v1/' }, createdAt: { $gte: since } }),
+      ]);
+      res.json({ apiKeysActive, webhooksActive, integrationsConnected, deliveries24h, deliveriesFailed, apiCalls24h });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  PUBLIC OPEN API v1  (Authentication: Bearer qrx_live_... or qrx_test_...)
+  // ════════════════════════════════════════════════════════════════════════
+
+  // GET /api/v1/menu — list products
+  app.get("/api/v1/menu", requireApiKey("menu:read"), async (req: any, res) => {
+    try {
+      const { CoffeeItemModel } = await import("@shared/schema");
+      const items = await CoffeeItemModel.find({ isAvailable: true }).limit(500).lean();
+      res.json({ data: items, count: items.length });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /api/v1/menu/:id
+  app.get("/api/v1/menu/:id", requireApiKey("menu:read"), async (req: any, res) => {
+    try {
+      const { CoffeeItemModel } = await import("@shared/schema");
+      const item = await CoffeeItemModel.findOne({ id: req.params.id }).lean();
+      if (!item) return res.status(404).json({ error: "Not found" });
+      res.json({ data: item });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /api/v1/orders
+  app.get("/api/v1/orders", requireApiKey("orders:read"), async (req: any, res) => {
+    try {
+      const { OrderModel } = await import("@shared/schema");
+      const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+      const status = req.query.status;
+      const since = req.query.since ? new Date(req.query.since) : undefined;
+      const filter: any = req.tenantId ? { tenantId: req.tenantId } : {};
+      if (status) filter.status = status;
+      if (since) filter.createdAt = { $gte: since };
+      const orders = await OrderModel.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
+      res.json({ data: orders, count: orders.length });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /api/v1/orders/:id
+  app.get("/api/v1/orders/:id", requireApiKey("orders:read"), async (req: any, res) => {
+    try {
+      const { OrderModel } = await import("@shared/schema");
+      const order = await OrderModel.findOne({ $or: [{ id: req.params.id }, { orderNumber: req.params.id }] }).lean();
+      if (!order) return res.status(404).json({ error: "Not found" });
+      res.json({ data: order });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /api/v1/orders — create order from external source (Shopify/TikTok/etc.)
+  app.post("/api/v1/orders", requireApiKey("orders:write"), async (req: any, res) => {
+    try {
+      const { OrderModel } = await import("@shared/schema");
+      const orderData = req.body;
+      if (!orderData.items || !Array.isArray(orderData.items) || !orderData.items.length) {
+        return res.status(400).json({ error: "items array required" });
+      }
+      const orderNumber = `EXT-${Date.now().toString().slice(-6)}`;
+      const order = await OrderModel.create({
+        id: nanoid(),
+        orderNumber,
+        tenantId: req.tenantId,
+        items: orderData.items,
+        totalAmount: orderData.totalAmount || orderData.items.reduce((s: number, i: any) => s + (i.price || 0) * (i.quantity || 1), 0),
+        customerName: orderData.customerName || 'External',
+        customerPhone: orderData.customerPhone || '',
+        status: 'pending',
+        source: orderData.source || `api:${req.apiKey?.name || 'external'}`,
+        paymentMethod: orderData.paymentMethod || 'external',
+        deliveryMode: orderData.deliveryMode || 'delivery',
+        createdAt: new Date(),
+      });
+      publishEvent("order.created", { orderId: order.id, orderNumber, source: order.source }, req.tenantId);
+      res.status(201).json({ data: order });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /api/v1/customers
+  app.get("/api/v1/customers", requireApiKey("customers:read"), async (req: any, res) => {
+    try {
+      const { CustomerModel } = await import("@shared/schema");
+      const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+      const phone = req.query.phone;
+      const filter: any = {};
+      if (phone) filter.phone = phone;
+      const customers = await CustomerModel.find(filter).limit(limit).select("-password -resetToken").lean();
+      res.json({ data: customers, count: customers.length });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /api/v1/loyalty/cards/:phone
+  app.get("/api/v1/loyalty/cards/:phone", requireApiKey("loyalty:read"), async (req: any, res) => {
+    try {
+      const { LoyaltyCardModel } = await import("@shared/schema");
+      const card = await LoyaltyCardModel.findOne({ phone: req.params.phone }).lean();
+      if (!card) return res.status(404).json({ error: "Not found" });
+      res.json({ data: card });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /api/v1/loyalty/cards/:phone/points  { points, reason }
+  app.post("/api/v1/loyalty/cards/:phone/points", requireApiKey("loyalty:write"), async (req: any, res) => {
+    try {
+      const { LoyaltyCardModel } = await import("@shared/schema");
+      const { points, reason } = req.body;
+      if (typeof points !== 'number') return res.status(400).json({ error: "points (number) required" });
+      const card = await LoyaltyCardModel.findOneAndUpdate(
+        { phone: req.params.phone },
+        { $inc: { totalPoints: points, currentPoints: points } },
+        { new: true }
+      ).lean();
+      if (!card) return res.status(404).json({ error: "Card not found" });
+      publishEvent(points > 0 ? "loyalty.points_added" : "loyalty.points_redeemed", { phone: req.params.phone, points, reason, card }, req.tenantId);
+      res.json({ data: card });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /api/v1/inventory
+  app.get("/api/v1/inventory", requireApiKey("inventory:read"), async (req: any, res) => {
+    try {
+      const { RawItemModel } = await import("@shared/schema");
+      const items = await RawItemModel.find({ isActive: 1 }).limit(500).lean();
+      res.json({ data: items, count: items.length });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // PATCH /api/v1/inventory/:id   { currentStock }
+  app.patch("/api/v1/inventory/:id", requireApiKey("inventory:write"), async (req: any, res) => {
+    try {
+      const { RawItemModel } = await import("@shared/schema");
+      const { currentStock } = req.body;
+      if (typeof currentStock !== 'number') return res.status(400).json({ error: "currentStock (number) required" });
+      const item = await RawItemModel.findOneAndUpdate({ id: req.params.id }, { $set: { currentStock, updatedAt: new Date() } }, { new: true }).lean();
+      if (!item) return res.status(404).json({ error: "Not found" });
+      publishEvent("inventory.updated", { rawItemId: item.id, currentStock }, req.tenantId);
+      res.json({ data: item });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /api/v1 — discovery endpoint (no auth)
+  app.get("/api/v1", (_req, res) => {
+    res.json({
+      name: "QIROX Open API",
+      version: "1.0",
+      authentication: "Bearer qrx_live_... or qrx_test_...",
+      docs: "/manager/ecosystem",
+      endpoints: [
+        "GET /api/v1/menu", "GET /api/v1/menu/:id",
+        "GET /api/v1/orders", "GET /api/v1/orders/:id", "POST /api/v1/orders",
+        "GET /api/v1/customers",
+        "GET /api/v1/loyalty/cards/:phone", "POST /api/v1/loyalty/cards/:phone/points",
+        "GET /api/v1/inventory", "PATCH /api/v1/inventory/:id",
+      ],
+    });
+  });
+
   const httpServer = createServer(app);
   
   // Setup WebSocket for real-time order updates

@@ -6086,3 +6086,130 @@ ApiMetricSchema.index({ createdAt: -1 });
 // TTL: auto-delete metrics older than 7 days to control storage
 ApiMetricSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });
 export const ApiMetricModel = mongoose.models['ApiMetric'] || mongoose.model<IApiMetric>('ApiMetric', ApiMetricSchema);
+
+// ════════════════ PHASE 7 — ECOSYSTEM (Open APIs, Webhooks, Integrations) ════════════════
+
+export interface IApiKey extends Document {
+  id: string;
+  tenantId?: string;
+  name: string;
+  keyHash: string;       // sha256 hash of the secret
+  keyPrefix: string;     // first 12 chars shown to user
+  scopes: string[];      // e.g. ["orders:read","menu:read","inventory:write","webhooks:manage"]
+  environment: 'live' | 'test';
+  rateLimit: number;     // requests per minute
+  isActive: boolean;
+  lastUsedAt?: Date;
+  expiresAt?: Date;
+  createdBy?: string;
+  createdAt: Date;
+}
+const ApiKeySchema = new Schema<IApiKey>({
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, index: true },
+  name: { type: String, required: true },
+  keyHash: { type: String, required: true, unique: true, index: true },
+  keyPrefix: { type: String, required: true },
+  scopes: [{ type: String }],
+  environment: { type: String, enum: ['live', 'test'], default: 'live' },
+  rateLimit: { type: Number, default: 100 },
+  isActive: { type: Boolean, default: true },
+  lastUsedAt: Date,
+  expiresAt: Date,
+  createdBy: String,
+  createdAt: { type: Date, default: Date.now, index: true },
+});
+export const ApiKeyModel = mongoose.models['ApiKey'] || mongoose.model<IApiKey>('ApiKey', ApiKeySchema);
+
+export interface IWebhook extends Document {
+  id: string;
+  tenantId?: string;
+  name: string;
+  url: string;
+  secret: string;        // shared secret for HMAC signing
+  events: string[];      // e.g. ["order.created","order.completed","inventory.low_stock"]
+  isActive: boolean;
+  failureCount: number;
+  lastTriggeredAt?: Date;
+  lastError?: string;
+  createdAt: Date;
+}
+const WebhookSchema = new Schema<IWebhook>({
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, index: true },
+  name: { type: String, required: true },
+  url: { type: String, required: true },
+  secret: { type: String, required: true },
+  events: [{ type: String }],
+  isActive: { type: Boolean, default: true },
+  failureCount: { type: Number, default: 0 },
+  lastTriggeredAt: Date,
+  lastError: String,
+  createdAt: { type: Date, default: Date.now },
+});
+export const WebhookModel = mongoose.models['Webhook'] || mongoose.model<IWebhook>('Webhook', WebhookSchema);
+
+export interface IWebhookDelivery extends Document {
+  id: string;
+  webhookId: string;
+  tenantId?: string;
+  event: string;
+  payload: any;
+  url: string;
+  statusCode?: number;
+  responseBody?: string;
+  durationMs?: number;
+  success: boolean;
+  attemptNumber: number;
+  errorMessage?: string;
+  createdAt: Date;
+}
+const WebhookDeliverySchema = new Schema<IWebhookDelivery>({
+  id: { type: String, required: true, unique: true },
+  webhookId: { type: String, required: true, index: true },
+  tenantId: { type: String, index: true },
+  event: { type: String, required: true, index: true },
+  payload: { type: Schema.Types.Mixed },
+  url: { type: String, required: true },
+  statusCode: Number,
+  responseBody: String,
+  durationMs: Number,
+  success: { type: Boolean, default: false, index: true },
+  attemptNumber: { type: Number, default: 1 },
+  errorMessage: String,
+  createdAt: { type: Date, default: Date.now, index: true },
+});
+WebhookDeliverySchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+export const WebhookDeliveryModel = mongoose.models['WebhookDelivery'] || mongoose.model<IWebhookDelivery>('WebhookDelivery', WebhookDeliverySchema);
+
+export interface IEcosystemIntegration extends Document {
+  id: string;
+  tenantId?: string;
+  type: 'shopify' | 'tiktok_shop' | 'whatsapp' | 'zoho' | 'qoyod' | 'daftra' | 'sap' | 'oracle_netsuite' | 'payment_device' | 'foodics' | 'jahez' | 'hungerstation' | 'mrsool' | 'salla' | 'zid' | 'generic_webhook';
+  name: string;
+  category: 'erp' | 'accounting' | 'delivery' | 'loyalty' | 'messaging' | 'ecommerce' | 'pos' | 'payment_device';
+  config: Record<string, any>;  // API keys, store URL, phone IDs, etc.
+  status: 'connected' | 'disconnected' | 'error' | 'pending';
+  lastSyncAt?: Date;
+  lastError?: string;
+  syncStats?: { ordersIn?: number; ordersOut?: number; productsOut?: number; lastSync?: Date };
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const EcosystemIntegrationSchema = new Schema<IEcosystemIntegration>({
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, index: true },
+  type: { type: String, required: true },
+  name: { type: String, required: true },
+  category: { type: String, required: true },
+  config: { type: Schema.Types.Mixed, default: {} },
+  status: { type: String, enum: ['connected', 'disconnected', 'error', 'pending'], default: 'pending' },
+  lastSyncAt: Date,
+  lastError: String,
+  syncStats: { type: Schema.Types.Mixed },
+  isActive: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
+export const EcosystemIntegrationModel = mongoose.models['EcosystemIntegration'] || mongoose.model<IEcosystemIntegration>('EcosystemIntegration', EcosystemIntegrationSchema);

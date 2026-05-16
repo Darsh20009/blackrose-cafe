@@ -876,6 +876,25 @@ export default function ManagerDashboard() {
            </div>
          </div>
 
+         {/* ── ECOSYSTEM BANNER (Phase 7) ── */}
+         <button
+           onClick={() => setLocation("/manager/ecosystem")}
+           data-testid="link-ecosystem-hub"
+           className="w-full group bg-gradient-to-l from-cyan-950/40 to-blue-950/20 border border-cyan-500/20 rounded-2xl p-4 flex items-center gap-4 hover:border-cyan-500/40 transition-all mb-3"
+         >
+           <div className="w-12 h-12 rounded-xl bg-cyan-600/20 border border-cyan-500/30 flex items-center justify-center shrink-0">
+             <Globe className="w-6 h-6 text-cyan-400" />
+           </div>
+           <div className="text-right flex-1 min-w-0">
+             <div className="flex items-center gap-2 flex-wrap">
+               <div className="text-foreground font-bold text-sm">منظومة التكامل</div>
+               <span className="text-[10px] bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full font-medium">المرحلة 7</span>
+             </div>
+             <div className="text-muted-foreground text-xs mt-0.5">APIs مفتوحة · Webhooks · ERP · توصيل · واتساب · Shopify · TikTok · أجهزة دفع</div>
+           </div>
+           <Plug className="w-5 h-5 text-cyan-400 group-hover:-translate-x-1 transition-transform" />
+         </button>
+
          {/* ── AI AUTOMATION BANNER (Phase 6) ── */}
          <button
            onClick={() => setLocation("/manager/ai-automation")}
