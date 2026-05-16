@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslate } from "@/lib/useTranslate";
 import {
   CommandDialog,
   CommandEmpty,
@@ -14,56 +15,56 @@ import {
   ShoppingCart, Coffee, Users, ClipboardList, Calendar, ChefHat,
   LayoutDashboard, Package, BarChart3, Settings, CreditCard,
   Receipt, Boxes, Truck, FileText, UserCog, Bell, Gift, Tag,
-  ScanLine, MonitorSmartphone, Home, Wallet, TrendingUp,
+  MonitorSmartphone, Home, Wallet, TrendingUp,
 } from "lucide-react";
 
 interface QuickLink {
-  label: string;
-  labelEn?: string;
+  ar: string;
+  en: string;
   path: string;
   icon: React.ReactNode;
-  group: string;
-  roles?: string[];
+  groupAr: string;
+  groupEn: string;
 }
 
 const QUICK_LINKS: QuickLink[] = [
-  { label: "الصفحة الرئيسية للموظف", path: "/employee/home", icon: <Home className="w-4 h-4" />, group: "تنقل سريع" },
-  { label: "كاشير POS", path: "/employee/pos", icon: <ShoppingCart className="w-4 h-4" />, group: "تنقل سريع" },
-  { label: "شاشة المطبخ", path: "/employee/kitchen", icon: <ChefHat className="w-4 h-4" />, group: "تنقل سريع" },
-  { label: "الطلبات الحية", path: "/employee/orders", icon: <ClipboardList className="w-4 h-4" />, group: "تنقل سريع" },
-  { label: "حضور وانصراف", path: "/employee/attendance", icon: <Calendar className="w-4 h-4" />, group: "تنقل سريع" },
-  { label: "الطاولات", path: "/employee/tables", icon: <LayoutDashboard className="w-4 h-4" />, group: "تنقل سريع" },
-  { label: "حجوزات الطاولات", path: "/employee/reservations", icon: <Calendar className="w-4 h-4" />, group: "تنقل سريع" },
-  { label: "حجوزات المنتجات", path: "/employee/product-reservations", icon: <Gift className="w-4 h-4" />, group: "تنقل سريع" },
-  { label: "إدارة المنيو", path: "/employee/menu-management", icon: <Coffee className="w-4 h-4" />, group: "إدارة" },
-  { label: "الموظفون", path: "/admin/employees", icon: <Users className="w-4 h-4" />, group: "إدارة" },
-  { label: "لوحة المدير", path: "/manager/dashboard", icon: <BarChart3 className="w-4 h-4" />, group: "إدارة" },
-  { label: "لوحة المالك", path: "/owner/dashboard", icon: <UserCog className="w-4 h-4" />, group: "إدارة" },
-  { label: "لوحة الإدارة العليا", path: "/executive/dashboard", icon: <TrendingUp className="w-4 h-4" />, group: "إدارة" },
-  { label: "المحاسبة", path: "/manager/accounting", icon: <Wallet className="w-4 h-4" />, group: "إدارة" },
-  { label: "التحليلات", path: "/manager/analytics", icon: <BarChart3 className="w-4 h-4" />, group: "إدارة" },
-  { label: "تقارير موحدة", path: "/manager/unified-reports", icon: <FileText className="w-4 h-4" />, group: "إدارة" },
-  { label: "BI Analytics", path: "/manager/bi-analytics", icon: <TrendingUp className="w-4 h-4" />, group: "إدارة" },
-  { label: "المخزون - المواد الخام", path: "/manager/inventory/raw-items", icon: <Boxes className="w-4 h-4" />, group: "مخزون" },
-  { label: "المخزون - تنبيهات", path: "/manager/inventory/alerts", icon: <Bell className="w-4 h-4" />, group: "مخزون" },
-  { label: "المخزون - الموردون", path: "/manager/inventory/suppliers", icon: <Truck className="w-4 h-4" />, group: "مخزون" },
-  { label: "المخزون - المشتريات", path: "/manager/inventory/purchases", icon: <Package className="w-4 h-4" />, group: "مخزون" },
-  { label: "الفروع", path: "/admin/branches", icon: <LayoutDashboard className="w-4 h-4" />, group: "إعدادات" },
-  { label: "إعدادات النظام", path: "/admin/settings", icon: <Settings className="w-4 h-4" />, group: "إعدادات" },
-  { label: "بطاقات الهدايا", path: "/manager/gift-cards", icon: <Gift className="w-4 h-4" />, group: "إعدادات" },
-  { label: "العروض والخصومات", path: "/manager/promotions", icon: <Tag className="w-4 h-4" />, group: "إعدادات" },
-  { label: "الولاء", path: "/manager/loyalty", icon: <CreditCard className="w-4 h-4" />, group: "إعدادات" },
-  { label: "فواتير ZATCA", path: "/manager/zatca-invoices", icon: <Receipt className="w-4 h-4" />, group: "إعدادات" },
-  { label: "كشك الطلب الذاتي (Kiosk)", path: "/kiosk", icon: <MonitorSmartphone className="w-4 h-4" />, group: "إعدادات" },
-  { label: "شاشة العميل", path: "/customer-display", icon: <MonitorSmartphone className="w-4 h-4" />, group: "إعدادات" },
+  { ar: "الصفحة الرئيسية للموظف", en: "Employee Home", path: "/employee/home", icon: <Home className="w-4 h-4" />, groupAr: "تنقل سريع", groupEn: "Quick Navigation" },
+  { ar: "كاشير POS", en: "POS Cashier", path: "/employee/pos", icon: <ShoppingCart className="w-4 h-4" />, groupAr: "تنقل سريع", groupEn: "Quick Navigation" },
+  { ar: "شاشة المطبخ", en: "Kitchen Display", path: "/employee/kitchen", icon: <ChefHat className="w-4 h-4" />, groupAr: "تنقل سريع", groupEn: "Quick Navigation" },
+  { ar: "الطلبات الحية", en: "Live Orders", path: "/employee/orders", icon: <ClipboardList className="w-4 h-4" />, groupAr: "تنقل سريع", groupEn: "Quick Navigation" },
+  { ar: "حضور وانصراف", en: "Attendance", path: "/employee/attendance", icon: <Calendar className="w-4 h-4" />, groupAr: "تنقل سريع", groupEn: "Quick Navigation" },
+  { ar: "الطاولات", en: "Tables", path: "/employee/tables", icon: <LayoutDashboard className="w-4 h-4" />, groupAr: "تنقل سريع", groupEn: "Quick Navigation" },
+  { ar: "حجوزات الطاولات", en: "Table Reservations", path: "/employee/reservations", icon: <Calendar className="w-4 h-4" />, groupAr: "تنقل سريع", groupEn: "Quick Navigation" },
+  { ar: "حجوزات المنتجات", en: "Product Reservations", path: "/employee/product-reservations", icon: <Gift className="w-4 h-4" />, groupAr: "تنقل سريع", groupEn: "Quick Navigation" },
+  { ar: "إدارة المنيو", en: "Menu Management", path: "/employee/menu-management", icon: <Coffee className="w-4 h-4" />, groupAr: "إدارة", groupEn: "Management" },
+  { ar: "الموظفون", en: "Employees", path: "/admin/employees", icon: <Users className="w-4 h-4" />, groupAr: "إدارة", groupEn: "Management" },
+  { ar: "لوحة المدير", en: "Manager Dashboard", path: "/manager/dashboard", icon: <BarChart3 className="w-4 h-4" />, groupAr: "إدارة", groupEn: "Management" },
+  { ar: "لوحة المالك", en: "Owner Dashboard", path: "/owner/dashboard", icon: <UserCog className="w-4 h-4" />, groupAr: "إدارة", groupEn: "Management" },
+  { ar: "لوحة الإدارة العليا", en: "Executive Dashboard", path: "/executive/dashboard", icon: <TrendingUp className="w-4 h-4" />, groupAr: "إدارة", groupEn: "Management" },
+  { ar: "المحاسبة", en: "Accounting", path: "/manager/accounting", icon: <Wallet className="w-4 h-4" />, groupAr: "إدارة", groupEn: "Management" },
+  { ar: "التحليلات", en: "Analytics", path: "/manager/analytics", icon: <BarChart3 className="w-4 h-4" />, groupAr: "إدارة", groupEn: "Management" },
+  { ar: "تقارير موحدة", en: "Unified Reports", path: "/manager/unified-reports", icon: <FileText className="w-4 h-4" />, groupAr: "إدارة", groupEn: "Management" },
+  { ar: "BI Analytics", en: "BI Analytics", path: "/manager/bi-analytics", icon: <TrendingUp className="w-4 h-4" />, groupAr: "إدارة", groupEn: "Management" },
+  { ar: "المخزون - المواد الخام", en: "Inventory - Raw Items", path: "/manager/inventory/raw-items", icon: <Boxes className="w-4 h-4" />, groupAr: "مخزون", groupEn: "Inventory" },
+  { ar: "المخزون - تنبيهات", en: "Inventory - Alerts", path: "/manager/inventory/alerts", icon: <Bell className="w-4 h-4" />, groupAr: "مخزون", groupEn: "Inventory" },
+  { ar: "المخزون - الموردون", en: "Inventory - Suppliers", path: "/manager/inventory/suppliers", icon: <Truck className="w-4 h-4" />, groupAr: "مخزون", groupEn: "Inventory" },
+  { ar: "المخزون - المشتريات", en: "Inventory - Purchases", path: "/manager/inventory/purchases", icon: <Package className="w-4 h-4" />, groupAr: "مخزون", groupEn: "Inventory" },
+  { ar: "الفروع", en: "Branches", path: "/admin/branches", icon: <LayoutDashboard className="w-4 h-4" />, groupAr: "إعدادات", groupEn: "Settings" },
+  { ar: "إعدادات النظام", en: "System Settings", path: "/admin/settings", icon: <Settings className="w-4 h-4" />, groupAr: "إعدادات", groupEn: "Settings" },
+  { ar: "بطاقات الهدايا", en: "Gift Cards", path: "/manager/gift-cards", icon: <Gift className="w-4 h-4" />, groupAr: "إعدادات", groupEn: "Settings" },
+  { ar: "العروض والخصومات", en: "Promotions", path: "/manager/promotions", icon: <Tag className="w-4 h-4" />, groupAr: "إعدادات", groupEn: "Settings" },
+  { ar: "الولاء", en: "Loyalty", path: "/manager/loyalty", icon: <CreditCard className="w-4 h-4" />, groupAr: "إعدادات", groupEn: "Settings" },
+  { ar: "فواتير ZATCA", en: "ZATCA Invoices", path: "/manager/zatca-invoices", icon: <Receipt className="w-4 h-4" />, groupAr: "إعدادات", groupEn: "Settings" },
+  { ar: "كشك الطلب الذاتي", en: "Self-Order Kiosk", path: "/kiosk", icon: <MonitorSmartphone className="w-4 h-4" />, groupAr: "إعدادات", groupEn: "Settings" },
+  { ar: "شاشة العميل", en: "Customer Display", path: "/customer-display", icon: <MonitorSmartphone className="w-4 h-4" />, groupAr: "إعدادات", groupEn: "Settings" },
 ];
 
 export function GlobalCommandPalette() {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [, setLocation] = useLocation();
+  const tc = useTranslate();
 
-  // Open with Ctrl+K / Cmd+K
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
@@ -75,7 +76,6 @@ export function GlobalCommandPalette() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Lazy fetch only when palette is open
   const { data: orders = [] } = useQuery<any[]>({
     queryKey: ["/api/orders"],
     enabled: open,
@@ -98,6 +98,7 @@ export function GlobalCommandPalette() {
   });
 
   const q = search.trim().toLowerCase();
+  const currency = tc("ر.س", "SAR");
 
   const filteredOrders = useMemo(() => {
     if (!q) return [];
@@ -144,29 +145,31 @@ export function GlobalCommandPalette() {
   };
 
   const linkGroups = useMemo(() => {
-    const groups: Record<string, QuickLink[]> = {};
+    const groups: Record<string, { ar: string; en: string; path: string; icon: React.ReactNode }[]> = {};
     QUICK_LINKS.forEach((l) => {
-      if (q && !l.label.toLowerCase().includes(q) && !(l.labelEn || "").toLowerCase().includes(q)) return;
-      if (!groups[l.group]) groups[l.group] = [];
-      groups[l.group].push(l);
+      const label = tc(l.ar, l.en).toLowerCase();
+      if (q && !label.includes(q)) return;
+      const key = tc(l.groupAr, l.groupEn);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(l);
     });
     return groups;
-  }, [q]);
+  }, [q, tc]);
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput
-        placeholder="ابحث عن طلب / منتج / عميل / موظف أو صفحة..."
+        placeholder={tc("ابحث عن طلب / منتج / عميل / موظف أو صفحة...", "Search orders / products / customers / employees or pages...")}
         value={search}
         onValueChange={setSearch}
         data-testid="input-command-search"
       />
       <CommandList className="max-h-[500px]">
-        <CommandEmpty>لا توجد نتائج</CommandEmpty>
+        <CommandEmpty>{tc("لا توجد نتائج", "No results")}</CommandEmpty>
 
         {filteredOrders.length > 0 && (
           <>
-            <CommandGroup heading="الطلبات">
+            <CommandGroup heading={tc("الطلبات", "Orders")}>
               {filteredOrders.map((o: any) => (
                 <CommandItem
                   key={o.id || o._id}
@@ -178,7 +181,7 @@ export function GlobalCommandPalette() {
                   <span className="text-muted-foreground text-sm mr-2">
                     {o.customerName || o.customerPhone || "—"}
                   </span>
-                  <span className="ml-auto text-xs text-muted-foreground">{o.total} ر.س</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{o.total} {currency}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -188,7 +191,7 @@ export function GlobalCommandPalette() {
 
         {filteredProducts.length > 0 && (
           <>
-            <CommandGroup heading="المنتجات">
+            <CommandGroup heading={tc("المنتجات", "Products")}>
               {filteredProducts.map((p: any) => (
                 <CommandItem
                   key={p.id}
@@ -196,9 +199,8 @@ export function GlobalCommandPalette() {
                   data-testid={`cmd-product-${p.id}`}
                 >
                   <Coffee className="w-4 h-4 ml-2 text-primary" />
-                  <span>{p.nameAr || p.name}</span>
-                  {p.nameEn && <span className="text-muted-foreground text-xs mr-2">({p.nameEn})</span>}
-                  <span className="ml-auto text-xs text-muted-foreground">{p.price} ر.س</span>
+                  <span>{tc(p.nameAr || p.name, p.nameEn || p.nameAr || p.name)}</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{p.price} {currency}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -208,7 +210,7 @@ export function GlobalCommandPalette() {
 
         {filteredCustomers.length > 0 && (
           <>
-            <CommandGroup heading="العملاء">
+            <CommandGroup heading={tc("العملاء", "Customers")}>
               {filteredCustomers.map((c: any) => (
                 <CommandItem
                   key={c.phone}
@@ -216,7 +218,7 @@ export function GlobalCommandPalette() {
                   data-testid={`cmd-customer-${c.phone}`}
                 >
                   <Users className="w-4 h-4 ml-2 text-primary" />
-                  <span>{c.name || "بدون اسم"}</span>
+                  <span>{c.name || tc("بدون اسم", "No name")}</span>
                   <span className="text-muted-foreground text-xs mr-2">{c.phone}</span>
                 </CommandItem>
               ))}
@@ -227,7 +229,7 @@ export function GlobalCommandPalette() {
 
         {filteredEmployees.length > 0 && (
           <>
-            <CommandGroup heading="الموظفون">
+            <CommandGroup heading={tc("الموظفون", "Employees")}>
               {filteredEmployees.map((e: any) => (
                 <CommandItem
                   key={e.id}
@@ -253,15 +255,15 @@ export function GlobalCommandPalette() {
                 data-testid={`cmd-link-${l.path.replace(/\//g, "-")}`}
               >
                 {l.icon}
-                <span className="mr-2">{l.label}</span>
+                <span className="mr-2">{tc(l.ar, l.en)}</span>
               </CommandItem>
             ))}
           </CommandGroup>
         ))}
       </CommandList>
       <div className="px-3 py-2 text-[10px] text-muted-foreground border-t flex items-center justify-between">
-        <span>اضغط <kbd className="px-1.5 py-0.5 bg-muted rounded">Esc</kbd> للإغلاق</span>
-        <span><kbd className="px-1.5 py-0.5 bg-muted rounded">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 bg-muted rounded">K</kbd> لفتح البحث</span>
+        <span>{tc("اضغط Esc للإغلاق", "Press Esc to close")}</span>
+        <span>{tc("Ctrl+K لفتح البحث", "Ctrl+K to open search")}</span>
       </div>
     </CommandDialog>
   );

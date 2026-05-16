@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, ShoppingCart, Package, UserX, MessageSquare, AlertTriangle, X } from "lucide-react";
+import { Bell, ShoppingCart, Package, UserX, MessageSquare, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -9,6 +9,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
+import { useTranslate } from "@/lib/useTranslate";
 import { cn } from "@/lib/utils";
 
 interface Notification {
@@ -25,29 +26,26 @@ interface Notification {
 export function ManagerNotificationCenter() {
   const [open, setOpen] = useState(false);
   const [, setLocation] = useLocation();
+  const tc = useTranslate();
 
-  // Pending orders
   const { data: orders = [] } = useQuery<any[]>({
     queryKey: ["/api/orders"],
     refetchInterval: 30_000,
     staleTime: 20_000,
   });
 
-  // Low-stock raw items
   const { data: lowStock = [] } = useQuery<any[]>({
     queryKey: ["/api/inventory/low-stock"],
     refetchInterval: 120_000,
     staleTime: 60_000,
   });
 
-  // Reviews needing reply
   const { data: reviews = [] } = useQuery<any[]>({
     queryKey: ["/api/reviews"],
     refetchInterval: 120_000,
     staleTime: 60_000,
   });
 
-  // Attendance today (to detect late/absent)
   const { data: attendance = [] } = useQuery<any[]>({
     queryKey: ["/api/attendance/today"],
     refetchInterval: 120_000,
@@ -67,8 +65,11 @@ export function ManagerNotificationCenter() {
       list.push({
         id: "orders-pending",
         type: "order",
-        title: "طلبات معلّقة",
-        desc: `لديك ${pendingOrders.length} طلب يحتاج متابعة`,
+        title: tc("طلبات معلّقة", "Pending Orders"),
+        desc: tc(
+          `لديك ${pendingOrders.length} طلب يحتاج متابعة`,
+          `You have ${pendingOrders.length} orders that need attention`
+        ),
         count: pendingOrders.length,
         path: "/employee/orders",
         severity: pendingOrders.length > 10 ? "critical" : "warning",
@@ -80,8 +81,11 @@ export function ManagerNotificationCenter() {
       list.push({
         id: "stock-low",
         type: "stock",
-        title: "تنبيهات مخزون",
-        desc: `${lowStock.length} مادة خام وصلت للحد الأدنى`,
+        title: tc("تنبيهات مخزون", "Stock Alerts"),
+        desc: tc(
+          `${lowStock.length} مادة خام وصلت للحد الأدنى`,
+          `${lowStock.length} raw items reached minimum threshold`
+        ),
         count: lowStock.length,
         path: "/manager/inventory/alerts",
         severity: "warning",
@@ -96,8 +100,11 @@ export function ManagerNotificationCenter() {
       list.push({
         id: "emp-late",
         type: "employee",
-        title: "موظفون متأخرون",
-        desc: `${lateEmployees.length} موظف سجّل دخوله متأخراً اليوم`,
+        title: tc("موظفون متأخرون", "Late Employees"),
+        desc: tc(
+          `${lateEmployees.length} موظف سجّل دخوله متأخراً اليوم`,
+          `${lateEmployees.length} employees clocked in late today`
+        ),
         count: lateEmployees.length,
         path: "/manager/attendance",
         severity: "info",
@@ -112,8 +119,11 @@ export function ManagerNotificationCenter() {
       list.push({
         id: "reviews",
         type: "review",
-        title: "تقييمات تحتاج رداً",
-        desc: `${unrepliedReviews.length} تقييم سلبي بدون رد`,
+        title: tc("تقييمات تحتاج رداً", "Reviews Need Reply"),
+        desc: tc(
+          `${unrepliedReviews.length} تقييم سلبي بدون رد`,
+          `${unrepliedReviews.length} negative reviews without reply`
+        ),
         count: unrepliedReviews.length,
         path: "/admin/reviews",
         severity: "warning",
@@ -122,7 +132,7 @@ export function ManagerNotificationCenter() {
     }
 
     return list;
-  }, [orders, lowStock, attendance, reviews]);
+  }, [orders, lowStock, attendance, reviews, tc]);
 
   const totalCount = notifications.reduce((sum, n) => sum + (n.count || 1), 0);
   const hasCritical = notifications.some((n) => n.severity === "critical");
@@ -162,7 +172,7 @@ export function ManagerNotificationCenter() {
         <div className="p-3 border-b flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Bell className="w-4 h-4 text-primary" />
-            <h4 className="font-semibold">مركز الإشعارات</h4>
+            <h4 className="font-semibold">{tc("مركز الإشعارات", "Notification Center")}</h4>
           </div>
           <Badge variant="outline">{notifications.length}</Badge>
         </div>
@@ -171,7 +181,7 @@ export function ManagerNotificationCenter() {
           {notifications.length === 0 ? (
             <div className="p-6 text-center text-muted-foreground">
               <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">لا توجد إشعارات حالياً 🎉</p>
+              <p className="text-sm">{tc("لا توجد إشعارات حالياً 🎉", "No notifications right now 🎉")}</p>
             </div>
           ) : (
             notifications.map((n) => (
@@ -179,7 +189,7 @@ export function ManagerNotificationCenter() {
                 key={n.id}
                 onClick={() => go(n.path)}
                 className={cn(
-                  "w-full text-right p-3 border-b last:border-b-0 hover:bg-muted/50 transition flex items-start gap-3",
+                  "w-full text-start p-3 border-b last:border-b-0 hover:bg-muted/50 transition flex items-start gap-3",
                   n.severity === "critical" && "bg-destructive/5",
                   n.severity === "warning" && "bg-amber-50"
                 )}
@@ -216,7 +226,7 @@ export function ManagerNotificationCenter() {
 
         <div className="p-2 border-t bg-muted/30 text-center">
           <p className="text-[10px] text-muted-foreground">
-            تحديث تلقائي كل 30 ثانية
+            {tc("تحديث تلقائي كل 30 ثانية", "Auto-refresh every 30 seconds")}
           </p>
         </div>
       </PopoverContent>

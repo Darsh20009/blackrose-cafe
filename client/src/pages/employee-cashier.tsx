@@ -185,6 +185,63 @@ export default function EmployeeCashier() {
    };
  }, [toast]);
 
+ // 🚀 Professional keyboard shortcuts (F1=New, F2=Submit, F4=Print Last, Esc=Clear)
+ useEffect(() => {
+   const onKey = (e: KeyboardEvent) => {
+     const target = e.target as HTMLElement | null;
+     if (target) {
+       const tag = target.tagName;
+       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) {
+         if (e.key === "Escape") target.blur();
+         return;
+       }
+     }
+     if (document.querySelector('[role="dialog"][data-state="open"]')) return;
+
+     switch (e.key) {
+       case "F1":
+         e.preventDefault();
+         setOrderItems([]);
+         setCustomerName("");
+         setCustomerPhone("");
+         setCustomerEmail("");
+         setCustomerId(null);
+         setLoyaltyCard(null);
+         setAppliedDiscount(null);
+         setDiscountCode("");
+         setStampsToUse(0);
+         setPointsToRedeem(0);
+         setUsePointsDiscount(false);
+         toast({ title: tc("🆕 طلب جديد", "🆕 New Order"), description: tc("تم تفريغ السلة", "Cart cleared") });
+         break;
+       case "F2":
+         e.preventDefault();
+         handleSubmitOrder();
+         break;
+       case "F4":
+         e.preventDefault();
+         if (lastOrder) {
+           handlePrintAllReceipts();
+         } else {
+           toast({ title: tc("لا يوجد طلب", "No order"), description: tc("لا يوجد طلب سابق للطباعة", "No previous order to print"), variant: "destructive" });
+         }
+         break;
+       case "Escape":
+         if (orderItems.length > 0) {
+           e.preventDefault();
+           if (window.confirm(tc("هل تريد إلغاء الطلب الحالي؟", "Cancel the current order?"))) {
+             setOrderItems([]);
+             toast({ title: tc("تم الإلغاء", "Cancelled") });
+           }
+         }
+         break;
+     }
+   };
+   window.addEventListener("keydown", onKey);
+   return () => window.removeEventListener("keydown", onKey);
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+ }, [orderItems, lastOrder]);
+
  // Check POS device connection
  useEffect(() => {
  const checkPosConnection = async () => {

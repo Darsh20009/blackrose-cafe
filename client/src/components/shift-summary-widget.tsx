@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingUp, ShoppingBag, Clock, ChevronUp, ChevronDown, Wallet } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { useTranslate } from "@/lib/useTranslate";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 interface ShiftStats {
@@ -13,12 +15,12 @@ interface ShiftStats {
   startedAt?: string;
 }
 
-/**
- * Compact, always-visible widget showing the current cashier's live shift stats.
- * Auto-refreshes every 30s. Collapsible to a single bar.
- */
 export function ShiftSummaryWidget() {
   const [collapsed, setCollapsed] = useState(false);
+  const tc = useTranslate();
+  const { i18n } = useTranslation();
+  const locale = i18n.language === "en" ? "en-US" : "ar-SA";
+  const currency = tc("ر.س", "SAR");
 
   const { data: shift } = useQuery<any>({
     queryKey: ["/api/shifts/active"],
@@ -39,7 +41,7 @@ export function ShiftSummaryWidget() {
   };
 
   const startedTime = stats.startedAt
-    ? new Date(stats.startedAt).toLocaleTimeString("ar-SA", {
+    ? new Date(stats.startedAt).toLocaleTimeString(locale, {
         hour: "2-digit",
         minute: "2-digit",
       })
@@ -54,16 +56,17 @@ export function ShiftSummaryWidget() {
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
           <span className="text-xs font-medium text-muted-foreground">
-            وردية نشطة
+            {tc("وردية نشطة", "Active Shift")}
           </span>
           <span className="text-[10px] text-muted-foreground">
-            (بدأت {startedTime})
+            {tc(`(بدأت ${startedTime})`, `(started ${startedTime})`)}
           </span>
         </div>
         <button
           onClick={() => setCollapsed((c) => !c)}
           className="p-1 hover:bg-muted rounded transition"
           data-testid="shift-widget-toggle"
+          aria-label={tc("طي/فتح", "Collapse/Expand")}
         >
           {collapsed ? (
             <ChevronDown className="w-4 h-4" />
@@ -77,25 +80,25 @@ export function ShiftSummaryWidget() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 px-3 pb-3">
           <Stat
             icon={<TrendingUp className="w-4 h-4" />}
-            label="مبيعاتي"
-            value={`${stats.totalSales.toFixed(2)} ر.س`}
+            label={tc("مبيعاتي", "My Sales")}
+            value={`${stats.totalSales.toFixed(2)} ${currency}`}
             color="text-primary"
           />
           <Stat
             icon={<ShoppingBag className="w-4 h-4" />}
-            label="طلباتي"
+            label={tc("طلباتي", "My Orders")}
             value={String(stats.totalOrders)}
             color="text-blue-600"
           />
           <Stat
             icon={<Clock className="w-4 h-4" />}
-            label="متوسط الطلب"
-            value={`${stats.avgOrder.toFixed(1)} ر.س`}
+            label={tc("متوسط الطلب", "Avg Order")}
+            value={`${stats.avgOrder.toFixed(1)} ${currency}`}
             color="text-amber-600"
           />
           <Stat
             icon={<Wallet className="w-4 h-4" />}
-            label="نقدي / شبكة"
+            label={tc("نقدي / شبكة", "Cash / Card")}
             value={`${(stats.cashSales || 0).toFixed(0)} / ${(stats.cardSales || 0).toFixed(0)}`}
             color="text-emerald-600"
           />
