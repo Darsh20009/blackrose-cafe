@@ -33,7 +33,7 @@ import {
 import type { Employee, Order, Customer } from "@shared/schema";
 import SarIcon from "@/components/sar-icon";
 import { DemoDataManager } from "@/components/demo-data-manager";
-import { FlaskConical, Sparkles, Brain, Globe, Plug, Zap, Gauge } from "lucide-react";
+import { FlaskConical, Sparkles, Brain, Globe, Plug, Zap, Gauge, Code2 } from "lucide-react";
 import { useTranslate } from "@/lib/useTranslate";
 
 interface EmployeeWithStats extends Employee {
@@ -875,6 +875,25 @@ export default function ManagerDashboard() {
              <div className="text-muted-foreground text-xs mt-1">الموظفون</div>
            </div>
          </div>
+
+         {/* ── CODE QUALITY BANNER (Phase 9) ── */}
+         <button
+           onClick={() => setLocation("/manager/code-quality")}
+           data-testid="link-code-quality"
+           className="w-full group bg-gradient-to-l from-violet-950/40 to-purple-950/20 border border-violet-500/20 rounded-2xl p-4 flex items-center gap-4 hover:border-violet-500/40 transition-all mb-3"
+         >
+           <div className="w-12 h-12 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center shrink-0">
+             <Code2 className="w-6 h-6 text-violet-400" />
+           </div>
+           <div className="text-right flex-1 min-w-0">
+             <div className="flex items-center gap-2 flex-wrap">
+               <div className="text-foreground font-bold text-sm">جودة الكود</div>
+               <span className="text-[10px] bg-violet-500/20 text-violet-400 border border-violet-500/30 px-2 py-0.5 rounded-full font-medium">المرحلة 9</span>
+             </div>
+             <div className="text-muted-foreground text-xs mt-0.5">Modular · Event Bus · Typed · Result&lt;T,E&gt; · اختبارات حقيقية · مراقبة الصحة</div>
+           </div>
+           <Sparkles className="w-5 h-5 text-violet-400 group-hover:-translate-x-1 transition-transform" />
+         </button>
 
          {/* ── PERFORMANCE BANNER (Phase 8) ── */}
          <button

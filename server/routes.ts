@@ -21586,6 +21586,168 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
   });
 
   // ════════════════════════════════════════════════════════════════════════
+  //  PHASE 9 — CODE QUALITY
+  // ════════════════════════════════════════════════════════════════════════
+  app.get("/api/code-quality/stats", requireAuth, async (req: AuthRequest, res) => {
+    const role = req.employee?.role;
+    if (role !== 'owner' && role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden — owner/admin only' });
+    }
+    try {
+      const ck = cacheKey('code-quality-stats', role);
+      const cached = cache.get<any>(ck);
+      if (cached) return res.json(cached);
+
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      const { bus } = await import("./core/event-bus");
+
+      const ROOT = process.cwd();
+      const SCAN_DIRS = ["server", "client/src", "shared"];
+      const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".cache", "build", "coverage"]);
+      const FILE_EXT = /\.(ts|tsx|js|jsx)$/;
+
+      const files: { path: string; lines: number; bytes: number; todos: number; isTest: boolean }[] = [];
+      let totalLines = 0, totalBytes = 0, totalTodos = 0;
+
+      async function walk(dir: string) {
+        let entries: any[];
+        try { entries = await fs.readdir(dir, { withFileTypes: true }); }
+        catch { return; }
+        for (const e of entries) {
+          if (SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) await walk(full);
+          else if (e.isFile() && FILE_EXT.test(e.name)) {
+            try {
+              const content = await fs.readFile(full, "utf8");
+              const lines = content.split("\n").length;
+              const bytes = Buffer.byteLength(content, "utf8");
+              const todos = (content.match(/\b(TODO|FIXME|HACK|XXX)\b/g) || []).length;
+              const rel = path.relative(ROOT, full);
+              files.push({
+                path: rel,
+                lines,
+                bytes,
+                todos,
+                isTest: /\.(test|spec)\./.test(e.name) || rel.startsWith("tests/"),
+              });
+              totalLines += lines;
+              totalBytes += bytes;
+              totalTodos += todos;
+            } catch {}
+          }
+        }
+      }
+
+      await Promise.all(SCAN_DIRS.map(d => walk(path.join(ROOT, d))));
+
+      const largest = [...files].sort((a, b) => b.lines - a.lines).slice(0, 15);
+      const todoFiles = files.filter(f => f.todos > 0).sort((a, b) => b.todos - a.todos).slice(0, 15);
+      const testFiles = files.filter(f => f.isTest);
+      const oversized = files.filter(f => f.lines > 800);
+
+      // Module scoring
+      const moduleStats: Record<string, { files: number; lines: number; tests: number }> = {};
+      for (const f of files) {
+        const top = f.path.split(path.sep).slice(0, 2).join("/");
+        if (!moduleStats[top]) moduleStats[top] = { files: 0, lines: 0, tests: 0 };
+        moduleStats[top].files++;
+        moduleStats[top].lines += f.lines;
+        if (f.isTest) moduleStats[top].tests++;
+      }
+
+      // Health score (0-100). Lower is worse.
+      // -1 for each oversized file (capped at -30), -1 per 5 TODOs (cap -20), +20 if tests exist
+      const oversizedPenalty = Math.min(30, oversized.length);
+      const todoPenalty = Math.min(20, Math.floor(totalTodos / 5));
+      const testsBonus = testFiles.length > 0 ? 20 : 0;
+      const eventBonus = bus.listSubscriptions().length > 0 ? 10 : 0;
+      const healthScore = Math.max(0, Math.min(100, 70 - oversizedPenalty - todoPenalty + testsBonus + eventBonus));
+
+      const busStats = bus.getStats();
+      const subscriptions = bus.listSubscriptions();
+
+      const payload = {
+        summary: {
+          totalFiles: files.length,
+          totalLines,
+          totalBytes,
+          totalTodos,
+          testFiles: testFiles.length,
+          oversizedFiles: oversized.length,
+          avgLinesPerFile: files.length ? Math.round(totalLines / files.length) : 0,
+          healthScore,
+        },
+        largest: largest.map(f => ({ path: f.path, lines: f.lines, kb: Math.round(f.bytes / 1024) })),
+        todoFiles: todoFiles.map(f => ({ path: f.path, todos: f.todos })),
+        oversized: oversized.slice(0, 20).map(f => ({ path: f.path, lines: f.lines })),
+        modules: Object.entries(moduleStats)
+          .map(([k, v]) => ({ name: k, ...v, coverage: v.tests > 0 ? Math.round((v.tests / v.files) * 100) : 0 }))
+          .sort((a, b) => b.lines - a.lines)
+          .slice(0, 12),
+        tests: testFiles.map(f => f.path),
+        eventBus: {
+          totalEmitted: busStats.totalEmitted,
+          totalHandled: busStats.totalHandled,
+          totalErrors: busStats.totalErrors,
+          subscriptions,
+          topEvents: Object.entries(busStats.byEvent)
+            .map(([name, s]) => ({ name, ...s }))
+            .sort((a, b) => b.emitted - a.emitted)
+            .slice(0, 10),
+        },
+      };
+
+      cache.set(ck, payload, 60);
+      res.json(payload);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Run core tests on demand (owner/admin only, single-flight, 60s timeout, dev only)
+  let _testsRunning: Promise<any> | null = null;
+  app.post("/api/code-quality/run-tests", requireAuth, async (req: AuthRequest, res) => {
+    const role = req.employee?.role;
+    if (role !== 'owner' && role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden — owner/admin only' });
+    }
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(503).json({ error: 'Test runner disabled in production' });
+    }
+    if (_testsRunning) {
+      return res.status(409).json({ error: 'Tests already running — wait for current run to finish' });
+    }
+    _testsRunning = (async () => {
+      const { spawn } = await import("child_process");
+      const child = spawn("node_modules/.bin/tsx", ["tests/core.test.ts"], { cwd: process.cwd() });
+      let out = "", err = "", killed = false;
+      const timer = setTimeout(() => { killed = true; try { child.kill('SIGKILL'); } catch {} }, 60000);
+      child.stdout.on("data", (d) => { out += d.toString(); });
+      child.stderr.on("data", (d) => { err += d.toString(); });
+      const code: number = await new Promise((r) => child.on("close", r));
+      clearTimeout(timer);
+      const passMatch = out.match(/(\d+)\s+passed/);
+      const failMatch = out.match(/(\d+)\s+failed/);
+      return {
+        exitCode: code,
+        timeout: killed,
+        passed: passMatch ? parseInt(passMatch[1]) : 0,
+        failed: failMatch ? parseInt(failMatch[1]) : 0,
+        ok: code === 0 && !killed,
+        output: (out + (err ? "\n[stderr]\n" + err : "")).slice(-4000),
+      };
+    })();
+    try {
+      const result = await _testsRunning;
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    } finally {
+      _testsRunning = null;
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
   //  PUBLIC OPEN API v1  (Authentication: Bearer qrx_live_... or qrx_test_...)
   // ════════════════════════════════════════════════════════════════════════
 
