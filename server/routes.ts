@@ -21480,6 +21480,112 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
   });
 
   // ════════════════════════════════════════════════════════════════════════
+  //  PHASE 8 — PERFORMANCE MONITORING
+  // ════════════════════════════════════════════════════════════════════════
+
+  app.get("/api/performance/stats", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const role = req.employee?.role;
+      const isSuperAdmin = role === 'owner' || role === 'admin';
+      // Tenant scope: super-admins see system-wide, managers see only their tenant
+      const tScope: any = isSuperAdmin ? {} : { $or: [{ tenantId }, { tenantId: { $exists: false } }] };
+
+      // Server-side cache to absorb dashboard polling load (30s TTL)
+      const statsKey = cacheKey('perf-stats', isSuperAdmin ? 'super' : tenantId);
+      const cached = cache.get<any>(statsKey);
+      if (cached) return res.json(cached);
+
+      const { ApiMetricModel } = await import("@shared/schema");
+      const since = new Date(Date.now() - 60 * 60 * 1000); // last hour
+      const since24 = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const [overall, slowest, mostCalled, errorPaths, totals] = await Promise.all([
+        ApiMetricModel.aggregate([
+          { $match: { ...tScope, createdAt: { $gte: since } } },
+          { $group: {
+              _id: null,
+              count: { $sum: 1 },
+              avgMs: { $avg: "$durationMs" },
+              maxMs: { $max: "$durationMs" },
+              errors: { $sum: { $cond: ["$isError", 1, 0] } },
+          }},
+        ]),
+        ApiMetricModel.aggregate([
+          { $match: { ...tScope, createdAt: { $gte: since } } },
+          { $group: { _id: "$path", avgMs: { $avg: "$durationMs" }, maxMs: { $max: "$durationMs" }, count: { $sum: 1 } } },
+          { $sort: { avgMs: -1 } },
+          { $limit: 10 },
+        ]),
+        ApiMetricModel.aggregate([
+          { $match: { ...tScope, createdAt: { $gte: since } } },
+          { $group: { _id: "$path", count: { $sum: 1 }, avgMs: { $avg: "$durationMs" } } },
+          { $sort: { count: -1 } },
+          { $limit: 10 },
+        ]),
+        ApiMetricModel.aggregate([
+          { $match: { ...tScope, createdAt: { $gte: since24 }, isError: true } },
+          { $group: { _id: "$path", count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $limit: 10 },
+        ]),
+        ApiMetricModel.countDocuments({ ...tScope, createdAt: { $gte: since24 } }),
+      ]);
+
+      const o = overall[0] || { count: 0, avgMs: 0, maxMs: 0, errors: 0 };
+      const cacheStats = cache.stats();
+      const memUsage = process.memoryUsage();
+
+      const payload = {
+        lastHour: {
+          requests: o.count,
+          avgMs: Math.round(o.avgMs || 0),
+          maxMs: o.maxMs || 0,
+          errors: o.errors,
+          errorRate: o.count ? Math.round((o.errors / o.count) * 100) : 0,
+        },
+        last24h: { requests: totals },
+        slowest: slowest.map((s: any) => ({ path: s._id, avgMs: Math.round(s.avgMs), maxMs: s.maxMs, count: s.count })),
+        mostCalled: mostCalled.map((s: any) => ({ path: s._id, count: s.count, avgMs: Math.round(s.avgMs) })),
+        errorPaths: errorPaths.map((s: any) => ({ path: s._id, count: s.count })),
+        cache: {
+          size: cacheStats.size,
+          maxEntries: cacheStats.maxEntries,
+          totalHits: cacheStats.totalHits,
+          totalMisses: cacheStats.totalMisses,
+          totalSets: cacheStats.totalSets,
+          totalInvalidations: cacheStats.totalInvalidations,
+          hitRate: cacheStats.hitRate,
+          topKeys: cache.topKeys(10),
+        },
+        memory: {
+          rssMB: Math.round(memUsage.rss / 1024 / 1024),
+          heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
+          heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
+          externalMB: Math.round(memUsage.external / 1024 / 1024),
+        },
+        uptime: { seconds: Math.round(process.uptime()) },
+        scope: isSuperAdmin ? 'system' : 'tenant',
+      };
+      cache.set(statsKey, payload, 30);
+      res.json(payload);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Clear cache (manager only)
+  app.post("/api/performance/cache/clear", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const pattern = (req.body?.pattern as string) || '';
+      if (pattern) cache.invalidate(pattern);
+      else {
+        const keys = cache.stats().keys;
+        keys.forEach(k => cache.invalidateKey(k));
+      }
+      res.json({ ok: true, cleared: pattern || 'all' });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
   //  PUBLIC OPEN API v1  (Authentication: Bearer qrx_live_... or qrx_test_...)
   // ════════════════════════════════════════════════════════════════════════
 

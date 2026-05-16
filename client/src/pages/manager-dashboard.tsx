@@ -33,7 +33,7 @@ import {
 import type { Employee, Order, Customer } from "@shared/schema";
 import SarIcon from "@/components/sar-icon";
 import { DemoDataManager } from "@/components/demo-data-manager";
-import { FlaskConical, Sparkles, Brain, Globe, Plug } from "lucide-react";
+import { FlaskConical, Sparkles, Brain, Globe, Plug, Zap, Gauge } from "lucide-react";
 import { useTranslate } from "@/lib/useTranslate";
 
 interface EmployeeWithStats extends Employee {
@@ -875,6 +875,25 @@ export default function ManagerDashboard() {
              <div className="text-muted-foreground text-xs mt-1">الموظفون</div>
            </div>
          </div>
+
+         {/* ── PERFORMANCE BANNER (Phase 8) ── */}
+         <button
+           onClick={() => setLocation("/manager/performance")}
+           data-testid="link-performance-hub"
+           className="w-full group bg-gradient-to-l from-amber-950/40 to-yellow-950/20 border border-amber-500/20 rounded-2xl p-4 flex items-center gap-4 hover:border-amber-500/40 transition-all mb-3"
+         >
+           <div className="w-12 h-12 rounded-xl bg-amber-600/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+             <Zap className="w-6 h-6 text-amber-400" />
+           </div>
+           <div className="text-right flex-1 min-w-0">
+             <div className="flex items-center gap-2 flex-wrap">
+               <div className="text-foreground font-bold text-sm">الأداء الجنوني</div>
+               <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-medium">المرحلة 8</span>
+             </div>
+             <div className="text-muted-foreground text-xs mt-0.5">مراقبة الكاش · سرعة الـ APIs · الذاكرة · الأبطأ والأكثر استدعاءً</div>
+           </div>
+           <Gauge className="w-5 h-5 text-amber-400 group-hover:-translate-x-1 transition-transform" />
+         </button>
 
          {/* ── ECOSYSTEM BANNER (Phase 7) ── */}
          <button
