@@ -954,7 +954,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               });
             }
             const pointsToUse = Math.min(pointsRedeemedInBody, availPts);
-            const discountSar = parseFloat((pointsToUse / 50).toFixed(2));
+            const bizCfg = await BusinessConfigModel.findOne({ tenantId }).lean().catch(() => null);
+            const pointsPerSar = Number((bizCfg as any)?.loyalty?.pointsPerSar) || 50;
+            const discountSar = parseFloat((pointsToUse / pointsPerSar).toFixed(2));
             body.pointsRedeemed = pointsToUse;
             body.pointsValue = discountSar;
           }
@@ -1029,7 +1031,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         orderData.giftCardRemainingBalance = Number(card.balance) - deducted;
 
         // Deduct balance atomically — use findOneAndUpdate to avoid race conditions
-        await GiftCardModel.findOneAndUpdate(
+        const updatedCard = await GiftCardModel.findOneAndUpdate(
           { code: giftCardCode, status: 'active', balance: { $gte: deducted } },
           {
             $inc: { balance: -deducted },
@@ -1037,8 +1039,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               status: Number(card.balance) - deducted <= 0 ? 'used' : 'active',
               updatedAt: new Date()
             }
-          }
+          },
+          { new: true }
         );
+        if (!updatedCard) {
+          return res.status(409).json({ error: "تعذّر خصم بطاقة الهدية — قد تكون مستخدمة بالفعل", code: "GIFT_CARD_RACE" });
+        }
+        orderData.giftCardRemainingBalance = Number(updatedCard.balance);
       }
       // ─────────────────────────────────────────────────────────────────────────
 
@@ -19925,7 +19932,7 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
         reasonNote,
         unitCost,
         totalCost,
-        recordedBy: req.employee?.name || req.employee?.username || 'manager',
+        recordedBy: req.employee?.fullName || req.employee?.username || 'manager',
         recordedAt: new Date(),
       });
       // Deduct from stock
@@ -20002,7 +20009,7 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
         status: 'planned',
         plannedDate: new Date(plannedDate),
         notes,
-        producedBy: req.employee?.name || req.employee?.username || 'manager',
+        producedBy: req.employee?.fullName || req.employee?.username || 'manager',
       });
       res.status(201).json(batch);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -21836,7 +21843,7 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
         deliveryMode: orderData.deliveryMode || 'delivery',
         createdAt: new Date(),
       });
-      publishEvent("order.created", { orderId: order.id, orderNumber, source: order.source }, req.tenantId);
+      publishEvent("order.created", { orderId: order.id, orderNumber, source: (order as any).source }, req.tenantId);
       res.status(201).json({ data: order });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });

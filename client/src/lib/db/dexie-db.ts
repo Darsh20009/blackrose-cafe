@@ -68,19 +68,28 @@ export class QahwaDatabase extends Dexie {
   products!: Table<LocalProduct>;
   invoices!: Table<LocalInvoice>;
   syncQueue!: Table<SyncItem>;
-  tables!: Table<LocalTable>;
+  cafeTables!: Table<LocalTable>;
   configs!: Table<LocalConfig>;
   employees!: Table<LocalEmployee>;
 
   constructor() {
     super('QIROX_LOCAL_DB');
     this.version(3).stores({
-      products:   'id, nameAr, category, categoryId, tenantId, isAvailable, updatedAt',
-      invoices:   '++id, tempId, status, tenantId, branchId, createdAt',
+      products:    'id, nameAr, category, categoryId, tenantId, isAvailable, updatedAt',
+      invoices:    '++id, tempId, status, tenantId, branchId, createdAt',
       syncQueue:  '++id, type, status, createdAt, updatedAt',
       tables:     'id, tableNumber, status, branchId, tenantId, updatedAt',
       configs:    'id, tenantId, cachedAt',
       employees:  'id, role, branchId, tenantId, updatedAt',
+    });
+    this.version(4).stores({
+      products:    'id, nameAr, category, categoryId, tenantId, isAvailable, updatedAt',
+      invoices:    '++id, tempId, status, tenantId, branchId, createdAt',
+      syncQueue:   '++id, type, status, createdAt, updatedAt',
+      cafeTables:  'id, tableNumber, status, branchId, tenantId, updatedAt',
+      configs:     'id, tenantId, cachedAt',
+      employees:   'id, role, branchId, tenantId, updatedAt',
+      tables:      null,
     });
   }
 }

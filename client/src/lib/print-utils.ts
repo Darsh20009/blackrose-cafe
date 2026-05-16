@@ -153,6 +153,23 @@ interface KitchenOrderData {
 // ── iframe-based print queue (never touches the main page DOM during print) ──
 let _printQueue: Array<{ html: string; paperWidth: string; isFullDoc: boolean }> = [];
 let _isPrinting = false;
+let _printWatchdog: ReturnType<typeof setTimeout> | null = null;
+
+function _armPrintWatchdog() {
+  if (_printWatchdog) clearTimeout(_printWatchdog);
+  _printWatchdog = setTimeout(() => {
+    if (_isPrinting) {
+      console.warn('[Print] Watchdog: print job stuck >30s — resetting queue');
+      _isPrinting = false;
+      _printWatchdog = null;
+      if (_printQueue.length > 0) setTimeout(_drainPrintQueue, 300);
+    }
+  }, 30000);
+}
+
+function _clearPrintWatchdog() {
+  if (_printWatchdog) { clearTimeout(_printWatchdog); _printWatchdog = null; }
+}
 
 function _buildFullDoc(html: string, paperWidth: string): string {
   return `<!DOCTYPE html><html lang="ar" dir="rtl">
@@ -323,11 +340,15 @@ function _printDirectHtml(fullHtml: string, paperWidth: string): void {
 function _drainPrintQueue() {
   if (_isPrinting || _printQueue.length === 0) return;
   _isPrinting = true;
+  _armPrintWatchdog();
   const { html, paperWidth, isFullDoc } = _printQueue.shift()!;
-  _printViaImageAsync(html, paperWidth, isFullDoc).catch(() => {
-    _isPrinting = false;
-    setTimeout(_drainPrintQueue, 500);
-  });
+  _printViaImageAsync(html, paperWidth, isFullDoc)
+    .catch(() => {})
+    .finally(() => {
+      _clearPrintWatchdog();
+      _isPrinting = false;
+      if (_printQueue.length > 0) setTimeout(_drainPrintQueue, 500);
+    });
 }
 
 /**

@@ -239,7 +239,7 @@ export default function InventoryHub() {
     setPIngredients(prev => [...prev, {
       rawItemId: raw.id,
       rawItemName: raw.nameAr,
-      quantityUsed: qty,
+      quantityUsed: String(qty),
       unit: raw.unit,
       unitCost: raw.unitCost,
     }]);
@@ -262,7 +262,7 @@ export default function InventoryHub() {
     const ingredients = pIngredients.map(i => ({
       ...i,
       quantityUsed: i.quantityUsed,
-      totalCost: i.quantityUsed * i.unitCost,
+      totalCost: (parseFloat(String(i.quantityUsed)) || 0) * i.unitCost,
     }));
     createProduction.mutate({ productName: pName, quantity: parseFloat(pQty), unit: pUnit, ingredients, plannedDate: pDate, notes: pNotes });
   };
@@ -926,7 +926,7 @@ export default function InventoryHub() {
                     <span className="font-bold">{ing.rawItemName}</span>
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground">{ing.quantityUsed} {UNIT_LABELS[ing.unit] || ing.unit}</span>
-                      <span className="text-primary font-bold">{(ing.quantityUsed * ing.unitCost).toFixed(2)} {tc('ر.س', 'SAR')}</span>
+                      <span className="text-primary font-bold">{((parseFloat(String(ing.quantityUsed)) || 0) * ing.unitCost).toFixed(2)} {tc('ر.س', 'SAR')}</span>
                       <button onClick={() => setPIngredients(prev => prev.filter((_, j) => j !== i))} className="text-destructive hover:opacity-70">
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -936,7 +936,7 @@ export default function InventoryHub() {
                 <Separator className="my-1" />
                 <div className="flex justify-between text-xs font-black">
                   <span>{tc('إجمالي التكلفة', 'Total Cost')}</span>
-                  <span className="text-primary">{pIngredients.reduce((s, i) => s + i.quantityUsed * i.unitCost, 0).toFixed(2)} {tc('ر.س', 'SAR')}</span>
+                  <span className="text-primary">{pIngredients.reduce((s, i) => s + (parseFloat(String(i.quantityUsed)) || 0) * i.unitCost, 0).toFixed(2)} {tc('ر.س', 'SAR')}</span>
                 </div>
               </div>
             )}

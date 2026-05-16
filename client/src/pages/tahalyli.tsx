@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   TrendingUp, ShoppingBag, Banknote, CreditCard, Wallet,
-  BarChart3, Package, Star,
+  BarChart3, Package, Star, Receipt,
   RefreshCw, ChevronDown, ChevronUp,
   Percent, Award, Coffee, PieChart, Activity,
   ShoppingCart, Tag

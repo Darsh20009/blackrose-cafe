@@ -33,7 +33,7 @@ import {
 import type { Employee, Order, Customer } from "@shared/schema";
 import SarIcon from "@/components/sar-icon";
 import { DemoDataManager } from "@/components/demo-data-manager";
-import { FlaskConical, Sparkles, Brain, Globe, Plug, Zap, Gauge, Code2 } from "lucide-react";
+import { FlaskConical, Sparkles, Brain, Globe, Plug, Gauge, Code2 } from "lucide-react";
 import { useTranslate } from "@/lib/useTranslate";
 
 interface EmployeeWithStats extends Employee {

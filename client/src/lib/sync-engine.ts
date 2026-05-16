@@ -116,9 +116,9 @@ class SyncEngineClass {
     if (!res.ok) return;
     const tables: any[] = await res.json();
 
-    await db.transaction('rw', db.tables, async () => {
-      await db.tables.where('tenantId').equals(tenantId).delete();
-      await db.tables.bulkPut(
+    await db.transaction('rw', db.cafeTables, async () => {
+      await db.cafeTables.where('tenantId').equals(tenantId).delete();
+      await db.cafeTables.bulkPut(
         tables.map(t => ({
           id:             t.id || t._id,
           tableNumber:    t.tableNumber || t.number || '',
@@ -154,7 +154,7 @@ class SyncEngineClass {
   }
 
   async getOfflineTables(tenantId: string): Promise<LocalTable[]> {
-    return db.tables.where('tenantId').equals(tenantId).toArray();
+    return db.cafeTables.where('tenantId').equals(tenantId).toArray();
   }
 
   isCacheStale(cachedAt: number, maxAgeMs = 12 * 60 * 60 * 1000): boolean {
