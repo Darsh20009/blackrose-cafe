@@ -570,6 +570,12 @@ app.use((req, res, next) => {
   registerQiroxRoutes(app);
   const server = await registerRoutes(app);
 
+  // 404 guard for unknown /api/* paths — must come BEFORE Vite SPA fallback
+  // so unmatched API routes return JSON 404 instead of being swallowed by index.html
+  app.use("/api", (_req: Request, res: Response) => {
+    res.status(404).json({ error: "API endpoint not found" });
+  });
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
