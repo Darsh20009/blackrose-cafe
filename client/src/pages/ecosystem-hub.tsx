@@ -122,7 +122,8 @@ function ApiKeysTab() {
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", environment: "live" as "live" | "test", scopes: [] as string[] });
 
-  const { data: keys = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/ecosystem/api-keys"] });
+  const { data: keysRaw, isLoading } = useQuery<any>({ queryKey: ["/api/ecosystem/api-keys"] });
+  const keys: any[] = Array.isArray(keysRaw) ? keysRaw : [];
 
   const createMut = useMutation({
     mutationFn: async (d: any) => (await apiRequest("POST", "/api/ecosystem/api-keys", d)).json(),
@@ -251,7 +252,8 @@ function WebhooksTab() {
   const [showDeliveries, setShowDeliveries] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", url: "", events: [] as string[] });
 
-  const { data: hooks = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/ecosystem/webhooks"] });
+  const { data: hooksRaw, isLoading } = useQuery<any>({ queryKey: ["/api/ecosystem/webhooks"] });
+  const hooks: any[] = Array.isArray(hooksRaw) ? hooksRaw : [];
   const { data: catalog } = useQuery<any>({ queryKey: ["/api/ecosystem/catalog"] });
 
   const createMut = useMutation({
@@ -393,7 +395,8 @@ function IntegrationsTab() {
   const [showAdd, setShowAdd] = useState<string | null>(null);
   const [config, setConfig] = useState<Record<string, string>>({});
   const { data: catalog } = useQuery<any>({ queryKey: ["/api/ecosystem/catalog"] });
-  const { data: items = [] } = useQuery<any[]>({ queryKey: ["/api/ecosystem/integrations"] });
+  const { data: itemsRaw } = useQuery<any>({ queryKey: ["/api/ecosystem/integrations"] });
+  const items: any[] = Array.isArray(itemsRaw) ? itemsRaw : [];
 
   const createMut = useMutation({
     mutationFn: async ({ type, config }: any) => (await apiRequest("POST", "/api/ecosystem/integrations", { type, config })).json(),

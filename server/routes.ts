@@ -21483,11 +21483,14 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
   //  PUBLIC OPEN API v1  (Authentication: Bearer qrx_live_... or qrx_test_...)
   // ════════════════════════════════════════════════════════════════════════
 
+  // Tenant filter helper: limit to caller's tenant; if no tenantId, include legacy docs without tenantId
+  const tFilter = (tenantId?: string) => tenantId ? { $or: [{ tenantId }, { tenantId: { $exists: false } }] } : {};
+
   // GET /api/v1/menu — list products
   app.get("/api/v1/menu", requireApiKey("menu:read"), async (req: any, res) => {
     try {
       const { CoffeeItemModel } = await import("@shared/schema");
-      const items = await CoffeeItemModel.find({ isAvailable: true }).limit(500).lean();
+      const items = await CoffeeItemModel.find({ ...tFilter(req.tenantId), isAvailable: 1 }).limit(500).lean();
       res.json({ data: items, count: items.length });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -21496,7 +21499,7 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
   app.get("/api/v1/menu/:id", requireApiKey("menu:read"), async (req: any, res) => {
     try {
       const { CoffeeItemModel } = await import("@shared/schema");
-      const item = await CoffeeItemModel.findOne({ id: req.params.id }).lean();
+      const item = await CoffeeItemModel.findOne({ ...tFilter(req.tenantId), id: req.params.id }).lean();
       if (!item) return res.status(404).json({ error: "Not found" });
       res.json({ data: item });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -21509,7 +21512,7 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
       const limit = Math.min(parseInt(req.query.limit) || 50, 200);
       const status = req.query.status;
       const since = req.query.since ? new Date(req.query.since) : undefined;
-      const filter: any = req.tenantId ? { tenantId: req.tenantId } : {};
+      const filter: any = tFilter(req.tenantId);
       if (status) filter.status = status;
       if (since) filter.createdAt = { $gte: since };
       const orders = await OrderModel.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
@@ -21521,7 +21524,8 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
   app.get("/api/v1/orders/:id", requireApiKey("orders:read"), async (req: any, res) => {
     try {
       const { OrderModel } = await import("@shared/schema");
-      const order = await OrderModel.findOne({ $or: [{ id: req.params.id }, { orderNumber: req.params.id }] }).lean();
+      const baseFilter = tFilter(req.tenantId);
+      const order = await OrderModel.findOne({ ...baseFilter, $or: [{ id: req.params.id }, { orderNumber: req.params.id }] }).lean();
       if (!order) return res.status(404).json({ error: "Not found" });
       res.json({ data: order });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -21536,15 +21540,26 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
         return res.status(400).json({ error: "items array required" });
       }
       const orderNumber = `EXT-${Date.now().toString().slice(-6)}`;
+      // branchId is required by schema — derive from body or fall back to tenant's "main" branch
+      let branchId = orderData.branchId;
+      if (!branchId) {
+        try {
+          const { BranchModel } = await import("@shared/schema");
+          const branch: any = await BranchModel.findOne(tFilter(req.tenantId)).lean();
+          branchId = branch?.id || 'main';
+        } catch { branchId = 'main'; }
+      }
       const order = await OrderModel.create({
         id: nanoid(),
         orderNumber,
-        tenantId: req.tenantId,
+        tenantId: req.tenantId || 'demo-tenant',
+        branchId,
         items: orderData.items,
         totalAmount: orderData.totalAmount || orderData.items.reduce((s: number, i: any) => s + (i.price || 0) * (i.quantity || 1), 0),
         customerName: orderData.customerName || 'External',
         customerPhone: orderData.customerPhone || '',
         status: 'pending',
+        orderType: orderData.orderType || 'pickup',
         source: orderData.source || `api:${req.apiKey?.name || 'external'}`,
         paymentMethod: orderData.paymentMethod || 'external',
         deliveryMode: orderData.deliveryMode || 'delivery',
@@ -21561,9 +21576,9 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
       const { CustomerModel } = await import("@shared/schema");
       const limit = Math.min(parseInt(req.query.limit) || 50, 200);
       const phone = req.query.phone;
-      const filter: any = {};
+      const filter: any = tFilter(req.tenantId);
       if (phone) filter.phone = phone;
-      const customers = await CustomerModel.find(filter).limit(limit).select("-password -resetToken").lean();
+      const customers = await CustomerModel.find(filter).limit(limit).select("-password -walletPin").lean();
       res.json({ data: customers, count: customers.length });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -21572,7 +21587,7 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
   app.get("/api/v1/loyalty/cards/:phone", requireApiKey("loyalty:read"), async (req: any, res) => {
     try {
       const { LoyaltyCardModel } = await import("@shared/schema");
-      const card = await LoyaltyCardModel.findOne({ phone: req.params.phone }).lean();
+      const card = await LoyaltyCardModel.findOne({ ...tFilter(req.tenantId), phoneNumber: req.params.phone }).lean();
       if (!card) return res.status(404).json({ error: "Not found" });
       res.json({ data: card });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -21585,12 +21600,12 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
       const { points, reason } = req.body;
       if (typeof points !== 'number') return res.status(400).json({ error: "points (number) required" });
       const card = await LoyaltyCardModel.findOneAndUpdate(
-        { phone: req.params.phone },
-        { $inc: { totalPoints: points, currentPoints: points } },
+        { ...tFilter(req.tenantId), phoneNumber: req.params.phone },
+        { $inc: { points: points }, $set: { updatedAt: new Date() } },
         { new: true }
       ).lean();
       if (!card) return res.status(404).json({ error: "Card not found" });
-      publishEvent(points > 0 ? "loyalty.points_added" : "loyalty.points_redeemed", { phone: req.params.phone, points, reason, card }, req.tenantId);
+      publishEvent(points > 0 ? "loyalty.points_added" : "loyalty.points_redeemed", { phoneNumber: req.params.phone, points, reason, card }, req.tenantId);
       res.json({ data: card });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -21599,7 +21614,7 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
   app.get("/api/v1/inventory", requireApiKey("inventory:read"), async (req: any, res) => {
     try {
       const { RawItemModel } = await import("@shared/schema");
-      const items = await RawItemModel.find({ isActive: 1 }).limit(500).lean();
+      const items = await RawItemModel.find({ ...tFilter(req.tenantId), isActive: 1 }).limit(500).lean();
       res.json({ data: items, count: items.length });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -21610,7 +21625,7 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
       const { RawItemModel } = await import("@shared/schema");
       const { currentStock } = req.body;
       if (typeof currentStock !== 'number') return res.status(400).json({ error: "currentStock (number) required" });
-      const item = await RawItemModel.findOneAndUpdate({ id: req.params.id }, { $set: { currentStock, updatedAt: new Date() } }, { new: true }).lean();
+      const item = await RawItemModel.findOneAndUpdate({ ...tFilter(req.tenantId), id: req.params.id }, { $set: { currentStock, updatedAt: new Date() } }, { new: true }).lean();
       if (!item) return res.status(404).json({ error: "Not found" });
       publishEvent("inventory.updated", { rawItemId: item.id, currentStock }, req.tenantId);
       res.json({ data: item });
