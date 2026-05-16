@@ -1521,26 +1521,56 @@ export async function networkPrint(escData: Uint8Array, ip: string, port: number
 // The relay opens a raw TCP socket to the printer and forwards the bytes.
 
 /**
- * Send ESC/POS data to a LAN printer via the local relay agent.
+ * Send ESC/POS data to a LAN printer via the local relay agent (v2).
  * The relay agent runs on the same local network as the printer.
+ * Supports queued and direct print modes, vendor-specific init, and job tracking.
+ *
+ * @param escData    - Raw ESC/POS bytes
+ * @param relayUrl   - URL of the relay agent e.g. "http://192.168.1.10:8089"
+ * @param printerIp  - Printer LAN IP
+ * @param printerPort - Printer TCP port (default 9100)
+ * @param options    - Optional: vendor, jobType, direct (bypass queue)
  */
-export async function relayAgentPrint(escData: Uint8Array, relayUrl: string, printerIp: string, printerPort = 9100): Promise<PrintResult> {
+export async function relayAgentPrint(
+  escData: Uint8Array,
+  relayUrl: string,
+  printerIp: string,
+  printerPort = 9100,
+  options: { vendor?: string; jobType?: 'receipt' | 'kitchen' | 'test'; direct?: boolean } = {}
+): Promise<PrintResult> {
   try {
-    const base = relayUrl.replace(/\/+$/, '');
-    const b64  = btoa(Array.from(escData, b => String.fromCharCode(b)).join(''));
+    const base     = relayUrl.replace(/\/+$/, '');
+    const b64      = btoa(Array.from(escData, b => String.fromCharCode(b)).join(''));
+    const endpoint = options.direct ? `${base}/print/direct` : `${base}/print`;
+
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+    const timer = setTimeout(() => controller.abort(), 12_000);
+
     try {
-      const resp = await fetch(`${base}/print`, {
+      const resp = await fetch(endpoint, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ ip: printerIp, port: printerPort, data: b64 }),
-        signal:  controller.signal,
+        body:    JSON.stringify({
+          ip:      printerIp,
+          port:    printerPort,
+          data:    b64,
+          vendor:  options.vendor  || 'generic',
+          jobType: options.jobType || 'receipt',
+        }),
+        signal: controller.signal,
       });
+
       const result = await resp.json();
+
       if (!resp.ok || !result.success) {
         return { success: false, mode: 'error', error: result.error || 'فشل وكيل الطباعة المحلي' };
       }
+
+      // Queued mode: job accepted into queue (not yet printed)
+      if (result.jobId && !options.direct) {
+        console.info(`[Relay] مهمة طباعة في الطابور: ${result.jobId} (${result.queued || 1} مهمة معلقة)`);
+      }
+
       return { success: true, mode: 'network' };
     } finally {
       clearTimeout(timer);
@@ -1588,9 +1618,10 @@ export async function testRelayAgent(relayUrl: string, printerIp?: string, print
       };
     }
 
+    const wsNote = info.wsSupported ? ' | WebSocket ✅' : ' | WebSocket غير مفعّل (npm install ws)';
     return {
       connected: true,
-      message:   `✅ وكيل الطباعة يعمل (v${info.version || '?'}) على ${info.localIPs?.join(' / ') || relayUrl}`,
+      message:   `✅ وكيل الطباعة يعمل (v${info.version || '?'}) على ${info.localIPs?.join(' / ') || relayUrl}${wsNote}`,
     };
   } catch (err: any) {
     const isNetErr = err.name === 'AbortError' || err.message?.includes('fetch') || err.message?.includes('network');

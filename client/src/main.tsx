@@ -75,6 +75,10 @@ const CLIENT_RESET_VERSION = "2026-04-21-v2-logo";
 // Apply brand colors from the central brand config to CSS variables
 applyBrandColors();
 
+// Start offline sync engine (auto-sync every 15s, detects online/offline)
+import("./lib/sync-engine").then(({ SyncEngine }) => {
+  SyncEngine.startAutoSync(15_000);
+}).catch(() => {});
 
 createRoot(document.getElementById("root")!).render(<App />);
 
