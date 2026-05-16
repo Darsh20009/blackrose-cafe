@@ -1608,7 +1608,7 @@ export default function PosSystem() {
 
       <main className="flex-1 flex overflow-hidden">
 
-        <section className={`${mobilePanelView === 'products' ? 'flex' : 'hidden'} md:flex ${splitViewMode ? 'md:hidden' : ''} flex-1 flex-col overflow-hidden`}>
+        <section className={`${mobilePanelView === 'products' ? 'flex' : 'hidden'} md:flex flex-1 flex-col overflow-hidden`}>
           {/* Category Top Bar */}
           <div className={`${mobilePanelView === 'cart' ? 'hidden' : ''} flex gap-1 overflow-x-auto border-b bg-muted/30 px-2 py-2 shrink-0 no-scrollbar`}>
             <Button
@@ -1802,9 +1802,6 @@ export default function PosSystem() {
                   <Merge className="w-4 h-4" />
                 </Button>
               )}
-              <Button variant="ghost" size="icon" className="hidden md:flex" onClick={() => setSplitViewMode(!splitViewMode)} data-testid="button-split-view">
-                <Columns2 className="w-4 h-4" />
-              </Button>
               {orderItems.length > 0 && (
                 <Button variant="ghost" size="icon" onClick={() => { setOrderItems([]); setSplitCashAmount(""); setItemDiscounts({}); broadcastToDisplay("order_cancelled", { items: [], subtotal: 0, tax: 0, total: 0 }); }} className="text-destructive h-8 w-8" data-testid="button-clear-order">
                   <Trash2 className="w-4 h-4" />
