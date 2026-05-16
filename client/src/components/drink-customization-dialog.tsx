@@ -334,7 +334,7 @@ export default function DrinkCustomizationDialog({
             <Loader2 className="w-6 h-6 animate-spin" />
           </div>
         ) : (
-          <ScrollArea className="flex-1 min-h-0" style={{maxHeight:'calc(92vh - 160px)'}}>
+          <ScrollArea className="h-[60vh] max-h-[60vh] pr-2">
             <div className="space-y-4 p-1">
               {variants.length > 1 && (
                 <div className="space-y-2">
