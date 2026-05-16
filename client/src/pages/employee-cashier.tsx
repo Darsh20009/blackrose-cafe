@@ -26,6 +26,7 @@ import { printTaxInvoice, printCustomerPickupReceipt, printCashierReceipt, print
 import type { Employee, CoffeeItem, PaymentMethod, LoyaltyCard } from "@shared/schema";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import PrinterSettingsPanel from "@/components/printer-settings-panel";
+import { ShiftSummaryWidget } from "@/components/shift-summary-widget";
 
 interface OrderItem {
  coffeeItem: CoffeeItem;
@@ -952,6 +953,7 @@ export default function EmployeeCashier() {
  return (
  <div className="min-h-screen bg-gray-50 p-4 pb-20 sm:pb-4">
  <div className="max-w-7xl mx-auto">
+ <ShiftSummaryWidget />
  <div className="flex items-center justify-between mb-6">
  <div className="flex items-center gap-3">
  <div className="w-12 h-12 flex-shrink-0">

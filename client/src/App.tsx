@@ -17,6 +17,8 @@ import { GlobalPrompts } from "@/components/global-prompts";
 import { PWAInstallBanner } from "@/components/pwa-install";
 import { OfflineIndicator } from "@/components/offline-indicator";
 import { CustomerNotificationListener } from "@/components/customer-notification-listener";
+import { GlobalCommandPalette } from "@/components/global-command-palette";
+import { QuickActionBar } from "@/components/quick-action-bar";
 import { useProximityNotify } from "@/hooks/useProximityNotify";
 
 const CartModal = lazy(() => import("@/components/cart-modal"));
@@ -460,6 +462,8 @@ function App() {
                   <AppContent />
                 </WouterRouter>
                 <GlobalPrompts />
+                <GlobalCommandPalette />
+                <QuickActionBar />
                 <PWAUpdateNotifier />
                 <PWAInstallBanner />
                 <OfflineIndicator />
