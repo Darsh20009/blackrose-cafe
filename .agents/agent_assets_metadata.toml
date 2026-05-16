@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "4CAyNicdwpeyxZvRPgxoP"
+uri = "file://SYSTEM_HEALTH_REPORT.md"
+type = "text"
+title = "تقرير صحة النظام الشامل — BLACK ROSE CAFE"
