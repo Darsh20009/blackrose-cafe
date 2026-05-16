@@ -1,774 +1,1245 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { useParams } from "wouter";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useLocation, useRoute } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Badge } from "@/components/ui/badge";
+import {
+  ChevronLeft, ChevronRight, ShoppingCart, Plus, Minus, X, Search,
+  Store, ShoppingBag, Globe, CreditCard, Banknote, CheckCircle2, Loader2,
+  Star, Sparkles, ArrowRight, User, Phone, Coffee, Trash2, Receipt,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import {
-  ShoppingCart, Plus, Minus, Trash2, CheckCircle, Coffee, ChevronRight, X,
-  Loader2, CreditCard, Banknote, Wallet, Sparkles, ArrowLeft, ArrowRight, Globe, Clock,
-} from "lucide-react";
-import { useTranslate } from "@/lib/useTranslate";
-import { useTranslation } from "react-i18next";
-import { printTaxInvoice } from "@/lib/print-utils";
 import { brand } from "@/lib/brand";
+import i18n from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
+import bannerImage1 from "@assets/blackrose-banner-1.png";
+import bannerImage2 from "@assets/blackrose-banner-2.png";
+import SarIcon from "@/components/sar-icon";
 
-interface SizeOption { nameAr: string; nameEn?: string; price: number; }
-interface MenuItem {
-  _id: string; id: string; nameAr: string; nameEn: string; price: number;
-  imageUrl?: string; category?: string; isAvailable?: boolean;
-  availableSizes?: SizeOption[]; descriptionAr?: string; descriptionEn?: string;
-}
-interface MenuCategory { id: string; nameAr: string; nameEn?: string; imageUrl?: string; }
-interface CartItem {
-  item: MenuItem; quantity: number; selectedSize?: string; effectivePrice: number;
-}
-type PaymentChoice = "counter" | "online" | "external_pos";
-type Step = "menu" | "cart" | "info" | "payment" | "processing" | "success";
+type Step = "splash" | "language" | "location" | "menu" | "cart" | "payment" | "processing" | "success";
+type Location = "dine_in" | "takeaway";
+type PaymentChoice = "online" | "counter_cash";
 
-function SarIcon({ className = "" }: { className?: string }) {
-  return <span className={`font-arabic font-bold ${className}`}>ر.س</span>;
+interface KioskItem {
+  id: string;
+  nameAr: string;
+  nameEn?: string;
+  descriptionAr?: string;
+  descriptionEn?: string;
+  price: number;
+  category: string;
+  image?: string;
+  isAvailable?: boolean;
+  isBestSeller?: boolean;
+  rating?: number;
+  isReservation?: boolean;
 }
-function cartKey(item: MenuItem, size?: string): string {
-  return `${item._id || item.id}::${size || "__no_size__"}`;
+
+interface KioskCategory {
+  id: string;
+  nameAr: string;
+  nameEn?: string;
+  icon?: string;
+  order?: number;
 }
-const ALL_CATEGORY = "__all__";
-const IDLE_MS = 180000; // 3 min
+
+interface KioskCartItem {
+  itemId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  image?: string;
+}
+
+const VAT_RATE = 0.15;
 
 export default function KioskPage() {
+  const [, setLocation] = useLocation();
+  const [, params] = useRoute("/kiosk/:branchId");
+  const branchId = params?.branchId;
+  const { i18n: i18nHook } = useTranslation();
   const { toast } = useToast();
-  const tc = useTranslate();
-  const { i18n } = useTranslation();
-  const isEn = i18n.language === "en";
-  const isRtl = !isEn;
-  const params = useParams<{ branchId?: string }>();
-  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ── State ────────────────────────────────────────────────────────────────────
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORY);
-  const [step, setStep] = useState<Step>("menu");
-  const [orderNumber, setOrderNumber] = useState("");
-  const [orderId, setOrderId] = useState("");
+  // ───── State ─────
+  const [step, setStep] = useState<Step>("splash");
+  const [lang, setLang] = useState<"ar" | "en">(i18nHook.language === "en" ? "en" : "ar");
+  const [diningLocation, setDiningLocation] = useState<Location | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [cart, setCart] = useState<KioskCartItem[]>([]);
+  const [showCart, setShowCart] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [orderType, setOrderType] = useState<"dine-in" | "takeaway">("dine-in");
-  const [paymentChoice, setPaymentChoice] = useState<PaymentChoice>("counter");
-  const [sizeDialogItem, setSizeDialogItem] = useState<MenuItem | null>(null);
-  const [showWelcome, setShowWelcome] = useState(true);
+  const [paymentChoice, setPaymentChoice] = useState<PaymentChoice | null>(null);
+  const [orderResult, setOrderResult] = useState<any>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  // ── Data ─────────────────────────────────────────────────────────────────────
-  const { data: menuItems = [], isLoading: menuLoading } = useQuery<MenuItem[]>({
-    queryKey: ["/api/coffee-items"],
-  });
-  const { data: menuCategories = [] } = useQuery<MenuCategory[]>({
-    queryKey: ["/api/menu-categories"],
-  });
-  const { data: branches = [] } = useQuery<any[]>({ queryKey: ["/api/branches"] });
-  const { data: paymentMethods = [] } = useQuery<any[]>({ queryKey: ["/api/payment-methods"] });
+  const isAr = lang === "ar";
+  const dir = isAr ? "rtl" : "ltr";
+  const t = (ar: string, en: string) => (isAr ? ar : en);
 
-  const selectedBranch = useMemo(() => {
-    const list = branches as any[];
-    if (params.branchId) {
-      const m = list.find(b => (b.id === params.branchId) || (b._id === params.branchId));
-      if (m) return m;
-    }
-    return list[0];
-  }, [branches, params.branchId]);
-
-  const categoryNameMap = Object.fromEntries(
-    (menuCategories as MenuCategory[]).map(c => [c.id, isEn ? (c.nameEn || c.nameAr) : c.nameAr])
-  );
-  const availableItems = (menuItems as MenuItem[]).filter(
-    i => i.isAvailable !== false && (i as any).availabilityStatus !== "out_of_stock"
-  );
-  const categoryIds = Array.from(new Set(availableItems.map(i => i.category).filter(Boolean))) as string[];
-
-  const cartCount = cart.reduce((s, c) => s + c.quantity, 0);
-  const cartTotal = cart.reduce((s, c) => s + c.effectivePrice * c.quantity, 0);
-  const vat = cartTotal - cartTotal / 1.15;
-
-  // Detect available gateways for "online" option
-  const hasOnlineGateway = (paymentMethods as any[]).some(
-    m => m.gateway === "geidea" || m.gateway === "paymob" || m.id === "stc_pay"
-  );
-
-  // ── Idle reset ───────────────────────────────────────────────────────────────
-  const resetIdle = () => {
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => {
-      if (step !== "success" && step !== "processing") fullReset();
-    }, IDLE_MS);
-  };
+  // Apply language to i18n + html dir whenever kiosk language changes
   useEffect(() => {
+    if (i18nHook.language !== lang) i18nHook.changeLanguage(lang);
+    document.documentElement.dir = dir;
+    document.documentElement.lang = lang;
+  }, [lang]);
+
+  // Idle reset: any time the user is inactive for 3 minutes on a non-splash screen, return to splash
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const resetIdle = () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      if (step !== "splash" && step !== "processing" && step !== "success") {
+        idleTimerRef.current = setTimeout(() => resetSession(), 3 * 60 * 1000);
+      }
+    };
+    const events = ["mousedown", "touchstart", "keydown", "scroll"];
+    events.forEach((e) => window.addEventListener(e, resetIdle, { passive: true }));
     resetIdle();
-    return () => { if (idleTimerRef.current) clearTimeout(idleTimerRef.current); };
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, resetIdle));
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
   }, [step]);
 
-  const fullReset = () => {
-    setCart([]); setStep("menu"); setSizeDialogItem(null);
-    setCustomerName(""); setCustomerPhone(""); setOrderType("dine-in");
-    setPaymentChoice("counter"); setSelectedCategory(ALL_CATEGORY);
-    setShowWelcome(true);
+  // Auto-go to success page → splash after 30s
+  useEffect(() => {
+    if (step === "success") {
+      const t = setTimeout(() => resetSession(), 30 * 1000);
+      return () => clearTimeout(t);
+    }
+  }, [step]);
+
+  const resetSession = () => {
+    setStep("splash");
+    setDiningLocation(null);
+    setActiveCategory("all");
+    setSearch("");
+    setCart([]);
+    setShowCart(false);
+    setCustomerName("");
+    setCustomerPhone("");
+    setPaymentChoice(null);
+    setOrderResult(null);
   };
 
-  // ── Cart helpers ─────────────────────────────────────────────────────────────
-  const addToCart = (item: MenuItem, size?: string) => {
-    resetIdle();
-    const price = size
-      ? (item.availableSizes?.find(s => s.nameAr === size)?.price ?? item.price)
-      : item.price;
-    const key = cartKey(item, size);
-    setCart(prev => {
-      const existing = prev.find(c => cartKey(c.item, c.selectedSize) === key);
-      if (existing) return prev.map(c => cartKey(c.item, c.selectedSize) === key ? { ...c, quantity: c.quantity + 1 } : c);
-      return [...prev, { item, quantity: 1, selectedSize: size, effectivePrice: price }];
-    });
-    setSizeDialogItem(null);
-  };
-  const decreaseCart = (key: string) => {
-    resetIdle();
-    setCart(prev => {
-      const existing = prev.find(c => cartKey(c.item, c.selectedSize) === key);
-      if (!existing || existing.quantity <= 1) return prev.filter(c => cartKey(c.item, c.selectedSize) !== key);
-      return prev.map(c => cartKey(c.item, c.selectedSize) === key ? { ...c, quantity: c.quantity - 1 } : c);
-    });
-  };
-  const increaseCart = (key: string) =>
-    setCart(prev => prev.map(c => cartKey(c.item, c.selectedSize) === key ? { ...c, quantity: c.quantity + 1 } : c));
-
-  const handleItemClick = (item: MenuItem) => {
-    resetIdle();
-    if (item.availableSizes && item.availableSizes.length > 0) setSizeDialogItem(item);
-    else addToCart(item);
-  };
-
-  // ── Place order ──────────────────────────────────────────────────────────────
-  const placeOrder = async (paymentMethod: string, paymentStatus: "pending" | "paid" | "awaiting_external" = "pending") => {
-    const branchId = selectedBranch?.id || selectedBranch?._id || "default";
-    const res = await apiRequest("POST", "/api/orders", {
-      customerName: customerName || tc("زبون الكشك", "Kiosk Customer"),
-      customerPhone: customerPhone || undefined,
-      items: cart.map(c => ({
-        coffeeItemId: c.item._id || c.item.id,
-        quantity: c.quantity,
-        price: c.effectivePrice,
-        nameAr: c.item.nameAr,
-        nameEn: c.item.nameEn,
-        selectedSize: c.selectedSize,
-      })),
-      totalAmount: cartTotal,
-      paymentMethod,
-      paymentStatus,
-      status: paymentStatus === "awaiting_external" ? "pending_payment" : "pending",
-      channel: "kiosk",
-      orderType,
-      branchId,
-    });
-    if (!res.ok) throw new Error("order_failed");
-    return res.json();
-  };
-
-  const placeOrderMutation = useMutation({
-    mutationFn: async () => {
-      setStep("processing");
-      // 1) Cash / pay at counter — direct order
-      if (paymentChoice === "counter") {
-        return await placeOrder("cash", "pending");
-      }
-      // 2) External POS terminal — order held until cashier confirms
-      if (paymentChoice === "external_pos") {
-        return await placeOrder("external_pos", "awaiting_external");
-      }
-      // 3) Online gateway (Geidea/PayMob) — initialize payment
-      const order = await placeOrder("online", "pending");
-      const payRes = await apiRequest("POST", "/api/payments/init", {
-        amount: cartTotal,
-        orderId: order.id || order._id,
-        customerName: customerName || undefined,
-        customerPhone: customerPhone || undefined,
-        returnUrl: `${window.location.origin}/kiosk?paid=${order.id || order._id}`,
-      });
-      const payData = await payRes.json();
-      if (payData.redirectUrl) {
-        window.location.href = payData.redirectUrl;
-        return order;
-      }
-      if (!payRes.ok) throw new Error(payData.error || "payment_init_failed");
-      return order;
-    },
-    onSuccess: async (data) => {
-      const num = data.dailyNumber || data.orderNumber || data._id?.slice(-4) || "0000";
-      const id = data.id || data._id || "";
-      setOrderNumber(String(num));
-      setOrderId(String(id));
-
-      try {
-        await printTaxInvoice({
-          orderNumber: String(num),
-          customerName: customerName || tc("زبون الكشك", "Kiosk Customer"),
-          customerPhone: customerPhone || "",
-          items: cart.map(c => ({
-            coffeeItem: { nameAr: c.item.nameAr, nameEn: c.item.nameEn, price: String(c.effectivePrice) },
-            quantity: c.quantity,
-            selectedSize: c.selectedSize,
-          })),
-          subtotal: (cartTotal / 1.15).toFixed(2),
-          total: cartTotal.toFixed(2),
-          paymentMethod:
-            paymentChoice === "counter" ? tc("الدفع عند الاستلام", "Pay at counter") :
-            paymentChoice === "external_pos" ? tc("نقطة بيع — بطاقة", "External POS — Card") :
-            tc("دفع إلكتروني", "Online"),
-          employeeName: tc("الكشك", "Kiosk"),
-          date: new Date().toISOString(),
-        }, { autoPrint: true });
-      } catch (e) { console.warn("[Kiosk] Print failed:", e); }
-
-      setStep("success");
-      setTimeout(() => fullReset(), 12000);
-    },
-    onError: (err: any) => {
-      toast({
-        variant: "destructive",
-        title: tc("خطأ", "Error"),
-        description: err?.message === "payment_init_failed"
-          ? tc("تعذّر بدء الدفع الإلكتروني. حاول مجدداً أو اختر طريقة أخرى.", "Online payment failed. Try again or choose another method.")
-          : tc("تعذّر إرسال الطلب. حاول مجدداً.", "Failed to place order. Please try again."),
-      });
-      setStep("payment");
-    },
+  // ───── Data ─────
+  const { data: itemsRaw = [], isLoading: itemsLoading } = useQuery<KioskItem[]>({
+    queryKey: ["/api/coffee-items"],
+    staleTime: 60_000,
   });
 
-  // ── Welcome screen ───────────────────────────────────────────────────────────
-  if (showWelcome) {
-    return (
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-        className="h-screen w-screen bg-gradient-to-br from-primary via-primary/90 to-emerald-700 flex flex-col items-center justify-center text-white p-8 cursor-pointer overflow-hidden relative"
-        onClick={() => { setShowWelcome(false); resetIdle(); }}
-        dir={isRtl ? "rtl" : "ltr"}
-        data-testid="kiosk-welcome"
-      >
-        <div className="absolute inset-0 opacity-10">
-          {Array.from({ length: 20 }).map((_, i) => (
-            <motion.div
-              key={i}
-              className="absolute rounded-full bg-white"
-              style={{ width: 40 + (i % 4) * 30, height: 40 + (i % 4) * 30, left: `${(i * 53) % 100}%`, top: `${(i * 37) % 100}%` }}
-              animate={{ y: [0, -20, 0], opacity: [0.3, 0.6, 0.3] }}
-              transition={{ duration: 4 + (i % 3), repeat: Infinity, delay: i * 0.2 }}
-            />
-          ))}
-        </div>
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.2, type: "spring" }}
-          className="relative z-10 flex flex-col items-center"
-        >
-          <div className="w-32 h-32 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-8 border-4 border-white/30">
-            <Coffee className="w-16 h-16 text-white" />
-          </div>
-          <h1 className="text-6xl md:text-7xl font-black mb-4 text-center" data-testid="text-kiosk-welcome-title">
-            {tc(brand.nameAr, brand.nameEn)}
-          </h1>
-          <p className="text-2xl md:text-3xl font-bold mb-2 text-white/90">
-            {tc("اطلب بنفسك", "Order Yourself")}
-          </p>
-          <p className="text-lg text-white/70 mb-12 text-center max-w-md">
-            {tc("تجربة طلب سريعة، سهلة، وبدون انتظار", "Fast, easy, and contactless ordering experience")}
-          </p>
-          <motion.div
-            animate={{ y: [0, -8, 0] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="bg-white text-primary rounded-full px-10 py-5 text-2xl font-black flex items-center gap-3 shadow-2xl"
-          >
-            <Sparkles className="w-6 h-6" />
-            {tc("اضغط للبدء", "Tap to Start")}
-            {isRtl ? <ArrowLeft className="w-6 h-6" /> : <ArrowRight className="w-6 h-6" />}
-          </motion.div>
-          {selectedBranch && (
-            <p className="text-sm text-white/60 mt-8" data-testid="text-kiosk-branch">
-              📍 {isEn ? (selectedBranch.nameEn || selectedBranch.nameAr) : selectedBranch.nameAr}
-            </p>
-          )}
-        </motion.div>
-      </motion.div>
-    );
-  }
+  const { data: categoriesRaw = [] } = useQuery<KioskCategory[]>({
+    queryKey: ["/api/menu-categories"],
+    staleTime: 60_000,
+  });
 
-  // ── Success screen ───────────────────────────────────────────────────────────
-  if (step === "success") {
-    return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-        className="h-screen bg-gradient-to-br from-emerald-500 via-primary to-emerald-700 flex flex-col items-center justify-center text-white text-center p-8 overflow-hidden relative"
-        dir={isRtl ? "rtl" : "ltr"}
-        data-testid="kiosk-success"
-      >
-        <motion.div
-          initial={{ scale: 0 }} animate={{ scale: 1 }}
-          transition={{ type: "spring", delay: 0.1 }}
-          className="w-40 h-40 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-8 border-4 border-white"
-        >
-          <CheckCircle className="w-24 h-24 text-white" />
-        </motion.div>
-        <h1 className="text-5xl md:text-6xl font-black mb-4">{tc("شكراً لطلبك!", "Thank you!")}</h1>
-        <p className="text-2xl mb-2 text-white/90">{tc("رقم طلبك", "Your order number")}</p>
-        <motion.div
-          initial={{ scale: 0.5 }} animate={{ scale: 1 }}
-          transition={{ delay: 0.3, type: "spring" }}
-          className="text-8xl md:text-9xl font-black bg-white text-primary rounded-3xl px-12 py-6 mb-8 shadow-2xl"
-          data-testid="text-kiosk-order-number"
-        >
-          #{orderNumber}
-        </motion.div>
-        {paymentChoice === "external_pos" && (
-          <p className="text-xl text-white/90 mb-3 bg-amber-500/30 px-6 py-3 rounded-2xl border border-white/30">
-            💳 {tc("توجّه للكاشير لإتمام الدفع بالبطاقة", "Please go to cashier to complete card payment")}
-          </p>
-        )}
-        {paymentChoice === "counter" && (
-          <p className="text-xl text-white/90 mb-3">
-            💵 {tc("الدفع عند الاستلام", "Pay at the counter when ready")}
-          </p>
-        )}
-        {paymentChoice === "online" && (
-          <p className="text-xl text-white/90 mb-3">
-            ✅ {tc("تم استلام دفعتك", "Your payment was received")}
-          </p>
-        )}
-        <p className="text-lg text-white/70 mt-4">{tc("ستظهر الشاشة الرئيسية خلال ثوانٍ...", "Returning to home in a few seconds...")}</p>
-      </motion.div>
-    );
-  }
-
-  // ── Processing screen ────────────────────────────────────────────────────────
-  if (step === "processing") {
-    return (
-      <div className="h-screen bg-background flex flex-col items-center justify-center text-foreground p-8" dir={isRtl ? "rtl" : "ltr"} data-testid="kiosk-processing">
-        <Loader2 className="w-20 h-20 text-primary animate-spin mb-6" />
-        <h2 className="text-3xl font-black mb-2">{tc("جارٍ معالجة طلبك...", "Processing your order...")}</h2>
-        <p className="text-muted-foreground text-lg">{tc("لحظات قليلة من فضلك", "Just a moment, please")}</p>
-      </div>
-    );
-  }
-
-  // ── Main shell ───────────────────────────────────────────────────────────────
-  const filteredItems = availableItems.filter(
-    i => selectedCategory === ALL_CATEGORY || i.category === selectedCategory
+  const items = useMemo(
+    () => itemsRaw.filter((i) => i.isAvailable !== false && !i.isReservation),
+    [itemsRaw]
   );
 
+  const categories = useMemo(() => {
+    const sorted = [...categoriesRaw].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    return sorted;
+  }, [categoriesRaw]);
+
+  const bestSellers = useMemo(
+    () => items.filter((i) => i.isBestSeller).slice(0, 8),
+    [items]
+  );
+
+  const filteredItems = useMemo(() => {
+    let arr = items;
+    if (activeCategory !== "all" && activeCategory !== "best") {
+      arr = arr.filter((i) => i.category === activeCategory);
+    } else if (activeCategory === "best") {
+      arr = arr.filter((i) => i.isBestSeller);
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      arr = arr.filter(
+        (i) =>
+          i.nameAr.toLowerCase().includes(q) ||
+          (i.nameEn || "").toLowerCase().includes(q)
+      );
+    }
+    return arr;
+  }, [items, activeCategory, search]);
+
+  // ───── Cart helpers ─────
+  const cartCount = cart.reduce((s, c) => s + c.quantity, 0);
+  const cartSubtotal = cart.reduce((s, c) => s + c.price * c.quantity, 0);
+  const cartTax = cartSubtotal - cartSubtotal / (1 + VAT_RATE);
+  const cartTotal = cartSubtotal;
+
+  const addToCart = (item: KioskItem) => {
+    setCart((prev) => {
+      const existing = prev.find((c) => c.itemId === item.id);
+      if (existing) {
+        return prev.map((c) =>
+          c.itemId === item.id ? { ...c, quantity: c.quantity + 1 } : c
+        );
+      }
+      return [
+        ...prev,
+        {
+          itemId: item.id,
+          name: isAr ? item.nameAr : item.nameEn || item.nameAr,
+          price: Number(item.price) || 0,
+          quantity: 1,
+          image: item.image,
+        },
+      ];
+    });
+    toast({
+      title: t("تمت الإضافة ✓", "Added to cart ✓"),
+      description: isAr ? item.nameAr : item.nameEn || item.nameAr,
+      duration: 1500,
+    });
+  };
+
+  const updateQty = (id: string, delta: number) => {
+    setCart((prev) =>
+      prev
+        .map((c) => (c.itemId === id ? { ...c, quantity: c.quantity + delta } : c))
+        .filter((c) => c.quantity > 0)
+    );
+  };
+
+  const removeItem = (id: string) => setCart((prev) => prev.filter((c) => c.itemId !== id));
+
+  // ───── Order submission ─────
+  const validatePhone = (p: string) => /^(05\d{8}|5\d{8}|9665\d{8}|\+9665\d{8})$/.test(p.replace(/\s/g, ""));
+
+  const submitOrder = async () => {
+    if (!paymentChoice) return;
+    if (!customerName.trim() || !validatePhone(customerPhone)) {
+      toast({
+        title: t("معلومات ناقصة", "Missing info"),
+        description: t("الاسم ورقم الجوال مطلوبان", "Name and phone are required"),
+        variant: "destructive",
+      });
+      return;
+    }
+    setSubmitting(true);
+    setStep("processing");
+
+    try {
+      const orderItems = cart.map((c) => ({
+        coffeeItemId: c.itemId,
+        productId: c.itemId,
+        name: c.name,
+        nameAr: c.name,
+        quantity: c.quantity,
+        unitPrice: c.price,
+        price: c.price,
+        totalPrice: c.price * c.quantity,
+      }));
+
+      const paymentMethod = paymentChoice === "counter_cash" ? "cash" : "card";
+
+      const orderBody: any = {
+        items: orderItems,
+        customerInfo: {
+          customerName: customerName.trim(),
+          customerPhone: customerPhone.trim(),
+        },
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        totalAmount: cartTotal,
+        subtotal: cartTotal / (1 + VAT_RATE),
+        tax: cartTax,
+        paymentMethod,
+        orderType: diningLocation === "dine_in" ? "dine_in" : "takeaway",
+        deliveryType: diningLocation === "dine_in" ? "dine_in" : "pickup",
+        channel: "pos",
+        source: "kiosk",
+        status: paymentChoice === "counter_cash" ? "pending" : "pending",
+        notes: t("طلب عبر الكيوسك الذاتي", "Self-order kiosk"),
+        ...(branchId ? { branchId } : {}),
+      };
+
+      const orderRes = await apiRequest("POST", "/api/orders", orderBody);
+      const order = await orderRes.json();
+
+      if (!order?.id && !order?._id) {
+        throw new Error(order?.error || "Order creation failed");
+      }
+      const orderId = order.id || order._id;
+      const orderNumber = order.orderNumber || order.id;
+
+      // ── Online payment via PayMob/Geidea ──
+      if (paymentChoice === "online") {
+        const returnUrl = `${window.location.origin}/kiosk?paid=1&order=${orderId}`;
+        const payRes = await apiRequest("POST", "/api/payments/init", {
+          amount: cartTotal,
+          orderId,
+          customerName: customerName.trim(),
+          customerPhone: customerPhone.trim(),
+          returnUrl,
+        });
+        const pay = await payRes.json();
+        if (pay?.redirectUrl || pay?.paymentUrl) {
+          // Redirect to gateway. After payment, return URL handles confirmation.
+          window.location.href = pay.redirectUrl || pay.paymentUrl;
+          return;
+        } else {
+          throw new Error(pay?.error || t("تعذّر إنشاء رابط الدفع", "Failed to create payment link"));
+        }
+      }
+
+      // ── Cash at cashier path ──
+      setOrderResult({ orderId, orderNumber, total: cartTotal });
+      setStep("success");
+    } catch (err: any) {
+      console.error("[Kiosk] submitOrder error:", err);
+      toast({
+        title: t("فشل إنشاء الطلب", "Order failed"),
+        description: err?.message || t("حاول مرة أخرى", "Please try again"),
+        variant: "destructive",
+      });
+      setStep("payment");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ───── UI ─────
   return (
-    <div
-      className="h-screen bg-gradient-to-b from-muted/30 to-background flex flex-col overflow-hidden"
-      onClick={resetIdle}
-      data-testid="kiosk-page"
-      dir={isRtl ? "rtl" : "ltr"}
+    <div dir={dir} className="min-h-screen bg-white text-foreground font-ibm-arabic select-none">
+      <AnimatePresence mode="wait">
+        {step === "splash" && <SplashScreen key="splash" onStart={() => setStep("language")} t={t} />}
+        {step === "language" && (
+          <LanguageScreen
+            key="language"
+            current={lang}
+            onPick={(l) => {
+              setLang(l);
+              setStep("location");
+            }}
+            onBack={() => setStep("splash")}
+            t={t}
+          />
+        )}
+        {step === "location" && (
+          <LocationScreen
+            key="location"
+            onPick={(loc) => {
+              setDiningLocation(loc);
+              setStep("menu");
+            }}
+            onBack={() => setStep("language")}
+            t={t}
+          />
+        )}
+        {step === "menu" && (
+          <MenuScreen
+            key="menu"
+            t={t}
+            isAr={isAr}
+            items={filteredItems}
+            allItems={items}
+            bestSellers={bestSellers}
+            categories={categories}
+            activeCategory={activeCategory}
+            setActiveCategory={setActiveCategory}
+            search={search}
+            setSearch={setSearch}
+            loading={itemsLoading}
+            onAdd={addToCart}
+            cartCount={cartCount}
+            cartTotal={cartTotal}
+            onOpenCart={() => setStep("cart")}
+            onBack={() => setStep("location")}
+            diningLocation={diningLocation}
+          />
+        )}
+        {step === "cart" && (
+          <CartScreen
+            key="cart"
+            t={t}
+            cart={cart}
+            updateQty={updateQty}
+            removeItem={removeItem}
+            subtotal={cartSubtotal}
+            tax={cartTax}
+            total={cartTotal}
+            customerName={customerName}
+            setCustomerName={setCustomerName}
+            customerPhone={customerPhone}
+            setCustomerPhone={setCustomerPhone}
+            onContinue={() => {
+              if (!customerName.trim() || !validatePhone(customerPhone)) {
+                toast({
+                  title: t("معلومات ناقصة", "Missing info"),
+                  description: t("الاسم ورقم جوال صحيح مطلوبان", "Valid name and phone required"),
+                  variant: "destructive",
+                });
+                return;
+              }
+              setStep("payment");
+            }}
+            onBack={() => setStep("menu")}
+            diningLocation={diningLocation}
+          />
+        )}
+        {step === "payment" && (
+          <PaymentScreen
+            key="payment"
+            t={t}
+            choice={paymentChoice}
+            setChoice={setPaymentChoice}
+            total={cartTotal}
+            onConfirm={submitOrder}
+            onBack={() => setStep("cart")}
+            submitting={submitting}
+          />
+        )}
+        {step === "processing" && <ProcessingScreen key="processing" t={t} />}
+        {step === "success" && (
+          <SuccessScreen
+            key="success"
+            t={t}
+            order={orderResult}
+            paymentChoice={paymentChoice}
+            onNew={resetSession}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//                          SPLASH SCREEN
+// ═══════════════════════════════════════════════════════════════════
+function SplashScreen({ onStart, t }: { onStart: () => void; t: (ar: string, en: string) => string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="min-h-screen relative flex flex-col"
+      data-testid="kiosk-splash"
     >
-      {/* === Premium Hero Header === */}
-      <div className="bg-gradient-to-r from-primary via-primary/95 to-emerald-700 text-white shrink-0 shadow-xl">
-        <div className="px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center border-2 border-white/30">
-              <Coffee className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-xl md:text-2xl font-black leading-tight">{tc(brand.nameAr, brand.nameEn)}</h1>
-              <p className="text-xs text-white/80">{tc("نظام الطلب الذاتي", "Self-Order Kiosk")}</p>
-            </div>
+      {/* Background */}
+      <div className="absolute inset-0 z-0">
+        <img src={bannerImage1} alt="" className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/85" />
+      </div>
+
+      {/* Glow accents */}
+      <div className="absolute inset-0 z-10 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-primary/25 rounded-full blur-[120px] animate-pulse" />
+        <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-emerald-500/15 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: "1s" }} />
+      </div>
+
+      <div className="relative z-20 flex-1 flex flex-col items-center justify-center px-6 text-center text-white">
+        {/* Logo */}
+        <motion.div
+          initial={{ scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
+          className="mb-8"
+        >
+          <div className="w-40 h-40 rounded-3xl bg-white/10 backdrop-blur-xl border border-white/20 p-5 shadow-2xl">
+            <img src={brand.logoCustomer} alt={brand.nameEn} className="w-full h-full object-contain" />
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => i18n.changeLanguage(isEn ? "ar" : "en")}
-              className="flex items-center gap-1 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full px-3 py-1.5 text-sm font-bold transition-all"
-              data-testid="button-kiosk-lang"
-            >
-              <Globe className="w-4 h-4" />
-              {isEn ? "عربي" : "EN"}
-            </button>
+        </motion.div>
+
+        <motion.h1
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="text-5xl md:text-7xl font-black tracking-tight mb-3"
+        >
+          {brand.nameEn}
+        </motion.h1>
+        <motion.p
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="text-lg md:text-xl text-white/80 mb-12 tracking-wide"
+        >
+          {brand.taglineEn}
+        </motion.p>
+
+        {/* CTA */}
+        <motion.button
+          initial={{ y: 30, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={onStart}
+          data-testid="button-start-self-order"
+          className="group relative px-12 py-6 bg-primary hover:bg-primary/90 text-primary-foreground rounded-2xl shadow-2xl shadow-primary/40 flex items-center gap-4 text-2xl font-bold transition-all"
+        >
+          <Sparkles className="w-6 h-6" />
+          <span>{t("ابدأ رحلتك للطلب الذاتي", "Start Your Self-Order Journey")}</span>
+          <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform rtl:rotate-180" />
+        </motion.button>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+          className="mt-8 text-sm text-white/60 tracking-widest uppercase"
+        >
+          {t("اضغط في أي مكان للبدء", "Touch anywhere to start")}
+        </motion.p>
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//                          LANGUAGE SCREEN
+// ═══════════════════════════════════════════════════════════════════
+function LanguageScreen({
+  current, onPick, onBack, t,
+}: { current: "ar" | "en"; onPick: (l: "ar" | "en") => void; onBack: () => void; t: any }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -30 }}
+      className="min-h-screen flex flex-col bg-gradient-to-br from-white via-slate-50 to-primary/5"
+      data-testid="kiosk-language"
+    >
+      <KioskHeader onBack={onBack} title={t("اختر اللغة", "Select Language")} step={1} total={5} t={t} />
+
+      <div className="flex-1 flex items-center justify-center px-6 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl w-full">
+          {[
+            { code: "ar" as const, name: "العربية", english: "Arabic", flag: "🇸🇦" },
+            { code: "en" as const, name: "English", english: "English", flag: "🇬🇧" },
+          ].map((opt) => (
             <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => cartCount > 0 && setStep("cart")}
-              className="relative bg-white text-primary rounded-2xl px-5 py-2.5 font-black flex items-center gap-2 shadow-lg hover:shadow-2xl transition-all disabled:opacity-50"
-              disabled={cartCount === 0}
-              data-testid="button-kiosk-cart"
+              key={opt.code}
+              whileHover={{ scale: 1.03, y: -4 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => onPick(opt.code)}
+              data-testid={`button-lang-${opt.code}`}
+              className={`group relative p-10 rounded-3xl border-2 transition-all shadow-md hover:shadow-2xl ${
+                current === opt.code
+                  ? "border-primary bg-primary/5 shadow-primary/20"
+                  : "border-border bg-white hover:border-primary/50"
+              }`}
             >
-              <ShoppingCart className="w-5 h-5" />
-              <span className="hidden sm:inline">{cartTotal.toFixed(2)} </span><SarIcon />
-              {cartCount > 0 && (
-                <motion.span
-                  initial={{ scale: 0 }} animate={{ scale: 1 }}
-                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-7 h-7 text-xs flex items-center justify-center font-black border-2 border-white"
-                >
-                  {cartCount}
-                </motion.span>
+              <div className="text-7xl mb-5">{opt.flag}</div>
+              <div className="text-3xl font-black text-foreground mb-1">{opt.name}</div>
+              <div className="text-sm text-muted-foreground tracking-widest uppercase">{opt.english}</div>
+              {current === opt.code && (
+                <div className="absolute top-4 right-4 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5 text-primary-foreground" />
+                </div>
               )}
             </motion.button>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//                          LOCATION SCREEN
+// ═══════════════════════════════════════════════════════════════════
+function LocationScreen({
+  onPick, onBack, t,
+}: { onPick: (loc: Location) => void; onBack: () => void; t: any }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -30 }}
+      className="min-h-screen flex flex-col bg-gradient-to-br from-white via-slate-50 to-primary/5"
+      data-testid="kiosk-location"
+    >
+      <KioskHeader onBack={onBack} title={t("أين ستتناول الطلب؟", "Where will you enjoy your order?")} step={2} total={5} t={t} />
+
+      <div className="flex-1 flex items-center justify-center px-6 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl w-full">
+          {[
+            {
+              id: "dine_in" as const,
+              icon: Store,
+              title: t("داخل المطعم", "Dine-In"),
+              desc: t("استمتع بالطلب في المقهى", "Enjoy your order in the cafe"),
+              gradient: "from-primary/15 to-emerald-100",
+            },
+            {
+              id: "takeaway" as const,
+              icon: ShoppingBag,
+              title: t("خارج المطعم", "Takeaway"),
+              desc: t("جاهز للأخذ معك", "Take it on the go"),
+              gradient: "from-blue-100 to-cyan-100",
+            },
+          ].map((opt) => (
+            <motion.button
+              key={opt.id}
+              whileHover={{ scale: 1.03, y: -4 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => onPick(opt.id)}
+              data-testid={`button-location-${opt.id}`}
+              className={`group relative p-12 rounded-3xl border-2 border-border bg-gradient-to-br ${opt.gradient} hover:border-primary transition-all shadow-md hover:shadow-2xl text-start`}
+            >
+              <div className="w-20 h-20 rounded-2xl bg-white shadow-md flex items-center justify-center mb-6">
+                <opt.icon className="w-10 h-10 text-primary" />
+              </div>
+              <h3 className="text-3xl font-black text-foreground mb-2">{opt.title}</h3>
+              <p className="text-base text-muted-foreground">{opt.desc}</p>
+              <ArrowRight className="absolute top-1/2 -translate-y-1/2 end-6 w-8 h-8 text-primary opacity-0 group-hover:opacity-100 group-hover:translate-x-2 transition-all rtl:rotate-180" />
+            </motion.button>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//                          MENU SCREEN
+// ═══════════════════════════════════════════════════════════════════
+function MenuScreen(props: any) {
+  const {
+    t, isAr, items, bestSellers, categories, activeCategory, setActiveCategory,
+    search, setSearch, loading, onAdd, cartCount, cartTotal, onOpenCart, onBack, diningLocation,
+  } = props;
+
+  const banners = [bannerImage1, bannerImage2];
+  const [bannerIdx, setBannerIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setBannerIdx((p) => (p + 1) % banners.length), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="min-h-screen flex flex-col bg-slate-50"
+      data-testid="kiosk-menu"
+    >
+      <KioskHeader
+        onBack={onBack}
+        title={diningLocation === "dine_in" ? t("داخل المطعم", "Dine-In") : t("خارج المطعم", "Takeaway")}
+        step={3}
+        total={5}
+        t={t}
+      />
+
+      {/* Hero Banner */}
+      <div className="px-6 pt-6">
+        <div className="relative h-44 md:h-56 rounded-3xl overflow-hidden shadow-lg">
+          <AnimatePresence mode="wait">
+            <motion.img
+              key={bannerIdx}
+              src={banners[bannerIdx]}
+              alt=""
+              initial={{ opacity: 0, scale: 1.05 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8 }}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          </AnimatePresence>
+          <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />
+          <div className="relative z-10 h-full flex flex-col justify-center px-8 text-white">
+            <p className="text-sm font-bold text-primary mb-1 tracking-widest uppercase">{t("القائمة", "Menu")}</p>
+            <h2 className="text-3xl md:text-4xl font-black mb-2">{t("اختر ما تشتهي ☕", "Pick your favorites ☕")}</h2>
+            <p className="text-sm text-white/80">{t("جودة فاخرة • تحضير فوري", "Premium quality • Freshly prepared")}</p>
           </div>
         </div>
       </div>
 
-      {/* === Category pills === */}
-      <div className="bg-white border-b px-4 py-3 flex gap-2 overflow-x-auto scrollbar-none shrink-0 shadow-sm">
-        <button
-          onClick={() => setSelectedCategory(ALL_CATEGORY)}
-          data-testid="button-category-all"
-          className={`shrink-0 px-5 py-2 rounded-full text-sm font-bold transition-all ${
-            selectedCategory === ALL_CATEGORY
-              ? "bg-primary text-white shadow-md scale-105"
-              : "bg-muted text-muted-foreground hover:bg-muted/80"
-          }`}
-        >
-          ✨ {tc("الكل", "All")}
-        </button>
-        {categoryIds.map(catId => (
-          <button
-            key={catId}
-            onClick={() => setSelectedCategory(catId)}
-            data-testid={`button-category-${catId}`}
-            className={`shrink-0 px-5 py-2 rounded-full text-sm font-bold transition-all ${
-              selectedCategory === catId
-                ? "bg-primary text-white shadow-md scale-105"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            }`}
-          >
-            {categoryNameMap[catId] || catId}
-          </button>
-        ))}
+      {/* Search */}
+      <div className="px-6 pt-4">
+        <div className="relative">
+          <Search className="absolute top-1/2 -translate-y-1/2 start-4 w-5 h-5 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("ابحث عن منتج...", "Search products...")}
+            className="ps-12 h-14 rounded-2xl bg-white border-border text-base"
+            data-testid="input-kiosk-search"
+          />
+        </div>
       </div>
 
-      {/* === Menu Grid === */}
-      <ScrollArea className="flex-1 px-4 py-5">
-        {menuLoading ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-3">
-            <Loader2 className="w-10 h-10 text-primary animate-spin" />
-            <p className="text-muted-foreground font-medium">{tc("جاري تحميل القائمة...", "Loading menu...")}</p>
-          </div>
-        ) : filteredItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-3">
-            <Coffee className="w-16 h-16 text-primary/30" />
-            <p className="text-muted-foreground font-medium text-lg">{tc("لا توجد منتجات متاحة", "No items available")}</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {filteredItems.map(item => {
-              const key = item._id || item.id;
-              const cartQty = cart.filter(c => (c.item._id || c.item.id) === key).reduce((s, c) => s + c.quantity, 0);
-              const minPrice = item.availableSizes?.length
-                ? Math.min(...item.availableSizes.map(s => s.price))
-                : item.price;
-              return (
-                <motion.div
-                  key={key}
-                  whileHover={{ y: -4 }}
-                  whileTap={{ scale: 0.96 }}
-                  transition={{ type: "spring", stiffness: 300 }}
-                >
-                  <Card
-                    className="overflow-hidden cursor-pointer hover:shadow-2xl transition-shadow select-none border-2 hover:border-primary/50 bg-white"
-                    onClick={() => handleItemClick(item)}
-                    data-testid={`card-kiosk-item-${key}`}
-                  >
-                    <div className="aspect-square bg-muted relative overflow-hidden">
-                      {item.imageUrl ? (
-                        <img
-                          src={item.imageUrl}
-                          alt={isEn ? item.nameEn : item.nameAr}
-                          className="w-full h-full object-cover"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
-                          <Coffee className="w-16 h-16 text-primary/40" />
-                        </div>
-                      )}
-                      {cartQty > 0 && (
-                        <motion.div
-                          initial={{ scale: 0 }} animate={{ scale: 1 }}
-                          className="absolute top-2 end-2 bg-primary text-white rounded-full min-w-8 h-8 px-2 flex items-center justify-center font-black text-sm shadow-lg border-2 border-white"
-                        >
-                          ×{cartQty}
-                        </motion.div>
-                      )}
-                      {item.availableSizes && item.availableSizes.length > 0 && (
-                        <div className="absolute bottom-2 start-2 bg-black/60 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
-                          {item.availableSizes.length} {tc("أحجام", "sizes")}
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-3 text-center">
-                      <p className="font-bold text-sm leading-tight mb-1 line-clamp-1">{isEn ? item.nameEn : item.nameAr}</p>
-                      <p className="text-[11px] text-muted-foreground mb-2 line-clamp-1">{isEn ? item.nameAr : item.nameEn}</p>
-                      <Badge className="bg-primary/10 text-primary border-0 font-black text-sm hover:bg-primary/20">
-                        {item.availableSizes?.length ? `${tc("من", "from")} ` : ""}{minPrice.toFixed(2)} <SarIcon />
-                      </Badge>
-                    </div>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </div>
-        )}
-      </ScrollArea>
-
-      {/* === Footer status bar === */}
-      <div className="bg-white border-t px-6 py-2 flex items-center justify-between text-xs text-muted-foreground shrink-0">
-        <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {tc("النظام يتجدد كل 3 دقائق", "Auto-resets every 3 min")}</span>
-        <span className="font-semibold">{tc("اضغط أي عنصر لإضافته", "Tap any item to add")}</span>
-      </div>
-
-      {/* === Size dialog === */}
-      <Dialog open={!!sizeDialogItem} onOpenChange={() => setSizeDialogItem(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-center text-xl">
-              {sizeDialogItem ? (isEn ? sizeDialogItem.nameEn : sizeDialogItem.nameAr) : ""}
-            </DialogTitle>
-          </DialogHeader>
-          {sizeDialogItem && (
-            <div className="space-y-3">
-              <p className="text-center text-muted-foreground text-sm">{tc("اختر الحجم", "Choose size")}</p>
-              {(sizeDialogItem.availableSizes || []).map(sz => (
-                <button
-                  key={sz.nameAr}
-                  onClick={() => addToCart(sizeDialogItem, sz.nameAr)}
-                  className="w-full flex justify-between items-center p-4 rounded-xl border-2 border-primary/20 hover:border-primary hover:bg-primary/5 transition-all font-bold text-lg"
-                  data-testid={`button-kiosk-size-${sz.nameAr}`}
-                >
-                  <span>{sz.nameAr}{sz.nameEn ? ` — ${sz.nameEn}` : ""}</span>
-                  <span className="text-primary">{Number(sz.price).toFixed(2)} <SarIcon /></span>
-                </button>
+      {/* Body: sidebar + items */}
+      <div className="flex-1 flex gap-4 px-6 py-4 overflow-hidden">
+        {/* Sidebar categories */}
+        <aside className="w-44 md:w-52 shrink-0">
+          <ScrollArea className="h-full">
+            <div className="space-y-2 pe-2">
+              <CategoryPill
+                active={activeCategory === "all"}
+                onClick={() => setActiveCategory("all")}
+                label={t("الكل", "All")}
+                icon="🍽️"
+                count={items.length}
+              />
+              <CategoryPill
+                active={activeCategory === "best"}
+                onClick={() => setActiveCategory("best")}
+                label={t("الأكثر مبيعاً", "Best Sellers")}
+                icon="🔥"
+                count={bestSellers.length}
+                highlight
+              />
+              {categories.map((c: KioskCategory) => (
+                <CategoryPill
+                  key={c.id}
+                  active={activeCategory === c.id}
+                  onClick={() => setActiveCategory(c.id)}
+                  label={isAr ? c.nameAr : c.nameEn || c.nameAr}
+                  icon={c.icon || "☕"}
+                />
               ))}
-              <Button variant="outline" className="w-full" onClick={() => setSizeDialogItem(null)}>
-                {tc("إلغاء", "Cancel")}
-              </Button>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+          </ScrollArea>
+        </aside>
 
-      {/* === Cart sheet === */}
-      <Dialog open={step === "cart"} onOpenChange={(o) => !o && setStep("menu")}>
-        <DialogContent className="max-w-md h-[85vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="p-5 bg-gradient-to-br from-primary/10 to-transparent border-b">
-            <DialogTitle className="flex items-center gap-2 text-xl">
-              <ShoppingCart className="w-6 h-6 text-primary" />
-              {tc(`طلبك (${cartCount})`, `Your Order (${cartCount})`)}
-            </DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="flex-1 px-4">
-            {cart.length === 0 ? (
-              <div className="text-center py-16 text-muted-foreground">
-                <ShoppingCart className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                <p className="text-lg">{tc("طلبك فارغ", "Your cart is empty")}</p>
+        {/* Items grid */}
+        <main className="flex-1 overflow-hidden">
+          <ScrollArea className="h-full pe-2">
+            {loading ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="h-64 rounded-2xl bg-white animate-pulse" />
+                ))}
+              </div>
+            ) : items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center py-20">
+                <Coffee className="w-20 h-20 text-muted-foreground mb-4" />
+                <p className="text-lg font-bold text-muted-foreground">{t("لا توجد منتجات", "No products found")}</p>
               </div>
             ) : (
-              <div className="space-y-3 py-3">
-                {cart.map(c => {
-                  const key = cartKey(c.item, c.selectedSize);
-                  return (
-                    <div key={key} className="flex items-center gap-3 bg-muted/40 rounded-2xl p-3" data-testid={`kiosk-cart-item-${key}`}>
-                      <div className="w-14 h-14 rounded-xl overflow-hidden bg-muted shrink-0">
-                        {c.item.imageUrl ? (
-                          <img src={c.item.imageUrl} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center"><Coffee className="w-6 h-6 text-primary/40" /></div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-sm truncate">{isEn ? c.item.nameEn : c.item.nameAr}</p>
-                        {c.selectedSize && <p className="text-xs text-blue-600 font-medium">{c.selectedSize}</p>}
-                        <p className="text-sm text-primary font-black">{(c.effectivePrice * c.quantity).toFixed(2)} <SarIcon /></p>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button onClick={() => decreaseCart(key)} className="w-9 h-9 rounded-full bg-white border flex items-center justify-center hover:bg-red-50 hover:border-red-300 transition" data-testid={`button-kiosk-decrease-${key}`}>
-                          {c.quantity === 1 ? <Trash2 className="w-4 h-4 text-red-500" /> : <Minus className="w-4 h-4" />}
-                        </button>
-                        <span className="w-7 text-center font-black">{c.quantity}</span>
-                        <button onClick={() => increaseCart(key)} className="w-9 h-9 rounded-full bg-primary text-white flex items-center justify-center hover:bg-primary/90 transition" data-testid={`button-kiosk-increase-${key}`}>
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
+              <>
+                {activeCategory === "all" && bestSellers.length > 0 && !search && (
+                  <div className="mb-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Star className="w-5 h-5 text-primary fill-primary" />
+                      <h3 className="text-lg font-black">{t("الأكثر مبيعاً", "Best Sellers")}</h3>
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-4">
+                      {bestSellers.slice(0, 4).map((it: KioskItem) => (
+                        <ItemCard key={`best-${it.id}`} item={it} isAr={isAr} onAdd={onAdd} highlight />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-32">
+                  {items.map((it: KioskItem) => (
+                    <ItemCard key={it.id} item={it} isAr={isAr} onAdd={onAdd} />
+                  ))}
+                </div>
+              </>
             )}
           </ScrollArea>
-          {cart.length > 0 && (
-            <div className="space-y-3 p-4 border-t bg-white">
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>{tc("ضريبة 15%", "VAT 15%")}</span>
-                <span>{vat.toFixed(2)} <SarIcon /></span>
+        </main>
+      </div>
+
+      {/* Floating cart bar */}
+      {cartCount > 0 && (
+        <motion.div
+          initial={{ y: 80 }}
+          animate={{ y: 0 }}
+          className="fixed bottom-0 left-0 right-0 z-30 px-6 pb-5"
+        >
+          <button
+            onClick={onOpenCart}
+            data-testid="button-open-cart"
+            className="w-full max-w-3xl mx-auto bg-primary hover:bg-primary/90 text-primary-foreground rounded-2xl px-6 py-4 shadow-2xl shadow-primary/40 flex items-center justify-between gap-4 transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <ShoppingCart className="w-6 h-6" />
+                <Badge className="absolute -top-2 -end-2 bg-white text-primary text-[10px] h-5 min-w-5 px-1 rounded-full font-black">
+                  {cartCount}
+                </Badge>
               </div>
-              <div className="flex justify-between font-black text-xl">
-                <span>{tc("الإجمالي:", "Total:")}</span>
-                <span className="text-primary">{cartTotal.toFixed(2)} <SarIcon /></span>
+              <span className="font-bold text-lg">{t("عرض السلة", "View Cart")}</span>
+            </div>
+            <div className="flex items-center gap-2 text-lg font-black">
+              <span>{cartTotal.toFixed(2)}</span>
+              <SarIcon />
+              <ArrowRight className="w-5 h-5 ms-2 rtl:rotate-180" />
+            </div>
+          </button>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+}
+
+function CategoryPill({
+  active, onClick, label, icon, count, highlight,
+}: { active: boolean; onClick: () => void; label: string; icon: string; count?: number; highlight?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      data-testid={`category-${label}`}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-start transition-all border ${
+        active
+          ? "bg-primary text-primary-foreground border-primary shadow-md shadow-primary/30"
+          : highlight
+          ? "bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100"
+          : "bg-white border-border hover:bg-slate-50 text-foreground"
+      }`}
+    >
+      <span className="text-xl shrink-0">{icon}</span>
+      <span className="text-sm font-bold flex-1 truncate">{label}</span>
+      {typeof count === "number" && count > 0 && (
+        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${active ? "bg-white/20" : "bg-muted text-muted-foreground"}`}>
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function ItemCard({ item, isAr, onAdd, highlight }: { item: KioskItem; isAr: boolean; onAdd: (i: KioskItem) => void; highlight?: boolean }) {
+  const name = isAr ? item.nameAr : item.nameEn || item.nameAr;
+  const desc = isAr ? item.descriptionAr : item.descriptionEn || item.descriptionAr;
+  return (
+    <motion.button
+      whileHover={{ y: -3 }}
+      whileTap={{ scale: 0.97 }}
+      onClick={() => onAdd(item)}
+      data-testid={`item-${item.id}`}
+      className={`group bg-white rounded-2xl overflow-hidden border ${
+        highlight ? "border-primary/40 shadow-md shadow-primary/10" : "border-border"
+      } hover:border-primary hover:shadow-xl transition-all text-start flex flex-col`}
+    >
+      <div className="relative aspect-square bg-slate-100 overflow-hidden">
+        {item.image ? (
+          <img
+            src={item.image}
+            alt={name}
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Coffee className="w-12 h-12 text-muted-foreground/40" />
+          </div>
+        )}
+        {item.isBestSeller && (
+          <Badge className="absolute top-2 start-2 bg-primary text-primary-foreground text-[10px] font-black">
+            <Star className="w-3 h-3 me-1 fill-current" />
+            {isAr ? "الأكثر مبيعاً" : "Best Seller"}
+          </Badge>
+        )}
+      </div>
+      <div className="p-3 flex-1 flex flex-col">
+        <h4 className="font-bold text-sm line-clamp-1 mb-1">{name}</h4>
+        {desc && <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{desc}</p>}
+        <div className="mt-auto flex items-center justify-between pt-2">
+          <div className="flex items-center gap-1 font-black text-primary">
+            <span className="text-lg">{Number(item.price).toFixed(2)}</span>
+            <SarIcon />
+          </div>
+          <div className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+            <Plus className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+    </motion.button>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//                          CART SCREEN
+// ═══════════════════════════════════════════════════════════════════
+function CartScreen(props: any) {
+  const {
+    t, cart, updateQty, removeItem, subtotal, tax, total,
+    customerName, setCustomerName, customerPhone, setCustomerPhone,
+    onContinue, onBack, diningLocation,
+  } = props;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -30 }}
+      className="min-h-screen flex flex-col bg-slate-50"
+      data-testid="kiosk-cart"
+    >
+      <KioskHeader onBack={onBack} title={t("سلة الطلب", "Your Order")} step={4} total={5} t={t} />
+
+      <div className="flex-1 px-6 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl w-full mx-auto">
+        {/* Items list */}
+        <div className="lg:col-span-2 space-y-3">
+          <Card className="bg-white border-border">
+            <CardContent className="p-5">
+              <h3 className="text-lg font-black mb-4 flex items-center gap-2">
+                <ShoppingCart className="w-5 h-5 text-primary" />
+                {t("الأصناف", "Items")} ({cart.length})
+              </h3>
+              {cart.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <ShoppingCart className="w-16 h-16 mx-auto mb-3 opacity-40" />
+                  <p>{t("السلة فارغة", "Cart is empty")}</p>
+                </div>
+              ) : (
+                <ScrollArea className="max-h-[50vh]">
+                  <div className="space-y-3 pe-2">
+                    {cart.map((c: KioskCartItem) => (
+                      <div key={c.itemId} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl" data-testid={`cart-item-${c.itemId}`}>
+                        <div className="w-14 h-14 rounded-xl bg-white border border-border overflow-hidden shrink-0">
+                          {c.image ? (
+                            <img src={c.image} alt={c.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center"><Coffee className="w-6 h-6 text-muted-foreground/40" /></div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm truncate">{c.name}</p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            {c.price.toFixed(2)} <SarIcon /> × {c.quantity}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 bg-white rounded-lg border border-border p-1">
+                          <button onClick={() => updateQty(c.itemId, -1)} className="w-7 h-7 rounded-md hover:bg-slate-100 flex items-center justify-center" data-testid={`button-decrease-${c.itemId}`}>
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <span className="w-7 text-center font-bold text-sm">{c.quantity}</span>
+                          <button onClick={() => updateQty(c.itemId, 1)} className="w-7 h-7 rounded-md hover:bg-slate-100 flex items-center justify-center" data-testid={`button-increase-${c.itemId}`}>
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="font-black text-primary text-sm flex items-center gap-1 w-20 justify-end">
+                          {(c.price * c.quantity).toFixed(2)} <SarIcon />
+                        </div>
+                        <button onClick={() => removeItem(c.itemId)} className="w-8 h-8 rounded-lg hover:bg-red-50 text-red-500 flex items-center justify-center" data-testid={`button-remove-${c.itemId}`}>
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Customer Info */}
+          <Card className="bg-white border-border">
+            <CardContent className="p-5">
+              <h3 className="text-lg font-black mb-4 flex items-center gap-2">
+                <User className="w-5 h-5 text-primary" />
+                {t("معلومات العميل", "Customer Info")}
+                <Badge variant="destructive" className="text-[10px]">{t("مطلوب", "Required")}</Badge>
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-muted-foreground mb-1 block">
+                    {t("الاسم", "Name")} <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder={t("اسمك الكامل", "Your full name")}
+                    className="h-12 text-base"
+                    data-testid="input-customer-name"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-muted-foreground mb-1 block">
+                    {t("رقم الجوال", "Phone")} <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="05XXXXXXXX"
+                    type="tel"
+                    inputMode="tel"
+                    dir="ltr"
+                    className="h-12 text-base"
+                    data-testid="input-customer-phone"
+                  />
+                </div>
               </div>
-              <Button size="lg" className="w-full text-lg py-6 bg-primary hover:bg-primary/90" onClick={() => setStep("info")} data-testid="button-kiosk-checkout">
-                {tc("متابعة", "Continue")}
-                {isRtl ? <ArrowLeft className="w-5 h-5 ms-2" /> : <ArrowRight className="w-5 h-5 ms-2" />}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Summary */}
+        <div className="space-y-4">
+          <Card className="bg-white border-border sticky top-4">
+            <CardContent className="p-5">
+              <h3 className="text-lg font-black mb-4 flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-primary" />
+                {t("ملخص الطلب", "Order Summary")}
+              </h3>
+              <div className="space-y-2 mb-4 text-sm">
+                <Row label={t("النوع", "Type")} value={diningLocation === "dine_in" ? t("داخل المطعم", "Dine-In") : t("خارج المطعم", "Takeaway")} />
+                <Row label={t("عدد الأصناف", "Items")} value={cart.reduce((s: number, c: KioskCartItem) => s + c.quantity, 0).toString()} />
+              </div>
+              <Separator className="my-3" />
+              <div className="space-y-2 text-sm">
+                <RowAmount label={t("المجموع قبل الضريبة", "Subtotal")} amount={subtotal / (1 + 0.15)} />
+                <RowAmount label={t("ضريبة القيمة المضافة 15%", "VAT 15%")} amount={tax} />
+              </div>
+              <Separator className="my-3" />
+              <div className="flex items-center justify-between font-black text-xl">
+                <span>{t("الإجمالي", "Total")}</span>
+                <span className="flex items-center gap-1 text-primary">
+                  {total.toFixed(2)} <SarIcon />
+                </span>
+              </div>
+              <Button
+                onClick={onContinue}
+                disabled={cart.length === 0}
+                className="w-full h-14 mt-5 text-lg font-bold"
+                data-testid="button-continue-to-payment"
+              >
+                {t("متابعة الدفع", "Continue to Payment")}
+                <ArrowRight className="w-5 h-5 ms-2 rtl:rotate-180" />
               </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-bold">{value}</span>
+    </div>
+  );
+}
+function RowAmount({ label, amount }: { label: string; amount: number }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-bold flex items-center gap-1">{amount.toFixed(2)} <SarIcon /></span>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//                          PAYMENT SCREEN
+// ═══════════════════════════════════════════════════════════════════
+function PaymentScreen({
+  t, choice, setChoice, total, onConfirm, onBack, submitting,
+}: any) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -30 }}
+      className="min-h-screen flex flex-col bg-slate-50"
+      data-testid="kiosk-payment"
+    >
+      <KioskHeader onBack={onBack} title={t("اختر طريقة الدفع", "Choose Payment Method")} step={5} total={5} t={t} />
+
+      <div className="flex-1 px-6 py-8 max-w-4xl w-full mx-auto">
+        <div className="bg-white rounded-3xl border border-border p-6 mb-6 text-center">
+          <p className="text-sm text-muted-foreground mb-2">{t("الإجمالي المستحق", "Amount Due")}</p>
+          <p className="text-5xl font-black text-primary flex items-center justify-center gap-2">
+            {total.toFixed(2)} <SarIcon />
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <PaymentOption
+            active={choice === "online"}
+            onClick={() => setChoice("online")}
+            icon={CreditCard}
+            title={t("الدفع الإلكتروني", "Pay Online")}
+            desc={t("بطاقة بنكية / Apple Pay / مدى", "Card / Apple Pay / mada")}
+            badge={t("PayMob", "PayMob")}
+            color="primary"
+            testid="payment-online"
+          />
+          <PaymentOption
+            active={choice === "counter_cash"}
+            onClick={() => setChoice("counter_cash")}
+            icon={Banknote}
+            title={t("ادفع عند الكاشير", "Pay at Counter")}
+            desc={t("نقداً عند استلام الطلب", "Cash on pickup")}
+            badge={t("نقدي", "Cash")}
+            color="emerald"
+            testid="payment-counter"
+          />
+        </div>
+
+        <Button
+          onClick={onConfirm}
+          disabled={!choice || submitting}
+          className="w-full h-16 mt-8 text-xl font-black"
+          data-testid="button-confirm-payment"
+        >
+          {submitting ? (
+            <><Loader2 className="w-5 h-5 me-2 animate-spin" /> {t("جارٍ الإنشاء...", "Creating...")}</>
+          ) : (
+            <>{t("تأكيد الطلب", "Confirm Order")} <ArrowRight className="w-6 h-6 ms-2 rtl:rotate-180" /></>
+          )}
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
+function PaymentOption({ active, onClick, icon: Icon, title, desc, badge, color, testid }: any) {
+  return (
+    <motion.button
+      whileHover={{ scale: 1.02, y: -2 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={onClick}
+      data-testid={`button-${testid}`}
+      className={`relative p-6 rounded-3xl border-2 bg-white text-start transition-all ${
+        active ? "border-primary shadow-xl shadow-primary/20" : "border-border hover:border-primary/50"
+      }`}
+    >
+      <div className={`w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4`}>
+        <Icon className="w-7 h-7 text-primary" />
+      </div>
+      <div className="flex items-center gap-2 mb-1">
+        <h3 className="text-xl font-black">{title}</h3>
+        <Badge variant="outline" className="text-[10px]">{badge}</Badge>
+      </div>
+      <p className="text-sm text-muted-foreground">{desc}</p>
+      {active && (
+        <div className="absolute top-4 end-4 w-7 h-7 rounded-full bg-primary flex items-center justify-center">
+          <CheckCircle2 className="w-5 h-5 text-primary-foreground" />
+        </div>
+      )}
+    </motion.button>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//                          PROCESSING SCREEN
+// ═══════════════════════════════════════════════════════════════════
+function ProcessingScreen({ t }: { t: any }) {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen flex flex-col items-center justify-center bg-white">
+      <div className="relative w-32 h-32 mb-8">
+        <div className="absolute inset-0 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <img src={brand.logoCustomer} alt="" className="w-16 h-16 object-contain" />
+        </div>
+      </div>
+      <p className="text-2xl font-black text-foreground">{t("جارٍ إنشاء طلبك...", "Creating your order...")}</p>
+      <p className="text-sm text-muted-foreground mt-2">{t("لحظات من فضلك", "Just a moment please")}</p>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//                          SUCCESS SCREEN
+// ═══════════════════════════════════════════════════════════════════
+function SuccessScreen({ t, order, paymentChoice, onNew }: any) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-white via-primary/5 to-emerald-50 p-6"
+      data-testid="kiosk-success"
+    >
+      <motion.div
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+        className="w-32 h-32 rounded-full bg-primary flex items-center justify-center shadow-2xl shadow-primary/40 mb-6"
+      >
+        <CheckCircle2 className="w-20 h-20 text-primary-foreground" />
+      </motion.div>
+
+      <h2 className="text-4xl font-black text-foreground mb-2">{t("تم استلام طلبك بنجاح", "Order Received!")}</h2>
+      <p className="text-muted-foreground mb-8">{t("سيتم تحضير طلبك حالاً", "Your order will be prepared shortly")}</p>
+
+      <Card className="w-full max-w-md bg-white border-border shadow-xl mb-6">
+        <CardContent className="p-6 space-y-3">
+          <div className="text-center pb-3 border-b">
+            <p className="text-xs text-muted-foreground mb-1">{t("رقم الطلب", "Order Number")}</p>
+            <p className="text-3xl font-black text-primary" data-testid="text-order-number">
+              #{order?.orderNumber || order?.orderId?.slice(-6).toUpperCase() || "—"}
+            </p>
+          </div>
+          <Row label={t("الإجمالي", "Total")} value={`${(order?.total || 0).toFixed(2)} ر.س`} />
+          {paymentChoice === "counter_cash" && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+              <p className="text-sm font-bold text-amber-900">
+                💰 {t("توجّه إلى الكاشير لإتمام الدفع", "Please pay at the counter")}
+              </p>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+          {paymentChoice === "online" && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
+              <p className="text-sm font-bold text-emerald-900">
+                ✓ {t("تم الدفع بنجاح", "Payment completed")}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* === Step: Info (name + order type) === */}
-      <Dialog open={step === "info"} onOpenChange={(o) => !o && setStep("cart")}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-xl">{tc("بيانات الطلب", "Order Details")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setOrderType("dine-in")}
-                className={`p-4 rounded-2xl border-2 font-bold transition-all ${
-                  orderType === "dine-in" ? "border-primary bg-primary/10 text-primary" : "border-muted text-muted-foreground"
-                }`}
-                data-testid="button-kiosk-dinein"
-              >
-                ☕ {tc("داخل المقهى", "Dine-in")}
-              </button>
-              <button
-                onClick={() => setOrderType("takeaway")}
-                className={`p-4 rounded-2xl border-2 font-bold transition-all ${
-                  orderType === "takeaway" ? "border-primary bg-primary/10 text-primary" : "border-muted text-muted-foreground"
-                }`}
-                data-testid="button-kiosk-takeaway"
-              >
-                🥤 {tc("سفري", "Takeaway")}
-              </button>
-            </div>
-            <div>
-              <label className="text-sm font-semibold block mb-1">{tc("اسمك (اختياري)", "Your name (optional)")}</label>
-              <Input
-                placeholder={tc("لمناداتك عند الجاهزية", "So we can call you when ready")}
-                value={customerName}
-                onChange={e => setCustomerName(e.target.value)}
-                className="text-lg py-5"
-                data-testid="input-kiosk-name"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-semibold block mb-1">{tc("جوالك (اختياري)", "Phone (optional)")}</label>
-              <Input
-                placeholder="05xxxxxxxx"
-                value={customerPhone}
-                onChange={e => setCustomerPhone(e.target.value)}
-                className="text-lg py-5"
-                inputMode="tel"
-                data-testid="input-kiosk-phone"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <Button variant="outline" size="lg" onClick={() => setStep("cart")} data-testid="button-kiosk-back-info">
-                {tc("رجوع", "Back")}
-              </Button>
-              <Button size="lg" onClick={() => setStep("payment")} data-testid="button-kiosk-next-payment">
-                {tc("اختيار الدفع", "Choose Payment")}
-              </Button>
-            </div>
+      <Button onClick={onNew} size="lg" className="h-14 px-10 text-lg font-bold" data-testid="button-new-order">
+        {t("طلب جديد", "New Order")}
+      </Button>
+      <p className="mt-4 text-xs text-muted-foreground">{t("ستعود الشاشة تلقائياً بعد 30 ثانية", "Auto-resetting in 30 seconds")}</p>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//                          KIOSK HEADER
+// ═══════════════════════════════════════════════════════════════════
+function KioskHeader({
+  onBack, title, step, total, t,
+}: { onBack: () => void; title: string; step: number; total: number; t: any }) {
+  return (
+    <header className="sticky top-0 z-20 bg-white/90 backdrop-blur-xl border-b border-border px-6 py-4">
+      <div className="flex items-center justify-between gap-4 max-w-7xl mx-auto">
+        <button
+          onClick={onBack}
+          data-testid="button-kiosk-back"
+          className="w-11 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors"
+        >
+          <ChevronRight className="w-5 h-5 rtl:hidden" />
+          <ChevronLeft className="w-5 h-5 ltr:hidden" />
+        </button>
+
+        <div className="flex-1 text-center">
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <img src={brand.logoCustomer} alt="" className="w-7 h-7 object-contain" />
+            <h2 className="text-base md:text-lg font-black truncate">{title}</h2>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* === Step: Payment selection === */}
-      <Dialog open={step === "payment"} onOpenChange={(o) => !o && setStep("info")}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-xl">{tc("اختر طريقة الدفع", "Choose Payment Method")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            {/* Cash at counter */}
-            <button
-              onClick={() => setPaymentChoice("counter")}
-              className={`w-full p-4 rounded-2xl border-2 transition-all text-start flex items-center gap-3 ${
-                paymentChoice === "counter" ? "border-primary bg-primary/10" : "border-muted hover:border-primary/30"
-              }`}
-              data-testid="button-pay-counter"
-            >
-              <div className="w-12 h-12 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0">
-                <Banknote className="w-6 h-6" />
-              </div>
-              <div className="flex-1">
-                <p className="font-bold">{tc("الدفع عند الاستلام", "Pay at Counter")}</p>
-                <p className="text-xs text-muted-foreground">{tc("ادفع نقداً عند تسلّم الطلب", "Pay cash when you receive your order")}</p>
-              </div>
-              {paymentChoice === "counter" && <CheckCircle className="w-5 h-5 text-primary" />}
-            </button>
-
-            {/* External POS — card terminal at counter */}
-            <button
-              onClick={() => setPaymentChoice("external_pos")}
-              className={`w-full p-4 rounded-2xl border-2 transition-all text-start flex items-center gap-3 ${
-                paymentChoice === "external_pos" ? "border-primary bg-primary/10" : "border-muted hover:border-primary/30"
-              }`}
-              data-testid="button-pay-external"
-            >
-              <div className="w-12 h-12 rounded-xl bg-blue-500 text-white flex items-center justify-center shrink-0">
-                <Wallet className="w-6 h-6" />
-              </div>
-              <div className="flex-1">
-                <p className="font-bold">{tc("بطاقة عند الكاشير", "Card at Cashier")}</p>
-                <p className="text-xs text-muted-foreground">{tc("ادفع بالبطاقة على جهاز نقطة البيع", "Pay by card on the external POS terminal")}</p>
-              </div>
-              {paymentChoice === "external_pos" && <CheckCircle className="w-5 h-5 text-primary" />}
-            </button>
-
-            {/* Online gateway */}
-            <button
-              onClick={() => hasOnlineGateway && setPaymentChoice("online")}
-              disabled={!hasOnlineGateway}
-              className={`w-full p-4 rounded-2xl border-2 transition-all text-start flex items-center gap-3 ${
-                paymentChoice === "online" ? "border-primary bg-primary/10" : "border-muted hover:border-primary/30"
-              } ${!hasOnlineGateway ? "opacity-50 cursor-not-allowed" : ""}`}
-              data-testid="button-pay-online"
-            >
-              <div className="w-12 h-12 rounded-xl bg-purple-500 text-white flex items-center justify-center shrink-0">
-                <CreditCard className="w-6 h-6" />
-              </div>
-              <div className="flex-1">
-                <p className="font-bold">
-                  {tc("دفع إلكتروني", "Online Payment")}
-                  {!hasOnlineGateway && <span className="text-[10px] text-muted-foreground ms-2">({tc("غير مفعّل", "not enabled")})</span>}
-                </p>
-                <p className="text-xs text-muted-foreground">{tc("مدى، فيزا، Apple Pay عبر الإنترنت", "Mada, Visa, Apple Pay online")}</p>
-              </div>
-              {paymentChoice === "online" && <CheckCircle className="w-5 h-5 text-primary" />}
-            </button>
-
-            <div className="bg-muted/50 rounded-2xl p-3 flex justify-between items-center mt-2">
-              <span className="text-sm font-semibold">{tc("المبلغ الإجمالي", "Total Amount")}</span>
-              <span className="text-2xl font-black text-primary">{cartTotal.toFixed(2)} <SarIcon /></span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" size="lg" onClick={() => setStep("info")} data-testid="button-kiosk-back-payment">
-                {tc("رجوع", "Back")}
-              </Button>
-              <Button
-                size="lg"
-                onClick={() => placeOrderMutation.mutate()}
-                disabled={placeOrderMutation.isPending}
-                className="bg-primary hover:bg-primary/90"
-                data-testid="button-kiosk-confirm-pay"
-              >
-                {placeOrderMutation.isPending
-                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                  : <>{tc("تأكيد الطلب", "Confirm Order")} <CheckCircle className="w-4 h-4 ms-2" /></>}
-              </Button>
-            </div>
+          <div className="flex items-center justify-center gap-1.5">
+            {Array.from({ length: total }).map((_, i) => (
+              <div
+                key={i}
+                className={`h-1 rounded-full transition-all ${
+                  i + 1 <= step ? "w-8 bg-primary" : "w-4 bg-slate-200"
+                }`}
+              />
+            ))}
           </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+        </div>
+
+        <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center">
+          <span className="text-xs font-black text-primary">{step}/{total}</span>
+        </div>
+      </div>
+    </header>
   );
 }
