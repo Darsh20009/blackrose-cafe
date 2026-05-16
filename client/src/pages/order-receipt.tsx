@@ -289,18 +289,64 @@ export default function OrderReceiptPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm">{name}</p>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {it.selectedSize && (
-                            <Badge variant="secondary" className="text-[10px]">{tc("الحجم: ", "Size: ")}{it.selectedSize}</Badge>
-                          )}
-                          {it.selectedAddons && it.selectedAddons.length > 0 && (
-                            <Badge variant="secondary" className="text-[10px]">+{it.selectedAddons.length} {tc("إضافات", "addons")}</Badge>
-                          )}
-                          {it.notes && (
-                            <Badge variant="outline" className="text-[10px]">📝 {it.notes}</Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">{price.toFixed(2)} <SarIcon /> × {it.quantity}</p>
+
+                        {/* Size with its price as a dimension reference */}
+                        {it.selectedSize && (
+                          <div className="mt-1.5 inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1">
+                            <span className="text-[10px] text-blue-700 font-bold">📏 {tc("الحجم: ", "Size: ")}</span>
+                            <span className="text-xs font-bold text-blue-900">{it.selectedSize}</span>
+                            <span className="text-[10px] text-blue-600 font-semibold ms-1">({price.toFixed(2)} <SarIcon />)</span>
+                          </div>
+                        )}
+
+                        {/* Each add-on on its own row with its name + price (no duplication) */}
+                        {it.selectedAddons && it.selectedAddons.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
+                              {tc("الإضافات", "Add-ons")}
+                            </p>
+                            {(() => {
+                              // De-duplicate add-ons by name+price; count them up
+                              const grouped = new Map<string, { name: string; price: number; qty: number }>();
+                              for (const a of it.selectedAddons as any[]) {
+                                const aName = isEn
+                                  ? (a?.nameEn || a?.nameAr || a?.name || "—")
+                                  : (a?.nameAr || a?.nameEn || a?.name || "—");
+                                const aPrice = Number(a?.price ?? 0);
+                                const aQty = Number(a?.quantity ?? 1);
+                                const key = `${aName}::${aPrice}`;
+                                const prev = grouped.get(key);
+                                if (prev) prev.qty += aQty;
+                                else grouped.set(key, { name: aName, price: aPrice, qty: aQty });
+                              }
+                              return Array.from(grouped.values()).map((a, i) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1"
+                                  data-testid={`addon-row-${idx}-${i}`}
+                                >
+                                  <span className="text-xs font-semibold text-emerald-900 truncate">
+                                    {a.qty > 1 && <span className="font-black me-1">{a.qty}×</span>}
+                                    + {a.name}
+                                  </span>
+                                  <span className="text-xs font-bold text-emerald-700 shrink-0 ms-2">
+                                    {(a.price * a.qty).toFixed(2)} <SarIcon />
+                                  </span>
+                                </div>
+                              ));
+                            })()}
+                          </div>
+                        )}
+
+                        {it.notes && (
+                          <div className="mt-1.5 inline-flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
+                            <span className="text-[11px] text-amber-800">📝 {it.notes}</span>
+                          </div>
+                        )}
+
+                        <p className="text-[11px] text-muted-foreground mt-1.5">
+                          {tc("سعر الوحدة:", "Unit price:")} {price.toFixed(2)} <SarIcon /> × {it.quantity}
+                        </p>
                       </div>
                       <div className="text-end shrink-0">
                         <p className="font-black text-primary">{lineTotal.toFixed(2)} <SarIcon /></p>
