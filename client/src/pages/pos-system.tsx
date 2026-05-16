@@ -15,8 +15,15 @@ import {
   Archive, RefreshCw, Wifi, WifiOff, Loader2,
   Navigation, SplitSquareVertical, Banknote,
   Lock, Bell, BellOff, MonitorSmartphone, ScanLine,
-  PauseCircle, Receipt, Settings, User, Wallet, RotateCcw
+  PauseCircle, Receipt, Settings, User, Wallet, RotateCcw,
+  Percent, DollarSign, FolderOpen, Hash, Merge, Users, Scissors
 } from "lucide-react";
+import {
+  type CartSnapshot, type HeldCart as HeldCartType, type LineItemDiscount, type OrderDiscount,
+  type ServiceCharge as ServiceChargeConfig,
+  computeUnitPrice, computeTotalItemDiscounts, computeServiceChargeAmount,
+  computeOrderDiscountAmount, mergeCartItems, computePOSTotals, newCartId, blankCart
+} from "@/lib/pos-engine";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -147,6 +154,43 @@ export default function PosSystem() {
     return saved ? Number(saved) : 100;
   });
   const [showRefundDialog, setShowRefundDialog] = useState(false);
+
+  // ── Stable callback refs (prevents TDZ in keyboard useEffect) ────────────
+  const newCartTabRef     = useRef<() => void>(() => {});
+  const holdCurrentCartRef = useRef<() => void>(() => {});
+
+  // ── POS Engine: Multi-Cart, Hold, Service Charge, Discounts ──────────────
+  interface CartTab { id: string; name: string; itemCount: number; total: number; createdAt: number; }
+
+  const [cartTabs, setCartTabs] = useState<CartTab[]>([{ id: 'main', name: tc('طلب 1','Order 1'), itemCount: 0, total: 0, createdAt: Date.now() }]);
+  const [activeTabId, setActiveTabId] = useState('main');
+  const [heldCarts, setHeldCarts] = useState<HeldCartType[]>(() => {
+    try { return JSON.parse(localStorage.getItem('pos-held-carts') || '[]'); } catch { return []; }
+  });
+  const [showHeldCarts, setShowHeldCarts] = useState(false);
+  const [showMergeBills, setShowMergeBills] = useState(false);
+
+  // Service charge
+  const [serviceCharge, setServiceCharge] = useState<ServiceChargeConfig>({ enabled: false, type: 'percent', value: 10 });
+
+  // Per-item discounts: Record<lineItemId, {type, value}>
+  const [itemDiscounts, setItemDiscounts] = useState<Record<string, LineItemDiscount>>({});
+  const [showItemDiscountFor, setShowItemDiscountFor] = useState<string | null>(null);
+  const [itemDiscountInput, setItemDiscountInput] = useState('');
+  const [itemDiscountType, setItemDiscountType] = useState<'percent' | 'amount'>('percent');
+
+  // Manual order-level discount
+  const [manualDiscount, setManualDiscount] = useState<OrderDiscount | undefined>(undefined);
+  const [showManualDiscount, setShowManualDiscount] = useState(false);
+  const [manualDiscountInput, setManualDiscountInput] = useState('');
+  const [manualDiscountType, setManualDiscountType] = useState<'percent' | 'amount'>('percent');
+
+  // Split by persons
+  const [showSplitPersons, setShowSplitPersons] = useState(false);
+  const [splitPersons, setSplitPersons] = useState(2);
+
+  // Saved cart snapshots for tab switching (stored as map cartId → CartSnapshot)
+  const savedTabsRef = useRef<Record<string, Partial<CartSnapshot>>>({});
 
   const { isConnected: wsConnected, sendMessage: wsSend } = useOrderWebSocket({
     clientType: "pos",
@@ -357,17 +401,18 @@ export default function PosSystem() {
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       const isInput = tag === 'input' || tag === 'textarea' || tag === 'select';
 
-      // / or F2 → focus search (from anywhere except other inputs)
+      // / or F2 → focus search
       if ((e.key === '/' || e.key === 'F2') && !isInput) {
         e.preventDefault();
         searchInputRef.current?.focus();
         return;
       }
-      // Escape → clear search or blur
-      if (e.key === 'Escape' && isInput) {
-        setSearchQuery('');
-        (e.target as HTMLElement).blur();
-        return;
+      // Escape → clear search or close dialogs
+      if (e.key === 'Escape') {
+        if (showItemDiscountFor) { setShowItemDiscountFor(null); return; }
+        if (showHeldCarts) { setShowHeldCarts(false); return; }
+        if (showMergeBills) { setShowMergeBills(false); return; }
+        if (isInput) { setSearchQuery(''); (e.target as HTMLElement).blur(); return; }
       }
       // Ctrl+P → print receipt
       if ((e.ctrlKey || e.metaKey) && e.key === 'p' && orderItems.length > 0) {
@@ -381,10 +426,60 @@ export default function PosSystem() {
         searchInputRef.current?.focus();
         return;
       }
+      // F4 → new cart tab
+      if (e.key === 'F4' && !isInput) {
+        e.preventDefault();
+        newCartTabRef.current();
+        return;
+      }
+      // F5 → hold current cart
+      if (e.key === 'F5' && !isInput) {
+        e.preventDefault();
+        holdCurrentCartRef.current();
+        return;
+      }
+      // F6 → show held carts
+      if (e.key === 'F6' && !isInput) {
+        e.preventDefault();
+        setShowHeldCarts(true);
+        return;
+      }
+      // F7 → toggle service charge
+      if (e.key === 'F7' && !isInput) {
+        e.preventDefault();
+        setServiceCharge(prev => ({ ...prev, enabled: !prev.enabled }));
+        return;
+      }
+      // Numpad +/- → adjust quantity of last item
+      if (!isInput && orderItems.length > 0) {
+        const lastItem = orderItems[orderItems.length - 1];
+        if (e.key === 'NumpadAdd' || e.key === '+') {
+          e.preventDefault();
+          updateQuantity(lastItem.lineItemId, lastItem.quantity + 1);
+          return;
+        }
+        if (e.key === 'NumpadSubtract' || e.key === '-') {
+          e.preventDefault();
+          updateQuantity(lastItem.lineItemId, Math.max(0, lastItem.quantity - 1));
+          return;
+        }
+      }
+      // Ctrl+H → hold current order
+      if ((e.ctrlKey || e.metaKey) && e.key === 'h' && !isInput) {
+        e.preventDefault();
+        holdCurrentCartRef.current();
+        return;
+      }
+      // Ctrl+T → new cart tab
+      if ((e.ctrlKey || e.metaKey) && e.key === 't' && !isInput) {
+        e.preventDefault();
+        newCartTabRef.current();
+        return;
+      }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [orderItems.length]);
+  }, [orderItems.length, showItemDiscountFor, showHeldCarts, showMergeBills]);
 
   const { data: productsData, isLoading: isLoadingProducts } = useQuery<CoffeeItem[]>({
     queryKey: ["/api/coffee-items"],
@@ -647,6 +742,40 @@ export default function PosSystem() {
     [calculateTotalAfterPoints, couponDiscountAmount]
   );
 
+  // ── New engine calculations ────────────────────────────────────────────────
+  const itemDiscountTotal = useMemo(
+    () => computeTotalItemDiscounts(orderItems, itemDiscounts),
+    [orderItems, itemDiscounts]
+  );
+  const manualDiscountAmount = useMemo(
+    () => computeOrderDiscountAmount(Math.max(0, calculateGrandTotal - itemDiscountTotal), manualDiscount),
+    [calculateGrandTotal, itemDiscountTotal, manualDiscount]
+  );
+  const serviceChargeAmount = useMemo(
+    () => computeServiceChargeAmount(Math.max(0, calculateGrandTotal - itemDiscountTotal - manualDiscountAmount), serviceCharge),
+    [calculateGrandTotal, itemDiscountTotal, manualDiscountAmount, serviceCharge]
+  );
+  const finalGrandTotal = useMemo(
+    () => Math.max(0, calculateGrandTotal - itemDiscountTotal - manualDiscountAmount + serviceChargeAmount),
+    [calculateGrandTotal, itemDiscountTotal, manualDiscountAmount, serviceChargeAmount]
+  );
+  const finalSubtotal = useMemo(() => finalGrandTotal / 1.15, [finalGrandTotal]);
+  const finalTax     = useMemo(() => finalGrandTotal - finalSubtotal, [finalGrandTotal, finalSubtotal]);
+
+  // Sync tab item counts
+  useEffect(() => {
+    setCartTabs(prev => prev.map(t =>
+      t.id === activeTabId
+        ? { ...t, itemCount: orderItems.length, total: finalGrandTotal }
+        : t
+    ));
+  }, [orderItems.length, finalGrandTotal, activeTabId]);
+
+  // Persist held carts to localStorage
+  useEffect(() => {
+    localStorage.setItem('pos-held-carts', JSON.stringify(heldCarts));
+  }, [heldCarts]);
+
   const handleValidateDiscount = async () => {
     const code = discountCode.trim();
     if (!code) return;
@@ -734,6 +863,10 @@ export default function PosSystem() {
       : orderItems.map(item =>
           item.lineItemId === lineItemId ? { ...item, quantity: newQty } : item
         );
+    if (newQty <= 0) {
+      // Remove item discount if item deleted
+      setItemDiscounts(prev => { const n = { ...prev }; delete n[lineItemId]; return n; });
+    }
     setOrderItems(next);
     if (next.length === 0) {
       broadcastToDisplay("order_cancelled", { items: [], subtotal: 0, tax: 0, total: 0 });
@@ -741,6 +874,177 @@ export default function PosSystem() {
       broadcastToDisplay("item_updated", buildDisplayPayload(next, "item_updated"));
     }
   };
+
+  // ── Multi-Cart: hold, resume, new tab, switch, merge ──────────────────────
+
+  const captureCurrentCartSnapshot = useCallback((): Partial<CartSnapshot> => ({
+    orderItems,
+    orderType,
+    tableNumber,
+    customerName,
+    customerPhone,
+    orderNote,
+    paymentMethod,
+    splitCashAmount,
+    itemDiscounts,
+  }), [orderItems, orderType, tableNumber, customerName, customerPhone, orderNote, paymentMethod, splitCashAmount, itemDiscounts]);
+
+  const restoreCartSnapshot = useCallback((snap: Partial<CartSnapshot>) => {
+    setOrderItems(snap.orderItems || []);
+    if (snap.orderType) setOrderType(snap.orderType as any);
+    setTableNumber(snap.tableNumber || '');
+    setCustomerName(snap.customerName || '');
+    setCustomerPhone(snap.customerPhone || '');
+    setOrderNote(snap.orderNote || '');
+    if (snap.paymentMethod) setPaymentMethod(snap.paymentMethod as any);
+    setSplitCashAmount(snap.splitCashAmount || '');
+    setItemDiscounts(snap.itemDiscounts || {});
+  }, []);
+
+  const holdCurrentCart = useCallback(() => {
+    if (orderItems.length === 0) { toast({ title: tc('السلة فارغة', 'Cart is empty') }); return; }
+    const snap = captureCurrentCartSnapshot();
+    const rawTotal = orderItems.reduce((s, i) => s + getPosItemUnitPriceEarly(i) * i.quantity, 0);
+    const holdName = tableNumber
+      ? tc(`طاولة ${tableNumber}`, `Table ${tableNumber}`)
+      : customerName || tc(`طلب مؤجل ${heldCarts.length + 1}`, `Hold ${heldCarts.length + 1}`);
+    const held: HeldCartType = {
+      id: newCartId(),
+      name: holdName,
+      heldAt: Date.now(),
+      totalAmount: rawTotal,
+      orderItems: snap.orderItems || [],
+      orderType: (snap.orderType || 'dine_in') as any,
+      tableNumber: snap.tableNumber || '',
+      customerName: snap.customerName || '',
+      customerPhone: snap.customerPhone || '',
+      orderNote: snap.orderNote || '',
+      paymentMethod: (snap.paymentMethod || 'cash') as any,
+      splitCashAmount: snap.splitCashAmount || '',
+      itemDiscounts: snap.itemDiscounts || {},
+      createdAt: Date.now(),
+    };
+    setHeldCarts(prev => [held, ...prev]);
+    // Clear current cart
+    setOrderItems([]);
+    setTableNumber('');
+    setCustomerName('');
+    setCustomerPhone('');
+    setOrderNote('');
+    setItemDiscounts({});
+    setAppliedDiscount(null);
+    setDiscountCode('');
+    broadcastToDisplay("order_cancelled", { items: [], subtotal: 0, tax: 0, total: 0 });
+    toast({ title: tc(`تم حجز الطلب: ${holdName}`, `Order held: ${holdName}`) });
+  }, [orderItems, captureCurrentCartSnapshot, heldCarts.length, tableNumber, customerName, toast, tc]);
+
+  const resumeHeldCart = useCallback((heldId: string) => {
+    const held = heldCarts.find(h => h.id === heldId);
+    if (!held) return;
+    if (orderItems.length > 0) {
+      // Auto-hold the current cart before resuming
+      holdCurrentCart();
+    }
+    restoreCartSnapshot(held);
+    setHeldCarts(prev => prev.filter(h => h.id !== heldId));
+    setShowHeldCarts(false);
+    toast({ title: tc(`تم استرداد: ${held.name}`, `Resumed: ${held.name}`) });
+  }, [heldCarts, orderItems.length, holdCurrentCart, restoreCartSnapshot, toast, tc]);
+
+  const deleteHeldCart = useCallback((heldId: string) => {
+    setHeldCarts(prev => prev.filter(h => h.id !== heldId));
+  }, []);
+
+  const newCartTab = useCallback(() => {
+    // Save current cart to the saved tabs ref
+    savedTabsRef.current[activeTabId] = captureCurrentCartSnapshot();
+    // Create new tab
+    const newId = newCartId();
+    const newName = tc(`طلب ${cartTabs.length + 1}`, `Order ${cartTabs.length + 1}`);
+    setCartTabs(prev => [...prev, { id: newId, name: newName, itemCount: 0, total: 0, createdAt: Date.now() }]);
+    setActiveTabId(newId);
+    // Clear cart for new tab
+    setOrderItems([]);
+    setTableNumber('');
+    setCustomerName('');
+    setCustomerPhone('');
+    setOrderNote('');
+    setItemDiscounts({});
+    setAppliedDiscount(null);
+    setDiscountCode('');
+  }, [activeTabId, captureCurrentCartSnapshot, cartTabs.length, tc]);
+
+  const switchCartTab = useCallback((tabId: string) => {
+    if (tabId === activeTabId) return;
+    // Save current
+    savedTabsRef.current[activeTabId] = captureCurrentCartSnapshot();
+    // Restore target
+    const saved = savedTabsRef.current[tabId];
+    if (saved) {
+      restoreCartSnapshot(saved);
+    } else {
+      setOrderItems([]);
+      setTableNumber('');
+      setCustomerName('');
+      setCustomerPhone('');
+      setOrderNote('');
+      setItemDiscounts({});
+    }
+    setActiveTabId(tabId);
+  }, [activeTabId, captureCurrentCartSnapshot, restoreCartSnapshot]);
+
+  const closeCartTab = useCallback((tabId: string) => {
+    if (cartTabs.length <= 1) return; // keep at least 1
+    const idx = cartTabs.findIndex(t => t.id === tabId);
+    const isActive = tabId === activeTabId;
+    const remaining = cartTabs.filter(t => t.id !== tabId);
+    setCartTabs(remaining);
+    delete savedTabsRef.current[tabId];
+    if (isActive) {
+      const nextTab = remaining[Math.max(0, idx - 1)];
+      switchCartTab(nextTab.id);
+    }
+  }, [cartTabs, activeTabId, switchCartTab]);
+
+  const mergeTabIntoActive = useCallback((sourceTabId: string) => {
+    const sourceSaved = savedTabsRef.current[sourceTabId];
+    const sourceItems = sourceSaved?.orderItems || [];
+    const merged = mergeCartItems(orderItems, sourceItems);
+    setOrderItems(merged);
+    // Close source tab
+    const remaining = cartTabs.filter(t => t.id !== sourceTabId);
+    setCartTabs(remaining);
+    delete savedTabsRef.current[sourceTabId];
+    setShowMergeBills(false);
+    toast({ title: tc('تم دمج الطلبات', 'Bills merged') });
+  }, [orderItems, cartTabs, toast, tc]);
+
+  // Item-level discount helpers
+  const applyItemDiscount = useCallback((lineId: string) => {
+    const val = parseFloat(itemDiscountInput);
+    if (!val || val <= 0) return;
+    setItemDiscounts(prev => ({ ...prev, [lineId]: { type: itemDiscountType, value: val } }));
+    setShowItemDiscountFor(null);
+    setItemDiscountInput('');
+  }, [itemDiscountInput, itemDiscountType]);
+
+  const clearItemDiscount = useCallback((lineId: string) => {
+    setItemDiscounts(prev => { const n = { ...prev }; delete n[lineId]; return n; });
+  }, []);
+
+  const applyManualDiscount = useCallback(() => {
+    const val = parseFloat(manualDiscountInput);
+    if (!val || val <= 0) { setManualDiscount(undefined); setShowManualDiscount(false); return; }
+    setManualDiscount({ type: manualDiscountType, value: val });
+    setShowManualDiscount(false);
+    setManualDiscountInput('');
+  }, [manualDiscountInput, manualDiscountType]);
+
+  // Keep keyboard-accessible refs up-to-date every render
+  useEffect(() => {
+    newCartTabRef.current     = newCartTab;
+    holdCurrentCartRef.current = holdCurrentCart;
+  });
 
   const handleCheckout = async () => {
     if (orderItems.length === 0) return;
@@ -762,9 +1066,13 @@ export default function PosSystem() {
       const afterPoints = Math.max(0, rawTotal - pointsDiscountAmt);
       const couponDiscountAmt = appliedDiscount ? afterPoints * appliedDiscount.percentage / 100 : 0;
       const discount = pointsDiscountAmt + couponDiscountAmt;
-      const total = Math.max(0, rawTotal - discount);
-      const subtotal = calculateSubtotal;
-      const tax = rawTotal - subtotal;
+      // Apply new engine discounts on top
+      const itemDiscountsAmt = computeTotalItemDiscounts(orderItems, itemDiscounts);
+      const manualDiscAmt = computeOrderDiscountAmount(Math.max(0, rawTotal - discount - itemDiscountsAmt), manualDiscount);
+      const svcChargeAmt = computeServiceChargeAmount(Math.max(0, rawTotal - discount - itemDiscountsAmt - manualDiscAmt), serviceCharge);
+      const total = Math.max(0, rawTotal - discount - itemDiscountsAmt - manualDiscAmt + svcChargeAmt);
+      const subtotal = total / 1.15;
+      const tax = total - subtotal;
       const splitPaymentData = paymentMethod === "split"
         ? { cash: parseFloat(splitCashAmount) || 0, card: Math.max(0, total - (parseFloat(splitCashAmount) || 0)) }
         : undefined;
@@ -1475,16 +1783,93 @@ export default function PosSystem() {
               </div>
             </div>
             <div className="flex gap-1">
+              {/* Hold current cart */}
+              {orderItems.length > 0 && (
+                <Button variant="ghost" size="icon" title={tc('احجز الطلب (F5)','Hold Order (F5)')} onClick={holdCurrentCart} className="h-8 w-8 text-amber-600 hover:text-amber-700" data-testid="button-hold-order">
+                  <PauseCircle className="w-4 h-4" />
+                </Button>
+              )}
+              {/* Held carts badge */}
+              {heldCarts.length > 0 && (
+                <Button variant="ghost" size="icon" title={tc('الطلبات المحجوزة (F6)','Held Orders (F6)')} onClick={() => setShowHeldCarts(true)} className="h-8 w-8 relative" data-testid="button-show-held-carts">
+                  <Archive className="w-4 h-4" />
+                  <span className="absolute -top-1 -right-1 bg-amber-500 text-white rounded-full w-4 h-4 text-[9px] font-bold flex items-center justify-center">{heldCarts.length}</span>
+                </Button>
+              )}
+              {/* Merge bills */}
+              {cartTabs.length > 1 && (
+                <Button variant="ghost" size="icon" title={tc('دمج الفواتير','Merge Bills')} onClick={() => setShowMergeBills(true)} className="h-8 w-8" data-testid="button-merge-bills">
+                  <Merge className="w-4 h-4" />
+                </Button>
+              )}
               <Button variant="ghost" size="icon" className="hidden md:flex" onClick={() => setSplitViewMode(!splitViewMode)} data-testid="button-split-view">
                 <Columns2 className="w-4 h-4" />
               </Button>
               {orderItems.length > 0 && (
-                <Button variant="ghost" size="icon" onClick={() => { setOrderItems([]); setSplitCashAmount(""); broadcastToDisplay("order_cancelled", { items: [], subtotal: 0, tax: 0, total: 0 }); }} className="text-destructive h-8 w-8" data-testid="button-clear-order">
+                <Button variant="ghost" size="icon" onClick={() => { setOrderItems([]); setSplitCashAmount(""); setItemDiscounts({}); broadcastToDisplay("order_cancelled", { items: [], subtotal: 0, tax: 0, total: 0 }); }} className="text-destructive h-8 w-8" data-testid="button-clear-order">
                   <Trash2 className="w-4 h-4" />
                 </Button>
               )}
             </div>
           </div>
+
+          {/* ── Cart Tabs Bar (Multi-Cart) ──────────────────────────────── */}
+          {cartTabs.length > 1 && (
+            <div className="flex items-center gap-0.5 px-2 pt-1 pb-0 border-b overflow-x-auto no-scrollbar bg-muted/20">
+              {cartTabs.map(tab => (
+                <div key={tab.id} className="flex items-center shrink-0">
+                  <button
+                    onClick={() => switchCartTab(tab.id)}
+                    className={`flex items-center gap-1 px-2 py-1.5 rounded-t-lg text-[10px] font-bold whitespace-nowrap border-b-2 transition-all ${
+                      activeTabId === tab.id
+                        ? 'border-primary text-primary bg-primary/5'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                    }`}
+                    data-testid={`button-cart-tab-${tab.id}`}
+                  >
+                    {tab.name}
+                    {tab.itemCount > 0 && (
+                      <span className={`rounded-full px-1 text-[9px] font-black ${activeTabId === tab.id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                        {tab.itemCount}
+                      </span>
+                    )}
+                  </button>
+                  {cartTabs.length > 1 && (
+                    <button
+                      onClick={() => closeCartTab(tab.id)}
+                      className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-destructive transition-colors mr-1"
+                      data-testid={`button-close-tab-${tab.id}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                onClick={newCartTab}
+                className="flex items-center gap-0.5 px-2 py-1.5 rounded-t-lg text-[10px] text-muted-foreground hover:text-primary transition-colors shrink-0"
+                title={tc('طلب جديد (F4 / Ctrl+T)','New Order (F4 / Ctrl+T)')}
+                data-testid="button-new-cart-tab"
+              >
+                <Plus className="w-3 h-3" />
+                <span>{tc('جديد','New')}</span>
+              </button>
+            </div>
+          )}
+          {/* Quick new tab when only 1 tab */}
+          {cartTabs.length === 1 && (
+            <div className="flex justify-end px-2 pt-1">
+              <button
+                onClick={newCartTab}
+                className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+                title={tc('طلب جديد (F4)','New Order (F4)')}
+                data-testid="button-new-first-tab"
+              >
+                <Plus className="w-3 h-3" />
+                <span>{tc('+ طلب جديد','+ New Order')}</span>
+              </button>
+            </div>
+          )}
 
           <ScrollArea className="flex-1 px-2 sm:px-4 py-2">
             {orderItems.length === 0 ? (
@@ -1504,9 +1889,31 @@ export default function PosSystem() {
                           + {item.customization.selectedItemAddons.map((a: any) => a.nameAr).join('، ')}
                         </p>
                       )}
-                      <p className="text-primary font-black text-xs mt-0.5">
-                        {(getPosItemUnitPrice(item) * item.quantity).toFixed(2)} {t('pos.currency')}
-                      </p>
+                      <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                        <p className="text-primary font-black text-xs">
+                          {(getPosItemUnitPrice(item) * item.quantity).toFixed(2)} {t('pos.currency')}
+                        </p>
+                        {/* Per-item discount badge */}
+                        {itemDiscounts[item.lineItemId] ? (
+                          <button
+                            onClick={() => { setShowItemDiscountFor(item.lineItemId); setItemDiscountInput(String(itemDiscounts[item.lineItemId].value)); setItemDiscountType(itemDiscounts[item.lineItemId].type); }}
+                            className="text-[9px] font-bold text-green-700 bg-green-100 rounded px-1 inline-flex items-center gap-0.5 dark:bg-green-900/30 dark:text-green-400"
+                            data-testid={`badge-item-discount-${item.lineItemId}`}
+                          >
+                            <Percent className="w-2.5 h-2.5" />
+                            -{itemDiscounts[item.lineItemId].type === 'percent' ? `${itemDiscounts[item.lineItemId].value}%` : `${itemDiscounts[item.lineItemId].value} ${tc('ر.س','SAR')}`}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => { setShowItemDiscountFor(item.lineItemId); setItemDiscountInput(''); setItemDiscountType('percent'); }}
+                            className="text-[9px] text-muted-foreground/60 hover:text-primary inline-flex items-center gap-0.5 transition-colors"
+                            data-testid={`button-add-item-discount-${item.lineItemId}`}
+                          >
+                            <Tag className="w-2.5 h-2.5" />
+                            {tc('خصم','Disc')}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     {/* Quantity controls */}
                     <div className="flex items-center bg-muted rounded-full p-0.5 shrink-0">
@@ -1791,8 +2198,69 @@ export default function PosSystem() {
               {((usePoints && pointsDiscount > 0) || appliedDiscount) && (
                 <div className="flex justify-between items-center">
                   <span className="font-black text-sm sm:text-base">{i18n.language === 'ar' ? 'الإجمالي بعد الخصم' : 'Total After Discount'}</span>
-                  <span className="font-black text-base sm:text-xl text-primary" data-testid="text-grand-total">{calculateGrandTotal.toFixed(2)} {t('pos.currency')}</span>
+                  <span className={`font-black text-base sm:text-xl ${(itemDiscountTotal > 0 || manualDiscountAmount > 0 || serviceChargeAmount > 0) ? 'line-through text-muted-foreground text-sm' : 'text-primary'}`} data-testid="text-grand-total">{calculateGrandTotal.toFixed(2)} {t('pos.currency')}</span>
                 </div>
+              )}
+
+              {/* ── Engine extras: item discounts, manual discount, service charge ── */}
+              {itemDiscountTotal > 0 && (
+                <div className="flex justify-between text-[10px] sm:text-sm text-green-600">
+                  <span className="font-bold flex items-center gap-1"><Tag className="w-3 h-3" />{tc('خصم العناصر','Item Discounts')}</span>
+                  <span className="font-bold">- {itemDiscountTotal.toFixed(2)} {t('pos.currency')}</span>
+                </div>
+              )}
+              {manualDiscountAmount > 0 && (
+                <div className="flex justify-between text-[10px] sm:text-sm text-green-600">
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setShowManualDiscount(true)} className="font-bold flex items-center gap-1 hover:underline">
+                      <DollarSign className="w-3 h-3" />{tc('خصم يدوي','Manual Discount')}
+                      {manualDiscount && <span className="text-[9px] text-muted-foreground">({manualDiscount.type === 'percent' ? `${manualDiscount.value}%` : `${manualDiscount.value} ${tc('ر.س','SAR')}`})</span>}
+                    </button>
+                    <button onClick={() => setManualDiscount(undefined)} className="text-destructive hover:opacity-70 ml-1"><X className="w-3 h-3" /></button>
+                  </div>
+                  <span className="font-bold">- {manualDiscountAmount.toFixed(2)} {t('pos.currency')}</span>
+                </div>
+              )}
+              {serviceCharge.enabled && serviceChargeAmount > 0 && (
+                <div className="flex justify-between text-[10px] sm:text-sm text-orange-600">
+                  <button onClick={() => setServiceCharge(prev => ({...prev, enabled: false}))} className="font-bold flex items-center gap-1 hover:underline">
+                    <Hash className="w-3 h-3" />{tc('رسوم الخدمة','Service Charge')} ({serviceCharge.value}{serviceCharge.type === 'percent' ? '%' : ` ${tc('ر.س','SAR')}`})
+                  </button>
+                  <span className="font-bold">+ {serviceChargeAmount.toFixed(2)} {t('pos.currency')}</span>
+                </div>
+              )}
+
+              {/* Service charge quick toggle */}
+              {!serviceCharge.enabled && (
+                <button
+                  onClick={() => setServiceCharge(prev => ({ ...prev, enabled: true }))}
+                  className="text-[10px] text-muted-foreground/50 hover:text-orange-600 transition-colors flex items-center gap-1"
+                  data-testid="button-enable-service-charge"
+                >
+                  <Hash className="w-3 h-3" />
+                  {tc('إضافة رسوم خدمة (F7)','Add Service Charge (F7)')}
+                </button>
+              )}
+              {/* Manual discount quick add */}
+              {!manualDiscountAmount && (
+                <button
+                  onClick={() => setShowManualDiscount(true)}
+                  className="text-[10px] text-muted-foreground/50 hover:text-green-600 transition-colors flex items-center gap-1"
+                  data-testid="button-add-manual-discount"
+                >
+                  <DollarSign className="w-3 h-3" />
+                  {tc('إضافة خصم يدوي','Add Manual Discount')}
+                </button>
+              )}
+
+              {(itemDiscountTotal > 0 || manualDiscountAmount > 0 || serviceChargeAmount > 0) && (
+                <>
+                  <Separator />
+                  <div className="flex justify-between items-center pt-1">
+                    <span className="font-black text-sm sm:text-base">{tc('الإجمالي النهائي','Final Total')}</span>
+                    <span className="font-black text-base sm:text-xl text-primary" data-testid="text-final-grand-total">{finalGrandTotal.toFixed(2)} {t('pos.currency')}</span>
+                  </div>
+                </>
               )}
             </div>
 
@@ -2967,6 +3435,191 @@ export default function PosSystem() {
               </div>
               <Switch id="pos-terminal" checked={posTerminalConnected} onCheckedChange={setPosTerminalConnected} />
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Held Orders Dialog ──────────────────────────────────────────── */}
+      <Dialog open={showHeldCarts} onOpenChange={setShowHeldCarts}>
+        <DialogContent className="max-w-md" dir={dir}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Archive className="w-5 h-5 text-amber-500" />
+              {tc('الطلبات المحجوزة','Held Orders')}
+              <Badge variant="outline">{heldCarts.length}</Badge>
+            </DialogTitle>
+          </DialogHeader>
+          {heldCarts.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              <Archive className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">{tc('لا توجد طلبات محجوزة','No held orders')}</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {heldCarts.map(held => (
+                <div key={held.id} className="rounded-xl border p-3 flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm truncate">{held.name}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {held.orderItems.length} {tc('منتج','items')} · {held.totalAmount.toFixed(2)} {tc('ر.س','SAR')}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{new Date(held.heldAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</p>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button size="sm" className="h-8 text-xs" onClick={() => resumeHeldCart(held.id)} data-testid={`button-resume-held-${held.id}`}>
+                      <FolderOpen className="w-3.5 h-3.5 ml-1" />
+                      {tc('استرداد','Resume')}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" onClick={() => deleteHeldCart(held.id)} data-testid={`button-delete-held-${held.id}`}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Per-Item Discount Dialog ────────────────────────────────────── */}
+      {showItemDiscountFor && (() => {
+        const item = orderItems.find(i => i.lineItemId === showItemDiscountFor);
+        if (!item) return null;
+        return (
+          <Dialog open={true} onOpenChange={() => setShowItemDiscountFor(null)}>
+            <DialogContent className="max-w-xs" dir={dir}>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Percent className="w-4 h-4 text-green-600" />
+                  {tc('خصم على المنتج','Item Discount')}
+                </DialogTitle>
+              </DialogHeader>
+              <p className="text-sm font-bold text-muted-foreground line-clamp-1">{getItemDisplayName(item.coffeeItem)}</p>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Button
+                    size="sm" variant={itemDiscountType === 'percent' ? 'default' : 'outline'}
+                    onClick={() => setItemDiscountType('percent')} className="flex-1 h-8 text-xs"
+                  >
+                    <Percent className="w-3 h-3 ml-1" /> {tc('نسبة %','Percent %')}
+                  </Button>
+                  <Button
+                    size="sm" variant={itemDiscountType === 'amount' ? 'default' : 'outline'}
+                    onClick={() => setItemDiscountType('amount')} className="flex-1 h-8 text-xs"
+                  >
+                    <DollarSign className="w-3 h-3 ml-1" /> {tc('مبلغ ثابت','Fixed SAR')}
+                  </Button>
+                </div>
+                <Input
+                  type="number" min={0} step={itemDiscountType === 'percent' ? 1 : 0.01}
+                  max={itemDiscountType === 'percent' ? 100 : getPosItemUnitPrice(item) * item.quantity}
+                  placeholder={itemDiscountType === 'percent' ? tc('الخصم %','Discount %') : tc('مبلغ الخصم','Discount SAR')}
+                  value={itemDiscountInput}
+                  onChange={e => setItemDiscountInput(e.target.value)}
+                  className="h-10 text-center text-base font-bold"
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') applyItemDiscount(showItemDiscountFor); if (e.key === 'Escape') setShowItemDiscountFor(null); }}
+                  data-testid="input-item-discount"
+                />
+                <div className="flex gap-2">
+                  <Button className="flex-1" onClick={() => applyItemDiscount(showItemDiscountFor)} data-testid="button-apply-item-discount">
+                    {tc('تطبيق','Apply')}
+                  </Button>
+                  {itemDiscounts[showItemDiscountFor] && (
+                    <Button variant="outline" className="text-destructive" onClick={() => { clearItemDiscount(showItemDiscountFor); setShowItemDiscountFor(null); }}>
+                      {tc('إزالة','Remove')}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
+
+      {/* ── Manual Order Discount Dialog ────────────────────────────────── */}
+      <Dialog open={showManualDiscount} onOpenChange={setShowManualDiscount}>
+        <DialogContent className="max-w-xs" dir={dir}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-green-600" />
+              {tc('خصم يدوي على الطلب','Manual Order Discount')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Button size="sm" variant={manualDiscountType === 'percent' ? 'default' : 'outline'} onClick={() => setManualDiscountType('percent')} className="flex-1 h-8 text-xs">
+                <Percent className="w-3 h-3 ml-1" /> {tc('نسبة %','Percent %')}
+              </Button>
+              <Button size="sm" variant={manualDiscountType === 'amount' ? 'default' : 'outline'} onClick={() => setManualDiscountType('amount')} className="flex-1 h-8 text-xs">
+                <DollarSign className="w-3 h-3 ml-1" /> {tc('مبلغ ثابت','Fixed SAR')}
+              </Button>
+            </div>
+            <Input
+              type="number" min={0} step={manualDiscountType === 'percent' ? 1 : 0.01}
+              max={manualDiscountType === 'percent' ? 100 : finalGrandTotal}
+              placeholder={manualDiscountType === 'percent' ? tc('الخصم %','Discount %') : tc('مبلغ الخصم','Discount SAR')}
+              value={manualDiscountInput}
+              onChange={e => setManualDiscountInput(e.target.value)}
+              className="h-10 text-center text-base font-bold"
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') applyManualDiscount(); if (e.key === 'Escape') setShowManualDiscount(false); }}
+              data-testid="input-manual-discount"
+            />
+            {/* Service charge toggle inside manual discount dialog */}
+            <div className="border rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-muted-foreground">{tc('رسوم الخدمة','Service Charge')}</span>
+                <Switch checked={serviceCharge.enabled} onCheckedChange={v => setServiceCharge(prev => ({...prev, enabled: v}))} />
+              </div>
+              {serviceCharge.enabled && (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number" min={0} max={serviceCharge.type === 'percent' ? 100 : undefined} step={1}
+                    value={serviceCharge.value}
+                    onChange={e => setServiceCharge(prev => ({...prev, value: parseFloat(e.target.value) || 0}))}
+                    className="h-8 text-sm text-center flex-1"
+                  />
+                  <Button size="sm" variant={serviceCharge.type === 'percent' ? 'default' : 'outline'} className="h-8 text-xs px-2" onClick={() => setServiceCharge(prev => ({...prev, type: 'percent'}))}>%</Button>
+                  <Button size="sm" variant={serviceCharge.type === 'fixed' ? 'default' : 'outline'} className="h-8 text-xs px-2" onClick={() => setServiceCharge(prev => ({...prev, type: 'fixed'}))}>{tc('ر.س','SAR')}</Button>
+                </div>
+              )}
+            </div>
+            <Button className="w-full" onClick={applyManualDiscount} data-testid="button-apply-manual-discount">
+              {tc('تطبيق','Apply')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Merge Bills Dialog ──────────────────────────────────────────── */}
+      <Dialog open={showMergeBills} onOpenChange={setShowMergeBills}>
+        <DialogContent className="max-w-sm" dir={dir}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Merge className="w-5 h-5" />
+              {tc('دمج الفواتير','Merge Bills')}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{tc('اختر الطلب الذي تريد دمجه في الطلب الحالي','Choose which order to merge into the current one')}</p>
+          <div className="space-y-2">
+            {cartTabs.filter(t => t.id !== activeTabId).map(tab => {
+              const saved = savedTabsRef.current[tab.id];
+              const items = saved?.orderItems || [];
+              const total = items.reduce((s: number, i: any) => s + getPosItemUnitPriceEarly(i) * i.quantity, 0);
+              return (
+                <div key={tab.id} className="rounded-xl border p-3 flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm">{tab.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{items.length} {tc('منتج','items')} · {total.toFixed(2)} {tc('ر.س','SAR')}</p>
+                  </div>
+                  <Button size="sm" className="h-8 text-xs" onClick={() => mergeTabIntoActive(tab.id)} data-testid={`button-merge-tab-${tab.id}`}>
+                    <Merge className="w-3.5 h-3.5 ml-1" />
+                    {tc('دمج','Merge')}
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         </DialogContent>
       </Dialog>
