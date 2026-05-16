@@ -6,3 +6,9 @@ id = "4CAyNicdwpeyxZvRPgxoP"
 uri = "file://SYSTEM_HEALTH_REPORT.md"
 type = "text"
 title = "تقرير صحة النظام الشامل — BLACK ROSE CAFE"
+
+[[outputs]]
+id = "nCiA7CBXDR1rnWS0U7dYu"
+uri = "file://SYSTEM_MAP.md"
+type = "text"
+title = "System Map — تشريح النظام الكامل"
