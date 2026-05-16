@@ -27,8 +27,18 @@ interface DatabaseStats {
   collections: Record<string, CollectionStats>;
   summary: {
     todayOrders: number;
+    dayOrders?: number;
+    dayRevenue?: number;
     totalRevenue: number;
+    dayStart?: string;
+    dayEnd?: string;
+    dayStartHour?: number;
   };
+}
+
+function formatLocalDateISO(d: Date): string {
+  const saudi = new Date(d.getTime() + 3 * 60 * 60 * 1000);
+  return saudi.toISOString().slice(0, 10);
 }
 
 interface CollectionData {
@@ -70,6 +80,11 @@ export default function OwnerDashboard() {
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetConfirm, setResetConfirm] = useState('');
+  const [selectedDate, setSelectedDate] = useState<string>(() => formatLocalDateISO(new Date()));
+  const [dayStartHour, setDayStartHour] = useState<number>(() => {
+    const v = parseInt(localStorage.getItem('qirox_day_start_hour') || '0', 10);
+    return isNaN(v) ? 0 : Math.max(0, Math.min(23, v));
+  });
 
   useEffect(() => {
     const storedEmployee = localStorage.getItem("currentEmployee");
@@ -89,7 +104,11 @@ export default function OwnerDashboard() {
     if (employee) {
       fetchStats();
     }
-  }, [employee]);
+  }, [employee, selectedDate, dayStartHour]);
+
+  useEffect(() => {
+    localStorage.setItem('qirox_day_start_hour', String(dayStartHour));
+  }, [dayStartHour]);
 
   useEffect(() => {
     if (selectedCollection) {
@@ -100,7 +119,8 @@ export default function OwnerDashboard() {
   const fetchStats = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/owner/database-stats', { credentials: 'include' });
+      const url = `/api/owner/database-stats?date=${encodeURIComponent(selectedDate)}&dayStartHour=${dayStartHour}`;
+      const response = await fetch(url, { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
         setStats(data);
@@ -111,6 +131,8 @@ export default function OwnerDashboard() {
       setIsLoading(false);
     }
   };
+
+  const isToday = selectedDate === formatLocalDateISO(new Date());
 
   const fetchCollectionData = async (collection: string, page: number) => {
     try {
@@ -290,6 +312,61 @@ export default function OwnerDashboard() {
           </div>
         </div>
 
+        {/* Day-period selector */}
+        <Card className="bg-card border border-border mb-6">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5" /> {tc("اختر اليوم", "Select day")}
+                </label>
+                <Input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value || formatLocalDateISO(new Date()))}
+                  max={formatLocalDateISO(new Date())}
+                  className="h-9 w-44"
+                  data-testid="input-stats-date"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" /> {tc("اليوم يبدأ من الساعة", "Day starts at hour")}
+                </label>
+                <select
+                  value={dayStartHour}
+                  onChange={(e) => setDayStartHour(parseInt(e.target.value, 10) || 0)}
+                  className="h-9 w-32 rounded-md border border-input bg-background px-2 text-sm"
+                  data-testid="select-day-start-hour"
+                >
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedDate(formatLocalDateISO(new Date()))}
+                disabled={isToday}
+                data-testid="button-stats-today"
+              >
+                {tc("اليوم", "Today")}
+              </Button>
+              {stats?.summary.dayStart && (
+                <div className="text-xs text-muted-foreground mr-auto">
+                  {tc("الفترة:", "Window:")}{" "}
+                  <span className="font-mono" dir="ltr">
+                    {new Date(stats.summary.dayStart).toLocaleString('en-GB', { timeZone: 'Asia/Riyadh', hour12: false })}
+                    {" → "}
+                    {new Date(stats.summary.dayEnd!).toLocaleString('en-GB', { timeZone: 'Asia/Riyadh', hour12: false })}
+                  </span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         {isLoading ? (
           <div className="text-center py-12">
             <div className="animate-spin w-10 h-10 border-2 border-primary border-t-transparent rounded-full mx-auto"></div>
@@ -299,9 +376,9 @@ export default function OwnerDashboard() {
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4 mb-6">
               {[
-                { label: tc("طلبات اليوم", "Today's Orders"), value: stats?.summary.todayOrders || 0, icon: BarChart3, iconBg: 'bg-blue-50', iconColor: 'text-blue-600' },
-                { label: tc("إجمالي الإيرادات", "Total Revenue"), value: <>{(stats?.summary.totalRevenue || 0).toLocaleString()} <SarIcon /></>, icon: CreditCard, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
-                { label: tc("العملاء", "Customers"), value: stats?.collections.customers?.count || 0, icon: Users, iconBg: 'bg-violet-50', iconColor: 'text-violet-600' },
+                { label: isToday ? tc("طلبات اليوم", "Today's Orders") : tc("طلبات اليوم المحدد", "Orders (selected day)"), value: stats?.summary.dayOrders ?? stats?.summary.todayOrders ?? 0, icon: BarChart3, iconBg: 'bg-blue-50', iconColor: 'text-blue-600' },
+                { label: isToday ? tc("إيرادات اليوم", "Today's Revenue") : tc("إيرادات اليوم المحدد", "Revenue (selected day)"), value: <>{(stats?.summary.dayRevenue || 0).toLocaleString()} <SarIcon /></>, icon: CreditCard, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
+                { label: tc("إجمالي الإيرادات", "Total Revenue"), value: <>{(stats?.summary.totalRevenue || 0).toLocaleString()} <SarIcon /></>, icon: CreditCard, iconBg: 'bg-violet-50', iconColor: 'text-violet-600' },
                 { label: tc("الطلبات", "Orders"), value: stats?.collections.orders?.count || 0, icon: ShoppingCart, iconBg: 'bg-amber-50', iconColor: 'text-amber-600' },
               ].map((k, i) => (
                 <Card key={i} className="bg-card border border-border hover:shadow-sm transition-shadow">
@@ -512,17 +589,17 @@ export default function OwnerDashboard() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {/* Reset Orders Only */}
-                  <div className="p-3 bg-amber-900/20 border border-amber-500/20 rounded-lg">
-                    <p className="text-amber-400 text-sm font-medium mb-1">تصفير الطلبات والمكاسب</p>
-                    <p className="text-gray-500 text-xs mb-3">يحذف الطلبات والمحاسبة فقط — المنتجات، الموظفون، والصور تبقى</p>
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-amber-700 text-sm font-medium mb-1">{tc("تصفير الطلبات والمكاسب", "Reset Orders & Revenue")}</p>
+                    <p className="text-muted-foreground text-xs mb-3">{tc("يحذف الطلبات والمحاسبة فقط — المنتجات، الموظفون، والصور تبقى", "Deletes orders & accounting only — products, employees, images remain")}</p>
                     <Button
                       variant="outline"
-                      className="w-full border-amber-500/30 text-amber-400 hover:bg-amber-900/30"
+                      className="w-full border-amber-300 text-amber-700 hover:bg-amber-100"
                       onClick={handleResetOrdersOnly}
                       data-testid="button-reset-orders-only"
                     >
                       <ShoppingCart className="w-4 h-4 ml-2" />
-                      تصفير الطلبات فقط
+                      {tc("تصفير الطلبات فقط", "Reset Orders Only")}
                     </Button>
                   </div>
 

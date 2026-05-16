@@ -92,6 +92,14 @@ function getSaudiEndOfDay(date?: Date): Date {
   const start = getSaudiStartOfDay(date);
   return new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
 }
+// Returns a custom 24-hour business-day window starting at `dayStartHour` (Saudi time) on the given date.
+// e.g. dayStartHour=6 means the business day runs 6 AM → 6 AM next day in Riyadh time.
+function getBusinessDayBoundaries(date?: Date, dayStartHour: number = 0): { start: Date; end: Date } {
+  const safeHour = Math.max(0, Math.min(23, Math.floor(Number(dayStartHour) || 0)));
+  const start = new Date(getSaudiStartOfDay(date).getTime() + safeHour * 60 * 60 * 1000);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
+  return { start, end };
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── High-Performance Coffee Items Cache ─────────────────────────────────────
@@ -13837,11 +13845,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         AttendanceModel, IngredientModel, CategoryModel, DeliveryZoneModel
       } = await import("@shared/schema");
 
+      // Optional query params: date=YYYY-MM-DD (Saudi local date), dayStartHour=0..23
+      const dayStartHour = parseInt(String(req.query.dayStartHour ?? '0'), 10) || 0;
+      const dateParam = req.query.date ? String(req.query.date) : '';
+      const targetDate = dateParam ? new Date(dateParam + 'T00:00:00Z') : new Date();
+      const { start: dayStart, end: dayEnd } = getBusinessDayBoundaries(targetDate, dayStartHour);
+
       const [
         ordersCount, customersCount, employeesCount, coffeeItemsCount,
         branchesCount, discountCodesCount, loyaltyCardsCount, tablesCount,
         attendanceCount, ingredientsCount, categoriesCount, deliveryZonesCount,
-        todayOrders, totalRevenue
+        dayOrders, dayRevenueAgg, totalRevenue
       ] = await Promise.all([
         OrderModel.countDocuments(),
         CustomerModel.countDocuments(),
@@ -13856,9 +13870,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         CategoryModel.countDocuments(),
         DeliveryZoneModel.countDocuments(),
         OrderModel.countDocuments({
-          createdAt: { $gte: getSaudiStartOfDay(), $lte: getSaudiEndOfDay() },
+          createdAt: { $gte: dayStart, $lte: dayEnd },
           status: { $ne: 'cancelled' }
         }),
+        OrderModel.aggregate([
+          { $match: { createdAt: { $gte: dayStart, $lte: dayEnd }, status: { $ne: 'cancelled' } } },
+          { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+        ]),
         OrderModel.aggregate([
           { $match: { status: { $ne: 'cancelled' } } },
           { $group: { _id: null, total: { $sum: '$totalAmount' } } }
@@ -13881,11 +13899,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           deliveryZones: { count: deliveryZonesCount, nameAr: 'مناطق التوصيل' }
         },
         summary: {
-          todayOrders,
-          totalRevenue: totalRevenue[0]?.total || 0
+          todayOrders: dayOrders,
+          dayOrders,
+          dayRevenue: dayRevenueAgg[0]?.total || 0,
+          totalRevenue: totalRevenue[0]?.total || 0,
+          dayStart: dayStart.toISOString(),
+          dayEnd: dayEnd.toISOString(),
+          dayStartHour,
         }
       });
     } catch (error) {
+      console.error("[GET /api/owner/database-stats] Error:", error);
       res.status(500).json({ error: "فشل جلب إحصائيات قاعدة البيانات" });
     }
   });
