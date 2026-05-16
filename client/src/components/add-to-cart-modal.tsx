@@ -596,7 +596,6 @@ export function AddToCartModal({
 
         </div>
         </div>
-        </div>
 
         {/* ── Fixed footer: total + add button ── */}
         <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t bg-background">
