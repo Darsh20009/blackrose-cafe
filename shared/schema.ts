@@ -5782,3 +5782,88 @@ AuditLogSchema.index({ tenantId: 1, entityType: 1 });
 AuditLogSchema.index({ tenantId: 1, actorId: 1 });
 
 export const AuditLogModel = mongoose.models['AuditLog'] || mongoose.model<IAuditLog>('AuditLog', AuditLogSchema);
+
+// ─── Wastage Log ──────────────────────────────────────────────────────────────
+export interface IWastage extends Document {
+  id: string;
+  tenantId?: string;
+  branchId?: string;
+  rawItemId: string;
+  rawItemName: string;
+  rawItemCode?: string;
+  quantity: number;
+  unit: string;
+  reason: 'expired' | 'damaged' | 'spoiled' | 'over_portion' | 'accident' | 'other';
+  reasonNote?: string;
+  unitCost: number;
+  totalCost: number;
+  recordedBy: string;
+  recordedAt: Date;
+}
+
+const WastageSchema = new Schema<IWastage>({
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, index: true },
+  branchId: { type: String },
+  rawItemId: { type: String, required: true },
+  rawItemName: { type: String, required: true },
+  rawItemCode: { type: String },
+  quantity: { type: Number, required: true },
+  unit: { type: String, required: true },
+  reason: { type: String, enum: ['expired','damaged','spoiled','over_portion','accident','other'], required: true },
+  reasonNote: { type: String },
+  unitCost: { type: Number, default: 0 },
+  totalCost: { type: Number, default: 0 },
+  recordedBy: { type: String, default: 'manager' },
+  recordedAt: { type: Date, default: Date.now },
+});
+WastageSchema.index({ tenantId: 1, recordedAt: -1 });
+WastageSchema.index({ tenantId: 1, rawItemId: 1 });
+export const WastageModel = mongoose.models['Wastage'] || mongoose.model<IWastage>('Wastage', WastageSchema);
+
+// ─── Production Batch ─────────────────────────────────────────────────────────
+export interface IProductionIngredient {
+  rawItemId: string;
+  rawItemName: string;
+  quantityUsed: number;
+  unit: string;
+  unitCost: number;
+  totalCost: number;
+}
+
+export interface IProduction extends Document {
+  id: string;
+  tenantId?: string;
+  branchId?: string;
+  batchNumber: string;
+  productName: string;
+  quantity: number;
+  unit: string;
+  ingredients: IProductionIngredient[];
+  totalCost: number;
+  status: 'planned' | 'in_progress' | 'completed' | 'cancelled';
+  plannedDate: Date;
+  completedDate?: Date;
+  notes?: string;
+  producedBy: string;
+}
+
+const ProductionSchema = new Schema<IProduction>({
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, index: true },
+  branchId: { type: String },
+  batchNumber: { type: String, required: true },
+  productName: { type: String, required: true },
+  quantity: { type: Number, required: true },
+  unit: { type: String, required: true },
+  ingredients: [{ rawItemId: String, rawItemName: String, quantityUsed: Number, unit: String, unitCost: Number, totalCost: Number }],
+  totalCost: { type: Number, default: 0 },
+  status: { type: String, enum: ['planned','in_progress','completed','cancelled'], default: 'planned' },
+  plannedDate: { type: Date, required: true },
+  completedDate: { type: Date },
+  notes: { type: String },
+  producedBy: { type: String, default: 'manager' },
+});
+ProductionSchema.index({ tenantId: 1, plannedDate: -1 });
+ProductionSchema.index({ tenantId: 1, status: 1 });
+export const ProductionModel = mongoose.models['Production'] || mongoose.model<IProduction>('Production', ProductionSchema);

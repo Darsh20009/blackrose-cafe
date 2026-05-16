@@ -69,13 +69,14 @@ const UNIT_LABELS: Record<string, string> = {
 };
 
 const NAV_LINKS = [
-  { href: "/manager/inventory/raw-items",  Icon: Coffee,       label: "المواد الخام",  desc: "إدارة المواد" },
-  { href: "/manager/inventory/stock",      Icon: Boxes,        label: "مستوى المخزون",desc: "الكميات الحالية" },
-  { href: "/manager/inventory/recipes",    Icon: BookOpen,     label: "الوصفات",       desc: "وصفات المنتجات" },
-  { href: "/manager/inventory/suppliers",  Icon: Users,        label: "الموردين",      desc: "إدارة الموردين" },
-  { href: "/manager/inventory/purchases",  Icon: ShoppingCart, label: "المشتريات",    desc: "أوامر الشراء" },
-  { href: "/manager/inventory/transfers",  Icon: ArrowRightLeft,label:"التحويلات",    desc: "بين الفروع" },
-  { href: "/manager/inventory/alerts",     Icon: Bell,         label: "التنبيهات",    desc: "تنبيهات المخزون", danger: true },
+  { href: "/manager/inventory/hub",        Icon: Boxes,         label: "المركز المتقدم", desc: "هدر · إنتاج · تنبؤ", highlight: true },
+  { href: "/manager/inventory/raw-items",  Icon: Coffee,        label: "المواد الخام",   desc: "إدارة المواد" },
+  { href: "/manager/inventory/stock",      Icon: Boxes,         label: "مستوى المخزون", desc: "الكميات الحالية" },
+  { href: "/manager/inventory/recipes",    Icon: BookOpen,      label: "الوصفات",        desc: "وصفات المنتجات" },
+  { href: "/manager/inventory/suppliers",  Icon: Users,         label: "الموردين",       desc: "إدارة الموردين" },
+  { href: "/manager/inventory/purchases",  Icon: ShoppingCart,  label: "المشتريات",     desc: "أوامر الشراء" },
+  { href: "/manager/inventory/transfers",  Icon: ArrowRightLeft, label: "التحويلات",     desc: "بين الفروع" },
+  { href: "/manager/inventory/alerts",     Icon: Bell,          label: "التنبيهات",     desc: "تنبيهات المخزون", danger: true },
 ];
 
 // ─── Interfaces ────────────────────────────────────────────────────────────────
@@ -312,15 +313,21 @@ export default function InventorySmartPage() {
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">الأقسام الفرعية</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
-              {NAV_LINKS.map(({ href, Icon, label, desc, danger }) => (
+              {NAV_LINKS.map(({ href, Icon, label, desc, danger, highlight }: any) => (
                 <Link key={href} href={href}>
-                  <div className={`group bg-white border rounded-2xl p-4 flex flex-col items-center gap-2 text-center cursor-pointer transition-all duration-200 hover:shadow-md ${danger ? "border-red-100 hover:border-red-300" : "border-gray-200 hover:border-green-300"}`}>
-                    <div className={`p-2.5 rounded-xl transition-transform group-hover:scale-110 ${danger ? "bg-red-50" : "bg-green-50"}`}>
-                      <Icon className={`h-5 w-5 ${danger ? "text-red-600" : "text-green-600"}`} />
+                  <div className={`group border rounded-2xl p-4 flex flex-col items-center gap-2 text-center cursor-pointer transition-all duration-200 hover:shadow-md ${
+                    highlight ? "bg-primary/5 border-primary/30 hover:border-primary hover:shadow-primary/20" :
+                    danger    ? "bg-white border-red-100 hover:border-red-300" :
+                                "bg-white border-gray-200 hover:border-green-300"
+                  }`}>
+                    <div className={`p-2.5 rounded-xl transition-transform group-hover:scale-110 ${
+                      highlight ? "bg-primary/10" : danger ? "bg-red-50" : "bg-green-50"
+                    }`}>
+                      <Icon className={`h-5 w-5 ${highlight ? "text-primary" : danger ? "text-red-600" : "text-green-600"}`} />
                     </div>
-                    <p className={`font-semibold text-xs ${danger ? "text-red-700" : "text-gray-800"}`}>{label}</p>
+                    <p className={`font-semibold text-xs ${highlight ? "text-primary" : danger ? "text-red-700" : "text-gray-800"}`}>{label}</p>
                     <p className="text-xs text-gray-400 hidden sm:block">{desc}</p>
-                    <ChevronRight className={`h-3 w-3 ${danger ? "text-red-400" : "text-gray-400"} group-hover:translate-x-0.5 transition-transform hidden sm:block`} />
+                    <ChevronRight className={`h-3 w-3 ${highlight ? "text-primary/40" : danger ? "text-red-400" : "text-gray-400"} group-hover:translate-x-0.5 transition-transform hidden sm:block`} />
                   </div>
                 </Link>
               ))}

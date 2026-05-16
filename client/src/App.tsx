@@ -87,6 +87,7 @@ const AccountingDashboard = lazy(() => import("@/pages/accounting-dashboard"));
 const OrderStatusDisplay = lazy(() => import("@/pages/order-status-display"));
 const CustomerDisplay = lazy(() => import("@/pages/customer-display"));
 const InventorySmartPage = lazy(() => import("@/pages/inventory-smart"));
+const InventoryHub = lazy(() => import("@/pages/inventory-hub"));
 const EmployeeAvailability = lazy(() => import("@/pages/employee-availability"));
 const UnauthorizedPage = lazy(() => import("@/pages/unauthorized"));
 const ProductReviews = lazy(() => import("@/pages/product-reviews"));
@@ -319,6 +320,7 @@ function AppRouter() {
       <Route path="/manager/warehouse"><AuthGuard userType="manager"><WarehouseManagement /></AuthGuard></Route>
       <Route path="/manager/support"><AuthGuard userType="manager"><SupportSystem /></AuthGuard></Route>
       <Route path="/manager/inventory/stock-organization"><AuthGuard userType="manager"><StockOrganizationDashboard /></AuthGuard></Route>
+      <Route path="/manager/inventory/hub"><AuthGuard userType="manager"><InventoryHub /></AuthGuard></Route>
       <Route path="/manager/delivery-services"><AuthGuard userType="manager"><DeliveryServiceStatus /></AuthGuard></Route>
       <Route path="/manager/delivery"><AuthGuard userType="manager"><ManagerDelivery /></AuthGuard></Route>
       <Route path="/manager/unified-reports"><AuthGuard userType="manager"><UnifiedReports /></AuthGuard></Route>

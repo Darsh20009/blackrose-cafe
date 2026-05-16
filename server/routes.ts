@@ -19885,6 +19885,228 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // ─── WASTAGE API ──────────────────────────────────────────────────────────
+  app.get("/api/inventory/wastage", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { WastageModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const { limit = '100', rawItemId, reason } = req.query as any;
+      const query: any = { $or: [{ tenantId }, { tenantId: { $exists: false } }] };
+      if (rawItemId) query.rawItemId = rawItemId;
+      if (reason) query.reason = reason;
+      const records = await WastageModel.find(query).sort({ recordedAt: -1 }).limit(parseInt(limit)).lean();
+      res.json(records);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/inventory/wastage", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { WastageModel, RawItemModel } = await import("@shared/schema");
+      const { nanoid } = await import("nanoid");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const { rawItemId, quantity, reason, reasonNote } = req.body;
+      if (!rawItemId || !quantity || !reason) return res.status(400).json({ error: 'rawItemId, quantity, reason required' });
+      // Fetch raw item for cost + name
+      const rawItem = await RawItemModel.findOne({ id: rawItemId }).lean() as any;
+      const unitCost = rawItem?.unitCost || 0;
+      const totalCost = unitCost * Number(quantity);
+      const wastage = await WastageModel.create({
+        id: nanoid(),
+        tenantId,
+        rawItemId,
+        rawItemName: rawItem?.nameAr || rawItemId,
+        rawItemCode: rawItem?.code,
+        quantity: Number(quantity),
+        unit: rawItem?.unit || 'piece',
+        reason,
+        reasonNote,
+        unitCost,
+        totalCost,
+        recordedBy: req.employee?.name || req.employee?.username || 'manager',
+        recordedAt: new Date(),
+      });
+      // Deduct from stock
+      if (rawItem) {
+        await RawItemModel.updateOne({ id: rawItemId }, { $inc: { currentStock: -Number(quantity), currentStockLevel: -Number(quantity) } });
+      }
+      res.status(201).json(wastage);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/inventory/wastage/summary", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { WastageModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const since = new Date(); since.setDate(since.getDate() - 30);
+      const records = await WastageModel.find({
+        $or: [{ tenantId }, { tenantId: { $exists: false } }],
+        recordedAt: { $gte: since }
+      }).lean() as any[];
+      const totalCost = records.reduce((s: number, r: any) => s + (r.totalCost || 0), 0);
+      const byReason = records.reduce((acc: any, r: any) => {
+        acc[r.reason] = (acc[r.reason] || 0) + (r.totalCost || 0);
+        return acc;
+      }, {});
+      const byItem = records.reduce((acc: any, r: any) => {
+        if (!acc[r.rawItemId]) acc[r.rawItemId] = { name: r.rawItemName, qty: 0, cost: 0 };
+        acc[r.rawItemId].qty  += r.quantity || 0;
+        acc[r.rawItemId].cost += r.totalCost || 0;
+        return acc;
+      }, {});
+      res.json({ totalCost, count: records.length, byReason, byItem });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/inventory/wastage/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { WastageModel } = await import("@shared/schema");
+      await WastageModel.deleteOne({ id: req.params.id });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ─── PRODUCTION API ────────────────────────────────────────────────────────
+  app.get("/api/inventory/production", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { ProductionModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const { status, limit = '100' } = req.query as any;
+      const query: any = { $or: [{ tenantId }, { tenantId: { $exists: false } }] };
+      if (status) query.status = status;
+      const batches = await ProductionModel.find(query).sort({ plannedDate: -1 }).limit(parseInt(limit)).lean();
+      res.json(batches);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/inventory/production", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { ProductionModel } = await import("@shared/schema");
+      const { nanoid } = await import("nanoid");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const { productName, quantity, unit, ingredients = [], plannedDate, notes } = req.body;
+      if (!productName || !quantity || !plannedDate) return res.status(400).json({ error: 'productName, quantity, plannedDate required' });
+      const totalCost = (ingredients as any[]).reduce((s: number, i: any) => s + (i.totalCost || 0), 0);
+      const count = await ProductionModel.countDocuments({ $or: [{ tenantId }, { tenantId: { $exists: false } }] });
+      const batch = await ProductionModel.create({
+        id: nanoid(),
+        tenantId,
+        batchNumber: `PROD-${String(count + 1).padStart(4, '0')}`,
+        productName,
+        quantity: Number(quantity),
+        unit: unit || 'piece',
+        ingredients,
+        totalCost,
+        status: 'planned',
+        plannedDate: new Date(plannedDate),
+        notes,
+        producedBy: req.employee?.name || req.employee?.username || 'manager',
+      });
+      res.status(201).json(batch);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put("/api/inventory/production/:id/status", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { ProductionModel, RawItemModel } = await import("@shared/schema");
+      const { status } = req.body;
+      const batch = await ProductionModel.findOne({ id: req.params.id }) as any;
+      if (!batch) return res.status(404).json({ error: 'Not found' });
+      batch.status = status;
+      if (status === 'completed') {
+        batch.completedDate = new Date();
+        // Deduct ingredients from stock
+        for (const ing of batch.ingredients || []) {
+          if (ing.rawItemId && ing.quantityUsed > 0) {
+            await RawItemModel.updateOne({ id: ing.rawItemId }, { $inc: { currentStock: -ing.quantityUsed, currentStockLevel: -ing.quantityUsed } });
+          }
+        }
+      }
+      await batch.save();
+      res.json(batch);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/inventory/production/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { ProductionModel } = await import("@shared/schema");
+      await ProductionModel.deleteOne({ id: req.params.id });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ─── STOCK FORECASTING API ─────────────────────────────────────────────────
+  app.get("/api/inventory/forecast", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { RawItemModel, StockMovementModel, WastageModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const since = new Date(); since.setDate(since.getDate() - 30);
+
+      const rawItems = await RawItemModel.find({
+        $or: [{ tenantId }, { tenantId: { $exists: false } }],
+        isActive: 1,
+      }).lean() as any[];
+
+      // Get stock movements (deductions) in last 30 days
+      const movements = await StockMovementModel.find({
+        $or: [{ tenantId }, { tenantId: { $exists: false } }],
+        type: { $in: ['deduction', 'sale', 'adjustment', 'deduct', 'use'] },
+        createdAt: { $gte: since },
+      }).lean() as any[];
+
+      // Get wastage in last 30 days
+      const wastageRecords = await WastageModel.find({
+        $or: [{ tenantId }, { tenantId: { $exists: false } }],
+        recordedAt: { $gte: since },
+      }).lean() as any[];
+
+      const forecast = rawItems.map((item: any) => {
+        // Sum deductions per item
+        const itemMovements = movements.filter((m: any) => m.rawItemId === item.id || m.itemId === item.id);
+        const itemWastage = wastageRecords.filter((w: any) => w.rawItemId === item.id);
+        const totalDeducted = itemMovements.reduce((s: number, m: any) => s + Math.abs(m.quantity || 0), 0);
+        const totalWasted   = itemWastage.reduce((s: number, w: any) => s + (w.quantity || 0), 0);
+        const totalConsumed = totalDeducted + totalWasted;
+        const avgDailyUsage = totalConsumed / 30;
+        const currentStock  = item.currentStock || item.currentStockLevel || 0;
+        const daysUntilStockout = avgDailyUsage > 0 ? Math.floor(currentStock / avgDailyUsage) : 999;
+        const suggestedReorder  = Math.max(0, (item.maxStockLevel || item.minStockLevel * 3) - currentStock);
+        const stockoutRisk = daysUntilStockout < 3 ? 'critical' : daysUntilStockout < 7 ? 'high' : daysUntilStockout < 14 ? 'medium' : 'low';
+
+        return {
+          id: item.id,
+          nameAr: item.nameAr,
+          nameEn: item.nameEn,
+          unit: item.unit,
+          currentStock,
+          minStockLevel: item.minStockLevel,
+          maxStockLevel: item.maxStockLevel,
+          unitCost: item.unitCost || 0,
+          totalDeducted,
+          totalWasted,
+          avgDailyUsage: Math.round(avgDailyUsage * 100) / 100,
+          daysUntilStockout,
+          suggestedReorder: Math.round(suggestedReorder * 100) / 100,
+          stockoutRisk,
+          reorderCost: Math.round(suggestedReorder * (item.unitCost || 0) * 100) / 100,
+        };
+      });
+
+      // Sort: critical first, then high, then medium, then low
+      const riskOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+      forecast.sort((a: any, b: any) => (riskOrder[a.stockoutRisk as keyof typeof riskOrder] || 3) - (riskOrder[b.stockoutRisk as keyof typeof riskOrder] || 3));
+
+      const summary = {
+        critical: forecast.filter((f: any) => f.stockoutRisk === 'critical').length,
+        high: forecast.filter((f: any) => f.stockoutRisk === 'high').length,
+        medium: forecast.filter((f: any) => f.stockoutRisk === 'medium').length,
+        low: forecast.filter((f: any) => f.stockoutRisk === 'low').length,
+        totalReorderCost: forecast.reduce((s: number, f: any) => s + (f.reorderCost || 0), 0),
+      };
+
+      res.json({ items: forecast, summary });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   // ─── AUDIT LOGS API ───────────────────────────────────────────────────────
   app.get("/api/audit-logs", requireAuth, async (req: AuthRequest, res) => {
     try {
