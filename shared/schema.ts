@@ -5867,3 +5867,110 @@ const ProductionSchema = new Schema<IProduction>({
 ProductionSchema.index({ tenantId: 1, plannedDate: -1 });
 ProductionSchema.index({ tenantId: 1, status: 1 });
 export const ProductionModel = mongoose.models['Production'] || mongoose.model<IProduction>('Production', ProductionSchema);
+
+// ─── Employee Tasks ───────────────────────────────────────────────────────────
+export interface IEmployeeTask extends Document {
+  id: string;
+  tenantId?: string;
+  branchId?: string;
+  title: string;
+  description?: string;
+  assignedTo: string;        // employeeId
+  assignedBy: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  dueDate?: Date;
+  completedAt?: Date;
+  category?: 'cleaning' | 'inventory' | 'service' | 'maintenance' | 'training' | 'other';
+  notes?: string;
+  createdAt: Date;
+}
+
+const EmployeeTaskSchema = new Schema<IEmployeeTask>({
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, index: true },
+  branchId: { type: String },
+  title: { type: String, required: true },
+  description: { type: String },
+  assignedTo: { type: String, required: true, index: true },
+  assignedBy: { type: String, required: true },
+  priority: { type: String, enum: ['low','normal','high','urgent'], default: 'normal' },
+  status: { type: String, enum: ['pending','in_progress','completed','cancelled'], default: 'pending', index: true },
+  dueDate: { type: Date },
+  completedAt: { type: Date },
+  category: { type: String, enum: ['cleaning','inventory','service','maintenance','training','other'], default: 'other' },
+  notes: { type: String },
+  createdAt: { type: Date, default: Date.now },
+});
+EmployeeTaskSchema.index({ tenantId: 1, status: 1, dueDate: 1 });
+export const EmployeeTaskModel = mongoose.models['EmployeeTask'] || mongoose.model<IEmployeeTask>('EmployeeTask', EmployeeTaskSchema);
+
+// ─── Employee Violations ──────────────────────────────────────────────────────
+export interface IEmployeeViolation extends Document {
+  id: string;
+  tenantId?: string;
+  branchId?: string;
+  employeeId: string;
+  employeeName: string;
+  type: 'tardiness' | 'absence' | 'misconduct' | 'cash_shortage' | 'customer_complaint' | 'policy_breach' | 'other';
+  severity: 'minor' | 'moderate' | 'major' | 'critical';
+  description: string;
+  penaltyAmount?: number;       // SAR deduction from salary
+  penaltyPoints?: number;       // performance points deducted
+  reportedBy: string;
+  status: 'recorded' | 'acknowledged' | 'resolved' | 'disputed';
+  resolutionNote?: string;
+  occurredAt: Date;
+  createdAt: Date;
+}
+
+const EmployeeViolationSchema = new Schema<IEmployeeViolation>({
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, index: true },
+  branchId: { type: String },
+  employeeId: { type: String, required: true, index: true },
+  employeeName: { type: String, required: true },
+  type: { type: String, enum: ['tardiness','absence','misconduct','cash_shortage','customer_complaint','policy_breach','other'], required: true },
+  severity: { type: String, enum: ['minor','moderate','major','critical'], default: 'minor' },
+  description: { type: String, required: true },
+  penaltyAmount: { type: Number, default: 0 },
+  penaltyPoints: { type: Number, default: 0 },
+  reportedBy: { type: String, default: 'manager' },
+  status: { type: String, enum: ['recorded','acknowledged','resolved','disputed'], default: 'recorded' },
+  resolutionNote: { type: String },
+  occurredAt: { type: Date, default: Date.now },
+  createdAt: { type: Date, default: Date.now },
+});
+EmployeeViolationSchema.index({ tenantId: 1, employeeId: 1, occurredAt: -1 });
+export const EmployeeViolationModel = mongoose.models['EmployeeViolation'] || mongoose.model<IEmployeeViolation>('EmployeeViolation', EmployeeViolationSchema);
+
+// ─── Employee Breaks (during shift) ──────────────────────────────────────────
+export interface IEmployeeBreak extends Document {
+  id: string;
+  tenantId?: string;
+  attendanceId?: string;
+  employeeId: string;
+  employeeName: string;
+  branchId?: string;
+  type: 'meal' | 'rest' | 'prayer' | 'other';
+  startedAt: Date;
+  endedAt?: Date;
+  durationMinutes?: number;
+  notes?: string;
+}
+
+const EmployeeBreakSchema = new Schema<IEmployeeBreak>({
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, index: true },
+  attendanceId: { type: String },
+  employeeId: { type: String, required: true, index: true },
+  employeeName: { type: String, required: true },
+  branchId: { type: String },
+  type: { type: String, enum: ['meal','rest','prayer','other'], default: 'rest' },
+  startedAt: { type: Date, default: Date.now },
+  endedAt: { type: Date },
+  durationMinutes: { type: Number },
+  notes: { type: String },
+});
+EmployeeBreakSchema.index({ tenantId: 1, employeeId: 1, startedAt: -1 });
+export const EmployeeBreakModel = mongoose.models['EmployeeBreak'] || mongoose.model<IEmployeeBreak>('EmployeeBreak', EmployeeBreakSchema);

@@ -20107,6 +20107,388 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EMPLOYEE TASKS API
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.get("/api/employee-tasks", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeTaskModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const { status, assignedTo, priority, limit = '200' } = req.query as any;
+      const query: any = { $or: [{ tenantId }, { tenantId: { $exists: false } }] };
+      if (status) query.status = status;
+      if (assignedTo) query.assignedTo = assignedTo;
+      if (priority) query.priority = priority;
+      const tasks = await EmployeeTaskModel.find(query).sort({ createdAt: -1 }).limit(parseInt(limit)).lean();
+      res.json(tasks);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/employee-tasks", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeTaskModel } = await import("@shared/schema");
+      const { nanoid } = await import("nanoid");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const { title, description, assignedTo, priority, dueDate, category, notes } = req.body;
+      if (!title || !assignedTo) return res.status(400).json({ error: 'title, assignedTo required' });
+      const task = await EmployeeTaskModel.create({
+        id: nanoid(), tenantId, title, description, assignedTo,
+        assignedBy: req.employee?.fullName || req.employee?.username || 'manager',
+        priority: priority || 'normal',
+        dueDate: dueDate ? new Date(dueDate) : undefined,
+        category: category || 'other', notes,
+      });
+      res.status(201).json(task);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put("/api/employee-tasks/:id", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeTaskModel } = await import("@shared/schema");
+      const update: any = { ...req.body };
+      if (update.status === 'completed' && !update.completedAt) update.completedAt = new Date();
+      const task = await EmployeeTaskModel.findOneAndUpdate({ id: req.params.id }, update, { new: true });
+      res.json(task);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/employee-tasks/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeTaskModel } = await import("@shared/schema");
+      await EmployeeTaskModel.deleteOne({ id: req.params.id });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EMPLOYEE VIOLATIONS API
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.get("/api/employee-violations", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeViolationModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const { employeeId, severity, status, limit = '200' } = req.query as any;
+      const query: any = { $or: [{ tenantId }, { tenantId: { $exists: false } }] };
+      if (employeeId) query.employeeId = employeeId;
+      if (severity) query.severity = severity;
+      if (status) query.status = status;
+      const violations = await EmployeeViolationModel.find(query).sort({ occurredAt: -1 }).limit(parseInt(limit)).lean();
+      res.json(violations);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/employee-violations", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeViolationModel, EmployeeModel } = await import("@shared/schema");
+      const { nanoid } = await import("nanoid");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const { employeeId, type, severity, description, penaltyAmount, penaltyPoints, occurredAt } = req.body;
+      if (!employeeId || !type || !description) return res.status(400).json({ error: 'employeeId, type, description required' });
+      const emp = await EmployeeModel.findOne({ id: employeeId }).lean() as any;
+      const violation = await EmployeeViolationModel.create({
+        id: nanoid(), tenantId,
+        employeeId, employeeName: emp?.fullName || employeeId,
+        type, severity: severity || 'minor', description,
+        penaltyAmount: Number(penaltyAmount || 0),
+        penaltyPoints: Number(penaltyPoints || 0),
+        reportedBy: req.employee?.fullName || req.employee?.username || 'manager',
+        occurredAt: occurredAt ? new Date(occurredAt) : new Date(),
+      });
+      res.status(201).json(violation);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put("/api/employee-violations/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeViolationModel } = await import("@shared/schema");
+      const v = await EmployeeViolationModel.findOneAndUpdate({ id: req.params.id }, req.body, { new: true });
+      res.json(v);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/employee-violations/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeViolationModel } = await import("@shared/schema");
+      await EmployeeViolationModel.deleteOne({ id: req.params.id });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EMPLOYEE BREAKS API
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.get("/api/employee-breaks", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeBreakModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const { employeeId, active, limit = '100' } = req.query as any;
+      const query: any = { $or: [{ tenantId }, { tenantId: { $exists: false } }] };
+      if (employeeId) query.employeeId = employeeId;
+      if (active === 'true') query.endedAt = { $exists: false };
+      const breaks = await EmployeeBreakModel.find(query).sort({ startedAt: -1 }).limit(parseInt(limit)).lean();
+      res.json(breaks);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/employee-breaks/start", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeBreakModel, EmployeeModel } = await import("@shared/schema");
+      const { nanoid } = await import("nanoid");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const employeeId = req.body.employeeId || req.employee?.id;
+      const { type, notes, attendanceId } = req.body;
+      if (!employeeId) return res.status(400).json({ error: 'employeeId required' });
+      // Check for active break
+      const active = await EmployeeBreakModel.findOne({ employeeId, endedAt: { $exists: false } });
+      if (active) return res.status(400).json({ error: 'Already on a break', active });
+      const emp = await EmployeeModel.findOne({ id: employeeId }).lean() as any;
+      const brk = await EmployeeBreakModel.create({
+        id: nanoid(), tenantId, employeeId,
+        employeeName: emp?.fullName || employeeId,
+        type: type || 'rest', notes, attendanceId,
+        startedAt: new Date(),
+      });
+      res.status(201).json(brk);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/employee-breaks/:id/end", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeBreakModel } = await import("@shared/schema");
+      const brk = await EmployeeBreakModel.findOne({ id: req.params.id }) as any;
+      if (!brk) return res.status(404).json({ error: 'Not found' });
+      const endedAt = new Date();
+      brk.endedAt = endedAt;
+      brk.durationMinutes = Math.round((endedAt.getTime() - brk.startedAt.getTime()) / 60000);
+      await brk.save();
+      res.json(brk);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EMPLOYEE LIVE STATUS (overview)
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.get("/api/employees/live-status", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeModel, AttendanceModel, EmployeeBreakModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const employees = await EmployeeModel.find({ $or: [{ tenantId }, { tenantId: { $exists: false } }], isActive: 1 }).lean() as any[];
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const attendance = await AttendanceModel.find({ shiftDate: { $gte: todayStart }, status: 'checked_in' }).lean() as any[];
+      const activeBreaks = await EmployeeBreakModel.find({ endedAt: { $exists: false } }).lean() as any[];
+      const onShiftIds = new Set(attendance.map((a: any) => a.employeeId));
+      const onBreakIds = new Set(activeBreaks.map((b: any) => b.employeeId));
+      const status = employees.map((e: any) => {
+        let s: 'on_shift' | 'on_break' | 'off_duty' = 'off_duty';
+        if (onBreakIds.has(e.id)) s = 'on_break';
+        else if (onShiftIds.has(e.id)) s = 'on_shift';
+        const att = attendance.find((a: any) => a.employeeId === e.id);
+        const brk = activeBreaks.find((b: any) => b.employeeId === e.id);
+        return {
+          id: e.id, fullName: e.fullName, role: e.role, jobTitle: e.jobTitle,
+          imageUrl: e.imageUrl, branchId: e.branchId,
+          status: s,
+          checkInTime: att?.checkInTime,
+          breakStartedAt: brk?.startedAt,
+          breakType: brk?.type,
+          isLate: att?.isLate || 0,
+          lateMinutes: att?.lateMinutes || 0,
+        };
+      });
+      res.json({
+        employees: status,
+        summary: {
+          total: employees.length,
+          onShift: status.filter(s => s.status === 'on_shift').length,
+          onBreak: status.filter(s => s.status === 'on_break').length,
+          offDuty: status.filter(s => s.status === 'off_duty').length,
+          late: status.filter(s => s.isLate === 1).length,
+        }
+      });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PERFORMANCE SCORING + LEADERBOARD
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.get("/api/employees/performance", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeModel, AttendanceModel, EmployeeViolationModel, EmployeeTaskModel, OrderModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const { period = 'month' } = req.query as any;
+      const since = new Date();
+      if (period === 'week') since.setDate(since.getDate() - 7);
+      else if (period === 'month') since.setDate(since.getDate() - 30);
+      else if (period === 'year') since.setDate(since.getDate() - 365);
+
+      const employees = await EmployeeModel.find({ $or: [{ tenantId }, { tenantId: { $exists: false } }], isActive: 1 }).lean() as any[];
+
+      const [attendance, violations, tasks, orders] = await Promise.all([
+        AttendanceModel.find({ shiftDate: { $gte: since } }).lean() as any,
+        EmployeeViolationModel.find({ $or: [{ tenantId }, { tenantId: { $exists: false } }], occurredAt: { $gte: since } }).lean() as any,
+        EmployeeTaskModel.find({ $or: [{ tenantId }, { tenantId: { $exists: false } }], createdAt: { $gte: since } }).lean() as any,
+        OrderModel.find({ createdAt: { $gte: since }, paymentStatus: 'paid' }).lean() as any,
+      ]);
+
+      const performance = employees.map((emp: any) => {
+        const empAttendance = (attendance as any[]).filter((a: any) => a.employeeId === emp.id);
+        const empViolations = (violations as any[]).filter((v: any) => v.employeeId === emp.id);
+        const empTasks = (tasks as any[]).filter((t: any) => t.assignedTo === emp.id);
+        const empOrders = (orders as any[]).filter((o: any) => o.assignedCashierId === emp.id || o.employeeId === emp.id);
+
+        const lateCount = empAttendance.filter((a: any) => a.isLate === 1).length;
+        const lateMinutes = empAttendance.reduce((s: number, a: any) => s + (a.lateMinutes || 0), 0);
+        const presentDays = empAttendance.length;
+        const completedTasks = empTasks.filter((t: any) => t.status === 'completed').length;
+        const totalTasks = empTasks.length;
+        const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100;
+        const totalSales = empOrders.reduce((s: number, o: any) => s + (o.totalAmount || 0), 0);
+        const orderCount = empOrders.length;
+        const violationPoints = empViolations.reduce((s: number, v: any) => {
+          const sevPts = v.severity === 'critical' ? 25 : v.severity === 'major' ? 15 : v.severity === 'moderate' ? 8 : 3;
+          return s + sevPts + (v.penaltyPoints || 0);
+        }, 0);
+        const totalPenalty = empViolations.reduce((s: number, v: any) => s + (v.penaltyAmount || 0), 0);
+
+        // Composite score: attendance(40) + tasks(30) + sales(20) - violations(weighted)
+        let score = 0;
+        const attendanceScore = Math.max(0, 40 - (lateCount * 4) - (lateMinutes * 0.1));
+        const taskScore = (taskCompletionRate / 100) * 30;
+        const salesScore = orderCount > 0 ? Math.min(20, orderCount / 10) : 0;
+        const violationDeduction = Math.min(40, violationPoints);
+        score = Math.max(0, Math.round(attendanceScore + taskScore + salesScore + 10 - violationDeduction));
+
+        const rating = score >= 85 ? 'excellent' : score >= 70 ? 'good' : score >= 50 ? 'average' : 'needs_improvement';
+
+        return {
+          id: emp.id, fullName: emp.fullName, role: emp.role, jobTitle: emp.jobTitle, imageUrl: emp.imageUrl,
+          score, rating,
+          attendance: { presentDays, lateCount, lateMinutes, score: Math.round(attendanceScore) },
+          tasks: { completed: completedTasks, total: totalTasks, completionRate: taskCompletionRate, score: Math.round(taskScore) },
+          sales: { totalSales: Math.round(totalSales * 100) / 100, orderCount, score: Math.round(salesScore) },
+          violations: { count: empViolations.length, points: violationPoints, totalPenalty },
+        };
+      });
+
+      performance.sort((a: any, b: any) => b.score - a.score);
+      res.json({ period, employees: performance });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/employees/leaderboard", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { OrderModel, EmployeeModel } = await import("@shared/schema");
+      const { period = 'month', limit = '20' } = req.query as any;
+      const since = new Date();
+      if (period === 'today') since.setHours(0, 0, 0, 0);
+      else if (period === 'week') since.setDate(since.getDate() - 7);
+      else if (period === 'month') since.setDate(since.getDate() - 30);
+      const orders = await OrderModel.find({ createdAt: { $gte: since }, paymentStatus: 'paid' }).lean() as any[];
+      const byEmp: Record<string, { sales: number; count: number }> = {};
+      for (const o of orders) {
+        const eid = o.assignedCashierId || o.employeeId;
+        if (!eid) continue;
+        if (!byEmp[eid]) byEmp[eid] = { sales: 0, count: 0 };
+        byEmp[eid].sales += o.totalAmount || 0;
+        byEmp[eid].count += 1;
+      }
+      const empIds = Object.keys(byEmp);
+      const emps = await EmployeeModel.find({ id: { $in: empIds } }).lean() as any[];
+      const board = emps.map((e: any) => ({
+        id: e.id, fullName: e.fullName, role: e.role, jobTitle: e.jobTitle, imageUrl: e.imageUrl,
+        sales: Math.round((byEmp[e.id]?.sales || 0) * 100) / 100,
+        orderCount: byEmp[e.id]?.count || 0,
+        avgOrderValue: byEmp[e.id]?.count > 0 ? Math.round((byEmp[e.id].sales / byEmp[e.id].count) * 100) / 100 : 0,
+      })).sort((a: any, b: any) => b.sales - a.sales).slice(0, parseInt(limit));
+      res.json({ period, leaderboard: board });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PAYROLL EXPORT
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.get("/api/employees/payroll-export", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { EmployeeModel, AttendanceModel, EmployeeViolationModel, OrderModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const { month, year, format = 'json' } = req.query as any;
+      const now = new Date();
+      const m = parseInt(month || (now.getMonth() + 1).toString());
+      const y = parseInt(year || now.getFullYear().toString());
+      const start = new Date(y, m - 1, 1);
+      const end = new Date(y, m, 0, 23, 59, 59);
+
+      const employees = await EmployeeModel.find({ $or: [{ tenantId }, { tenantId: { $exists: false } }], isActive: 1 }).lean() as any[];
+      const [attendance, violations, orders] = await Promise.all([
+        AttendanceModel.find({ shiftDate: { $gte: start, $lte: end } }).lean(),
+        EmployeeViolationModel.find({ occurredAt: { $gte: start, $lte: end } }).lean(),
+        OrderModel.find({ createdAt: { $gte: start, $lte: end }, paymentStatus: 'paid' }).lean(),
+      ]);
+
+      const rows = employees.map((e: any) => {
+        const empAtt = (attendance as any[]).filter((a: any) => a.employeeId === e.id);
+        const empViol = (violations as any[]).filter((v: any) => v.employeeId === e.id);
+        const empOrders = (orders as any[]).filter((o: any) => o.assignedCashierId === e.id || o.employeeId === e.id);
+        const presentDays = empAtt.length;
+        const lateMinutes = empAtt.reduce((s: number, a: any) => s + (a.lateMinutes || 0), 0);
+        const totalHours = empAtt.reduce((s: number, a: any) => {
+          if (!a.checkOutTime) return s;
+          return s + ((new Date(a.checkOutTime).getTime() - new Date(a.checkInTime).getTime()) / 3600000);
+        }, 0);
+        const totalSales = empOrders.reduce((s: number, o: any) => s + (o.totalAmount || 0), 0);
+        const baseSalary = e.salary || 0;
+        const commission = e.commissionPercentage ? (totalSales * e.commissionPercentage / 100) : 0;
+        const deductions = empViol.reduce((s: number, v: any) => s + (v.penaltyAmount || 0), 0);
+        const netPay = baseSalary + commission - deductions;
+        return {
+          employeeId: e.id, employmentNumber: e.employmentNumber || '',
+          fullName: e.fullName, role: e.role, jobTitle: e.jobTitle, phone: e.phone,
+          presentDays, lateMinutes, totalHours: Math.round(totalHours * 100) / 100,
+          orderCount: empOrders.length, totalSales: Math.round(totalSales * 100) / 100,
+          baseSalary, commissionPct: e.commissionPercentage || 0,
+          commission: Math.round(commission * 100) / 100,
+          violationsCount: empViol.length,
+          deductions: Math.round(deductions * 100) / 100,
+          netPay: Math.round(netPay * 100) / 100,
+        };
+      });
+
+      if (format === 'csv') {
+        const headers = ['ID','Emp #','Full Name','Role','Job','Phone','Present Days','Late Min','Hours','Orders','Sales SAR','Base SAR','Commission %','Commission SAR','Violations','Deductions SAR','Net Pay SAR'];
+        const lines = ['\uFEFF' + headers.join(',')];
+        for (const r of rows) {
+          lines.push([r.employeeId, r.employmentNumber, `"${r.fullName}"`, r.role, `"${r.jobTitle}"`, r.phone, r.presentDays, r.lateMinutes, r.totalHours, r.orderCount, r.totalSales, r.baseSalary, r.commissionPct, r.commission, r.violationsCount, r.deductions, r.netPay].join(','));
+        }
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="payroll-${y}-${String(m).padStart(2,'0')}.csv"`);
+        return res.send(lines.join('\n'));
+      }
+
+      res.json({ month: m, year: y, rows, totals: {
+        totalNet: rows.reduce((s, r) => s + r.netPay, 0),
+        totalSales: rows.reduce((s, r) => s + r.totalSales, 0),
+        totalDeductions: rows.reduce((s, r) => s + r.deductions, 0),
+      } });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PERMISSIONS MATRIX
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.get("/api/employees/permissions-matrix", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { PermissionsEngine } = await import("./permissions-engine");
+      const roles = ['cleaner','driver','accountant','cashier','barista','supervisor','branch_manager','owner','admin'];
+      const matrix = roles.map(r => ({
+        role: r,
+        roleNameAr: PermissionsEngine.getRoleNameAr(r as any),
+        permissions: PermissionsEngine.getPermissions(r),
+        accessiblePages: PermissionsEngine.getAccessiblePages(r),
+      }));
+      res.json({ roles: matrix });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   // ─── AUDIT LOGS API ───────────────────────────────────────────────────────
   app.get("/api/audit-logs", requireAuth, async (req: AuthRequest, res) => {
     try {
