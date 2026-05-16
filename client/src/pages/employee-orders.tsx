@@ -72,7 +72,7 @@ export default function EmployeeOrders() {
   const { data: orders = [], refetch, isLoading, isError } = useQuery<any[]>({
     queryKey: ["/api/orders", "management"],
     queryFn: async () => {
-      const res = await fetch("/api/orders?limit=500", { credentials: "include" });
+      const res = await fetch("/api/orders?limit=100", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch orders");
       return res.json();
     },

@@ -230,6 +230,13 @@ export default function ManagerTables() {
     },
   });
 
+  const getStoredTenantId = () => {
+    try {
+      const emp = localStorage.getItem("currentEmployee");
+      return emp ? JSON.parse(emp)?.tenantId || 'demo-tenant' : 'demo-tenant';
+    } catch { return 'demo-tenant'; }
+  };
+
   // Toggle table active status mutation
   const toggleActiveStatusMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -237,7 +244,7 @@ export default function ManagerTables() {
         method: "PATCH",
         headers: { 
           "Content-Type": "application/json",
-          "x-tenant-id": "demo-tenant"
+          "x-tenant-id": getStoredTenantId()
         },
         credentials: "include",
       });
@@ -267,7 +274,7 @@ export default function ManagerTables() {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "x-tenant-id": "demo-tenant"
+          "x-tenant-id": getStoredTenantId()
         },
         credentials: "include",
       });
@@ -296,7 +303,7 @@ export default function ManagerTables() {
       const response = await fetch(`/api/tables/${id}`, {
         method: "DELETE",
         headers: {
-          "x-tenant-id": "demo-tenant"
+          "x-tenant-id": getStoredTenantId()
         },
         credentials: "include",
       });

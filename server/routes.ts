@@ -2156,7 +2156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Public loyalty settings (no auth required) for customer-facing pages
   app.get("/api/public/loyalty-settings", async (req, res) => {
     try {
-      const tenantId = 'demo-tenant';
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const ck = cacheKey('loyalty-settings', tenantId);
       const cached = cache.get<any>(ck);
       if (cached) return res.json(cached);
@@ -2189,7 +2189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/loyalty-config", async (req, res) => {
     try {
-      const tenantId = 'demo-tenant';
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const ck = cacheKey('loyalty-settings', tenantId);
       const cached = cache.get<any>(ck);
       if (cached) return res.json(cached);
@@ -2568,14 +2568,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(transfer);
   });
 
-  // --- DELIVERY INTEGRATION MOCK API ---
-  app.get("/api/integrations/delivery/mock-status", requireAuth, async (req: AuthRequest, res) => {
-    res.json({
-      hungerstation: { status: 'connected', latency: '120ms', ordersToday: 45 },
-      jahez: { status: 'connected', latency: '95ms', ordersToday: 32 },
-      toyou: { status: 'disconnected', lastActive: '2025-12-29' }
-    });
-  });
 
   // Real service status endpoint
   app.get("/api/integrations/delivery/service-status", requireAuth, async (req: AuthRequest, res) => {
@@ -2864,7 +2856,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "المبلغ مطلوب" });
       }
 
-      const tenantId = 'demo-tenant';
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const config = await BusinessConfigModel.findOne({ tenantId }).lean();
       const pg = (config as any)?.paymentGateway;
 
@@ -3191,7 +3183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ verified: false, error: "معرّف الجلسة مطلوب" });
       }
 
-      const tenantId = 'demo-tenant';
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const config = await BusinessConfigModel.findOne({ tenantId });
       const pg = config?.paymentGateway;
       const provider = reqProvider || pg?.provider;
@@ -3432,7 +3424,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const body = req.body;
       console.log('[Geidea Webhook] Received:', JSON.stringify(body));
 
-      const tenantId = 'demo-tenant';
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const config = await BusinessConfigModel.findOne({ tenantId });
       const pg = config?.paymentGateway;
 
@@ -3483,7 +3475,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!amount || Number(amount) <= 0) {
         return res.status(400).json({ error: "المبلغ مطلوب" });
       }
-      const tenantId = 'demo-tenant';
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const config = await BusinessConfigModel.findOne({ tenantId });
       const pg = config?.paymentGateway;
       if (!pg || pg.provider !== 'geidea' || !pg.geidea?.publicKey || !pg.geidea?.apiPassword) {
@@ -3518,7 +3510,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Payment simulation endpoint — only works when paymentTestMode is enabled
   app.post("/api/payments/simulate-success", async (req, res) => {
     try {
-      const tenantId = 'demo-tenant';
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const config = await BusinessConfigModel.findOne({ tenantId });
       const pg = config?.paymentGateway;
       if (!pg?.paymentTestMode) {
@@ -3547,7 +3539,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Business config — expose paymentTestMode to frontend (no auth needed, read-only)
   app.get("/api/payments/config", async (req, res) => {
     try {
-      const tenantId = 'demo-tenant';
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const config = await BusinessConfigModel.findOne({ tenantId });
       const pg = config?.paymentGateway;
       return res.json({
@@ -3686,7 +3678,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/payments/order-status/:orderNumber", async (req, res) => {
     try {
       const { orderNumber } = req.params;
-      const tenantId = 'demo-tenant';
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const order = await OrderModel.findOne({ tenantId, orderNumber }).lean() as any;
       if (!order) {
         return res.json({ found: false, paid: false });
@@ -3782,7 +3774,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const body = req.body;
       console.log('[Paymob Webhook]', JSON.stringify(body));
 
-      const tenantId = 'demo-tenant';
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const config = await BusinessConfigModel.findOne({ tenantId });
       const hmacSecret = config?.paymentGateway?.paymob?.hmacSecret;
 
@@ -4905,20 +4897,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Temporary test route for email
-
-  app.get("/api/pos/hardware-status", requireAuth, (req: AuthRequest, res) => {
-    try {
-      // In a real implementation, this would check actual hardware connections
-      res.json({
-        pos: posDeviceStatus,
-        printer: { connected: true, status: "ready" },
-        cashDrawer: { connected: true, status: "closed" },
-        scanner: { connected: true, status: "ready" }
-      });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to get hardware status" });
-    }
-  });
 
   // FILE UPLOAD ROUTES
   
@@ -10188,7 +10166,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!loyaltyCard) return res.status(404).json({ error: "لم يتم العثور على بطاقة الولاء" });
 
       // Get real loyalty settings from business config
-      const businessConfig   = await storage.getBusinessConfig('demo-tenant').catch(() => null) as any;
+      const businessConfig   = await storage.getBusinessConfig((loyaltyCard as any)?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant').catch(() => null) as any;
       const loyaltyConfig    = businessConfig?.loyaltyConfig || {};
       const pointsValueInSar = loyaltyConfig.pointsValueInSar ?? 0.02;
 
@@ -10672,7 +10650,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if ((card.points || 0) < pts) return res.status(400).json({ error: "رصيد النقاط غير كافٍ" });
 
-      const config = await storage.getBusinessConfig('demo-tenant');
+      const config = await storage.getBusinessConfig((card as any)?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant');
       const pointsValueInSar = (config as any)?.loyaltyConfig?.pointsValueInSar ?? 0.05;
       const sarValue = pts * pointsValueInSar;
 
@@ -18316,34 +18294,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error: any) {
       res.status(400).json({ error: error.message || "فشل التعيين التلقائي" });
-    }
-  });
-
-  app.post("/api/webhooks/delivery/:provider", async (req, res) => {
-    try {
-      const { provider } = req.params;
-      const signature = req.headers['x-webhook-signature'] || req.headers['x-signature'];
-
-      const integration = await DeliveryIntegrationModel.findOne({
-        providerName: { $regex: new RegExp(provider, 'i') },
-        isActive: 1
-      });
-
-      if (!integration) {
-        return res.status(404).json({ error: "Integration not found or inactive" });
-      }
-
-      const tenantId = integration.tenantId;
-      const order = await deliveryService.processWebhookOrder(provider, req.body, tenantId);
-
-      if (integration.autoAcceptOrders || integration.autoAssignDriver) {
-        await deliveryService.autoAssignDriver(order.id, tenantId);
-      }
-
-      res.json({ success: true, orderId: order.id, status: 'received' });
-    } catch (error: any) {
-      console.error(`Webhook error [${req.params.provider}]:`, error.message);
-      res.status(500).json({ error: "Webhook processing failed" });
     }
   });
 
