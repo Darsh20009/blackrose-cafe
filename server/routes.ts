@@ -4012,32 +4012,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await new Promise<void>((resolve, reject) => {
         const socket = new net.Socket();
-        let resolved = false;
+        let resolved    = false;
         let writeStarted = false;
 
-        const cleanup = (err?: Error) => {
+        // Dynamic timeout: minimum 10s + 1s per 10KB — handles large raster receipts
+        const dynamicTimeout = Math.max(Number(timeout) || 10000, Math.ceil(printBuffer.length / 10000) * 1000);
+
+        const onError = (err: Error) => {
           if (resolved) return;
           resolved = true;
           socket.destroy();
-          if (err) reject(err);
-          else resolve();
+          reject(err);
         };
 
-        socket.setTimeout(Number(timeout));
-        socket.on('error', (err) => cleanup(err));
-        socket.on('timeout', () => cleanup(new Error(`انتهت مهلة الاتصال بـ ${ip}:${port}`)));
-        // Only auto-resolve on close if we haven't started writing yet;
-        // during a write the write-callback (or error) handles resolution.
-        socket.on('close', () => { if (!writeStarted) cleanup(); });
+        const onDone = () => {
+          if (resolved) return;
+          resolved = true;
+          resolve();
+        };
+
+        socket.setTimeout(dynamicTimeout);
+        socket.on('error', (err) => onError(err));
+        socket.on('timeout', () => {
+          if (!writeStarted) {
+            onError(new Error(`انتهت مهلة الاتصال بـ ${ip}:${port}`));
+          } else {
+            // Timeout after write started — close gracefully
+            socket.destroy();
+            onDone();
+          }
+        });
+        // Resolve when connection fully closes = all data flushed to printer
+        socket.on('close', onDone);
 
         socket.connect(Number(port), ip, () => {
           writeStarted = true;
           socket.write(printBuffer, (err) => {
             if (err) {
-              cleanup(err);
+              onError(err);
             } else {
-              // Give printer 800ms to process all data before closing
-              setTimeout(() => cleanup(), 800);
+              // Graceful close: sends FIN after all buffered data is delivered.
+              // Unlike destroy() which sends RST and drops unsent bytes,
+              // end() ensures the full raster image reaches the printer.
+              socket.end();
             }
           });
         });

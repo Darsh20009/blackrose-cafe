@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * QIROX Print Relay Agent - v1.1.0
+ * QIROX Print Relay Agent - v1.2.0
  * =================================
  * وكيل الطباعة المحلي - يعمل على أي جهاز في الشبكة (ويندوز / ماك / لينكس / Raspberry Pi)
  * يستقبل أوامر الطباعة من المتصفح ويرسلها مباشرة للطابعة عبر TCP
@@ -35,26 +35,52 @@ function getLocalIPs() {
 function sendToThermalPrinter(ip, port, buffer) {
   return new Promise((resolve, reject) => {
     const client = new net.Socket();
-    let done = false;
+    let done        = false;
+    let writeStarted = false;
 
-    const finish = (err) => {
+    // مهلة ديناميكية: الحد الأدنى 10 ثوانٍ + ثانية لكل 10KB من البيانات
+    // هذا يعالج الفواتير الكبيرة (صور رسترية كثيرة المنتجات) التي تحتاج وقتاً أطول
+    const dynamicTimeout = Math.max(10000, Math.ceil(buffer.length / 10000) * 1000);
+
+    const onError = (err) => {
       if (done) return;
       done = true;
       client.destroy();
-      err ? reject(err) : resolve();
+      reject(err);
     };
 
-    client.setTimeout(TIMEOUT);
+    const onDone = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+
+    client.setTimeout(dynamicTimeout);
     client.connect(port, ip, () => {
+      writeStarted = true;
       client.write(buffer, (err) => {
-        if (err) return finish(err);
-        // انتظر قصير لضمان استلام الطابعة للبيانات قبل إغلاق الاتصال
-        setTimeout(() => finish(null), 300);
+        if (err) return onError(err);
+        // إغلاق أنيق: يرسل FIN بعد تفريغ جميع البيانات المؤقتة
+        // على عكس destroy()، لا يرسل RST ولا يقطع البيانات في منتصف الطريق
+        client.end();
       });
     });
 
-    client.on('error',   (err) => finish(err));
-    client.on('timeout', ()    => finish(new Error(`انتهت مهلة الاتصال بـ ${ip}:${port}`)));
+    // الاتصال أُغلق بالكامل من الطرفين = جميع البيانات وصلت للطابعة
+    client.on('close', onDone);
+
+    client.on('error', onError);
+
+    client.on('timeout', () => {
+      if (!writeStarted) {
+        // انتهت المهلة قبل بدء الكتابة = مشكلة اتصال
+        onError(new Error(`انتهت مهلة الاتصال بـ ${ip}:${port}`));
+      } else {
+        // انتهت المهلة بعد بدء الكتابة = البيانات في الطريق، نغلق بأمان
+        client.destroy();
+        onDone();
+      }
+    });
   });
 }
 
