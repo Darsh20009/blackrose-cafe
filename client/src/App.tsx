@@ -90,7 +90,6 @@ const InventorySmartPage = lazy(() => import("@/pages/inventory-smart"));
 const InventoryHub = lazy(() => import("@/pages/inventory-hub"));
 const EmployeeAvailability = lazy(() => import("@/pages/employee-availability"));
 const UnauthorizedPage = lazy(() => import("@/pages/unauthorized"));
-const ProductReviews = lazy(() => import("@/pages/product-reviews"));
 const ReferralProgram = lazy(() => import("@/pages/referral-program"));
 const NotificationsPage = lazy(() => import("@/pages/notifications"));
 const AdminNotificationsPage = lazy(() => import("@/pages/admin-notifications"));

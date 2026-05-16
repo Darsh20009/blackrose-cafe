@@ -784,10 +784,12 @@ export default function ManagerDashboard() {
              <SelectItem value="all" className="text-xs">كل الفترات</SelectItem>
            </SelectContent>
          </Select>
-         <Button variant="outline" size="sm" onClick={() => setDemoManagerOpen(true)} className="h-8 text-xs border-border bg-muted/50 text-muted-foreground hover:text-foreground hidden sm:flex">
-           <FlaskConical className="w-3 h-3 ml-1" />
-           تجريبي
-         </Button>
+         {import.meta.env.DEV && (
+           <Button variant="outline" size="sm" onClick={() => setDemoManagerOpen(true)} className="h-8 text-xs border-border bg-muted/50 text-muted-foreground hover:text-foreground hidden sm:flex">
+             <FlaskConical className="w-3 h-3 ml-1" />
+             تجريبي
+           </Button>
+         )}
          <Button variant="outline" size="sm" onClick={handleExportData} className="h-8 text-xs border-border bg-muted/50 text-muted-foreground hover:text-foreground">
            <Download className="w-3 h-3 ml-1" />
            Excel
@@ -876,100 +878,38 @@ export default function ManagerDashboard() {
            </div>
          </div>
 
-         {/* ── CODE QUALITY BANNER (Phase 9) ── */}
-         <button
-           onClick={() => setLocation("/manager/code-quality")}
-           data-testid="link-code-quality"
-           className="w-full group bg-gradient-to-l from-violet-950/40 to-purple-950/20 border border-violet-500/20 rounded-2xl p-4 flex items-center gap-4 hover:border-violet-500/40 transition-all mb-3"
-         >
-           <div className="w-12 h-12 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center shrink-0">
-             <Code2 className="w-6 h-6 text-violet-400" />
-           </div>
-           <div className="text-right flex-1 min-w-0">
-             <div className="flex items-center gap-2 flex-wrap">
-               <div className="text-foreground font-bold text-sm">جودة الكود</div>
-               <span className="text-[10px] bg-violet-500/20 text-violet-400 border border-violet-500/30 px-2 py-0.5 rounded-full font-medium">المرحلة 9</span>
+         {/* ── 🧪 المختبر التقني — موحَّد (Phase 5-9) ── */}
+         <details className="group bg-card border border-border rounded-2xl mb-3" data-testid="lab-section">
+           <summary className="cursor-pointer list-none flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors rounded-2xl">
+             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/15 to-cyan-500/15 border border-violet-500/20 flex items-center justify-center shrink-0">
+               <FlaskConical className="w-5 h-5 text-violet-500" />
              </div>
-             <div className="text-muted-foreground text-xs mt-0.5">Modular · Event Bus · Typed · Result&lt;T,E&gt; · اختبارات حقيقية · مراقبة الصحة</div>
-           </div>
-           <Sparkles className="w-5 h-5 text-violet-400 group-hover:-translate-x-1 transition-transform" />
-         </button>
-
-         {/* ── PERFORMANCE BANNER (Phase 8) ── */}
-         <button
-           onClick={() => setLocation("/manager/performance")}
-           data-testid="link-performance-hub"
-           className="w-full group bg-gradient-to-l from-amber-950/40 to-yellow-950/20 border border-amber-500/20 rounded-2xl p-4 flex items-center gap-4 hover:border-amber-500/40 transition-all mb-3"
-         >
-           <div className="w-12 h-12 rounded-xl bg-amber-600/20 border border-amber-500/30 flex items-center justify-center shrink-0">
-             <Zap className="w-6 h-6 text-amber-400" />
-           </div>
-           <div className="text-right flex-1 min-w-0">
-             <div className="flex items-center gap-2 flex-wrap">
-               <div className="text-foreground font-bold text-sm">الأداء الجنوني</div>
-               <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-medium">المرحلة 8</span>
+             <div className="text-right flex-1 min-w-0">
+               <div className="text-foreground font-bold text-sm">🧪 المختبر التقني</div>
+               <div className="text-muted-foreground text-xs mt-0.5">أدوات المطور · جودة الكود · الأداء · الذكاء الاصطناعي · التكامل · الموثوقية</div>
              </div>
-             <div className="text-muted-foreground text-xs mt-0.5">مراقبة الكاش · سرعة الـ APIs · الذاكرة · الأبطأ والأكثر استدعاءً</div>
+             <ChevronDown className="w-4 h-4 text-muted-foreground group-open:rotate-180 transition-transform" />
+           </summary>
+           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 p-3 pt-0">
+             {[
+               { id: "code-quality", label: "جودة الكود", icon: Code2,    path: "/manager/code-quality", cls: "border-violet-500/20 bg-violet-500/5 hover:bg-violet-500/10 hover:border-violet-500/40",     iconCls: "text-violet-500"  },
+               { id: "performance",  label: "الأداء",     icon: Gauge,    path: "/manager/performance",  cls: "border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 hover:border-amber-500/40",         iconCls: "text-amber-500"   },
+               { id: "ecosystem",    label: "التكامل",    icon: Plug,     path: "/manager/ecosystem",    cls: "border-cyan-500/20 bg-cyan-500/5 hover:bg-cyan-500/10 hover:border-cyan-500/40",             iconCls: "text-cyan-500"    },
+               { id: "ai-automation",label: "AI أتمتة",   icon: Brain,    path: "/manager/ai-automation",cls: "border-fuchsia-500/20 bg-fuchsia-500/5 hover:bg-fuchsia-500/10 hover:border-fuchsia-500/40", iconCls: "text-fuchsia-500" },
+               { id: "reliability",  label: "الموثوقية",  icon: Sparkles, path: "/manager/reliability",  cls: "border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500/40", iconCls: "text-emerald-500" },
+             ].map(({ id, label, icon: Icon, path, cls, iconCls }) => (
+               <button
+                 key={id}
+                 onClick={() => setLocation(path)}
+                 data-testid={`link-lab-${id}`}
+                 className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${cls}`}
+               >
+                 <Icon className={`w-5 h-5 ${iconCls}`} />
+                 <span className="text-[11px] font-medium text-foreground text-center leading-tight">{label}</span>
+               </button>
+             ))}
            </div>
-           <Gauge className="w-5 h-5 text-amber-400 group-hover:-translate-x-1 transition-transform" />
-         </button>
-
-         {/* ── ECOSYSTEM BANNER (Phase 7) ── */}
-         <button
-           onClick={() => setLocation("/manager/ecosystem")}
-           data-testid="link-ecosystem-hub"
-           className="w-full group bg-gradient-to-l from-cyan-950/40 to-blue-950/20 border border-cyan-500/20 rounded-2xl p-4 flex items-center gap-4 hover:border-cyan-500/40 transition-all mb-3"
-         >
-           <div className="w-12 h-12 rounded-xl bg-cyan-600/20 border border-cyan-500/30 flex items-center justify-center shrink-0">
-             <Globe className="w-6 h-6 text-cyan-400" />
-           </div>
-           <div className="text-right flex-1 min-w-0">
-             <div className="flex items-center gap-2 flex-wrap">
-               <div className="text-foreground font-bold text-sm">منظومة التكامل</div>
-               <span className="text-[10px] bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full font-medium">المرحلة 7</span>
-             </div>
-             <div className="text-muted-foreground text-xs mt-0.5">APIs مفتوحة · Webhooks · ERP · توصيل · واتساب · Shopify · TikTok · أجهزة دفع</div>
-           </div>
-           <Plug className="w-5 h-5 text-cyan-400 group-hover:-translate-x-1 transition-transform" />
-         </button>
-
-         {/* ── AI AUTOMATION BANNER (Phase 6) ── */}
-         <button
-           onClick={() => setLocation("/manager/ai-automation")}
-           data-testid="link-ai-automation"
-           className="w-full group bg-gradient-to-l from-fuchsia-950/40 to-violet-950/20 border border-fuchsia-500/20 rounded-2xl p-4 flex items-center gap-4 hover:border-fuchsia-500/40 transition-all mb-3"
-         >
-           <div className="w-12 h-12 rounded-xl bg-fuchsia-600/20 border border-fuchsia-500/30 flex items-center justify-center shrink-0">
-             <Brain className="w-6 h-6 text-fuchsia-400" />
-           </div>
-           <div className="text-right flex-1 min-w-0">
-             <div className="flex items-center gap-2 flex-wrap">
-               <div className="text-foreground font-bold text-sm">الذكاء الاصطناعي والأتمتة</div>
-               <span className="text-[10px] bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30 px-2 py-0.5 rounded-full font-medium">المرحلة 6</span>
-             </div>
-             <div className="text-muted-foreground text-xs mt-0.5">اقتراحات ذكية · تنبؤ بالمبيعات · كشف السرقة · تقارير سرديّة · تنبؤ بنفاد المخزون</div>
-           </div>
-           <Sparkles className="w-5 h-5 text-fuchsia-400 group-hover:-translate-x-1 transition-transform" />
-         </button>
-
-         {/* ── RELIABILITY BANNER ── */}
-         <button
-           onClick={() => setLocation("/manager/reliability")}
-           data-testid="link-reliability-hub"
-           className="w-full group bg-gradient-to-l from-emerald-950/40 to-teal-950/20 border border-emerald-500/20 rounded-2xl p-4 flex items-center gap-4 hover:border-emerald-500/40 transition-all mb-3"
-         >
-           <div className="w-12 h-12 rounded-xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
-             <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-           </div>
-           <div className="text-right flex-1 min-w-0">
-             <div className="flex items-center gap-2 flex-wrap">
-               <div className="text-foreground font-bold text-sm">مركز الموثوقية</div>
-               <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-medium">المرحلة 5</span>
-             </div>
-             <div className="text-muted-foreground text-xs mt-0.5">سجلات تدقيق · صحة النظام · استرداد الجلسات · طوابير الطباعة · أداء الـ APIs · مراقبة الأجهزة</div>
-           </div>
-           <svg className="w-5 h-5 text-emerald-400 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
-         </button>
+         </details>
 
          {/* ── AI BANNER ── */}
          <button
@@ -1854,7 +1794,7 @@ export default function ManagerDashboard() {
    </div>
  </div>
  <MobileBottomNav manager={manager} />
- <DemoDataManager open={demoManagerOpen} onOpenChange={setDemoManagerOpen} />
+ {import.meta.env.DEV && <DemoDataManager open={demoManagerOpen} onOpenChange={setDemoManagerOpen} />}
  </>
  );
 }

@@ -2085,6 +2085,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete("/api/admin/clear-all-data", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Destructive demo cleanup disabled in production' });
+    }
     try {
       const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       
