@@ -348,7 +348,7 @@ export default function AdvancedAnalyticsPage() {
                       <CardContent className="p-4 text-center">
                         <p className="text-muted-foreground text-sm">متوسط طلبات / موظف</p>
                         <p className="text-3xl font-bold text-cyan-400 mt-2">
-                          {Math.round(employeePerformance.reduce((s,e) => s + e.orders, 0) / employeePerformance.length)}
+                          {employeePerformance.length > 0 ? Math.round(employeePerformance.reduce((s,e) => s + e.orders, 0) / employeePerformance.length) : 0}
                         </p>
                       </CardContent>
                     </Card>

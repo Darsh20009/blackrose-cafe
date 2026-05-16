@@ -9,7 +9,7 @@ import {
   TrendingUp, MapPin, Receipt, ChevronDown, ChevronRight,
   LogOut, Menu, X, BarChart2, Zap, Box, FlaskConical, 
   ArrowRightLeft, Bell, Table, BookOpen, UserCheck, CreditCard, Monitor,
-  Sparkles, MessageSquare
+  Sparkles, MessageSquare, ShieldCheck
 } from "lucide-react";
 import { brand } from "@/lib/brand";
 import { cn } from "@/lib/utils";
@@ -101,6 +101,8 @@ const NAV_GROUPS: { label: string; labelEn: string; color: string; items: NavIte
       { label: "التقارير", labelEn: "Reports", icon: FileText, path: "/admin/reports", color: "#14b8a6" },
       { label: "التقارير الموحدة", labelEn: "Unified Reports", icon: Building2, path: "/manager/unified-reports", color: "#2dd4bf" },
       { label: "تحليلات BI", labelEn: "BI Analytics", icon: Brain, path: "/manager/bi-analytics", color: "#99f6e4" },
+      { label: "تقارير الذكاء الاصطناعي", labelEn: "AI Smart Reports", icon: Sparkles, path: "/manager/smart-reports", color: "#a78bfa", badge: "AI" },
+      { label: "سجل الأحداث", labelEn: "Audit Logs", icon: ShieldCheck, path: "/manager/audit-logs", color: "#6366f1", roles: ["owner", "admin", "manager"] },
     ]
   },
   {

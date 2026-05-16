@@ -37,7 +37,15 @@ const MOCK_PARTNERS = [
   { nameAr: 'نيكست لفل سيستمز', nameEn: 'Next Level Systems', clients: 9, revenue: 6300, tier: 'gold', city: 'المدينة' },
 ];
 
-const REFERRAL_CODE = 'BR-' + Math.random().toString(36).toUpperCase().slice(2, 8);
+// Stable referral code per browser session — does not regenerate on every render
+const REFERRAL_CODE = (() => {
+  const key = 'qirox_partner_ref_code';
+  const cached = sessionStorage.getItem(key);
+  if (cached) return cached;
+  const code = 'BR-' + Math.random().toString(36).toUpperCase().slice(2, 8);
+  sessionStorage.setItem(key, code);
+  return code;
+})();
 
 const CAT_COLORS: Record<PartnerCategory, string> = {
   payment:         'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
@@ -162,6 +170,15 @@ export default function PartnerProgramPage() {
     <PlanGate feature="partnerProgram">
       <div className="min-h-screen bg-background" dir="rtl">
         <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
+
+          {/* Coming Soon Banner */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-3">
+            <span className="text-2xl">🚧</span>
+            <div>
+              <p className="font-semibold text-amber-800 text-sm">{tc("هذه الميزة قيد التطوير", "This feature is under development")}</p>
+              <p className="text-xs text-amber-600">{tc("البيانات المعروضة تجريبية — بيانات الشركاء والعمولات غير فعلية", "Data shown is demo — partner stats and commissions are not real")}</p>
+            </div>
+          </div>
 
           {/* Header */}
           <div className="flex items-center gap-3">

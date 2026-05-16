@@ -5736,3 +5736,49 @@ export const insertRefundOrderSchema = z.object({
   notes: z.string().optional(),
   status: z.enum(['completed', 'cancelled']).optional(),
 });
+
+// ─── AUDIT LOG ─────────────────────────────────────────────────────────────
+export interface IAuditLog extends Document {
+  id: string;
+  tenantId: string;
+  branchId?: string;
+  action: string;
+  entityType: string;
+  entityId?: string;
+  entityLabel?: string;
+  actorType: 'employee' | 'manager' | 'admin' | 'system' | 'customer';
+  actorId?: string;
+  actorName?: string;
+  actorRole?: string;
+  ipAddress?: string;
+  details?: Record<string, any>;
+  before?: any;
+  after?: any;
+  createdAt: Date;
+}
+
+const AuditLogSchema = new Schema<IAuditLog>({
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, required: true, index: true },
+  branchId: { type: String },
+  action: { type: String, required: true },
+  entityType: { type: String, required: true },
+  entityId: { type: String },
+  entityLabel: { type: String },
+  actorType: { type: String, enum: ['employee', 'manager', 'admin', 'system', 'customer'], default: 'system' },
+  actorId: { type: String },
+  actorName: { type: String },
+  actorRole: { type: String },
+  ipAddress: { type: String },
+  details: { type: Schema.Types.Mixed },
+  before: { type: Schema.Types.Mixed },
+  after: { type: Schema.Types.Mixed },
+  createdAt: { type: Date, default: Date.now },
+});
+
+AuditLogSchema.index({ tenantId: 1, createdAt: -1 });
+AuditLogSchema.index({ tenantId: 1, action: 1 });
+AuditLogSchema.index({ tenantId: 1, entityType: 1 });
+AuditLogSchema.index({ tenantId: 1, actorId: 1 });
+
+export const AuditLogModel = mongoose.models['AuditLog'] || mongoose.model<IAuditLog>('AuditLog', AuditLogSchema);

@@ -64,6 +64,15 @@ import { PlanGate } from "@/components/plan-gate";
       <PlanGate feature="b2bMarketplace">
       <div className="min-h-screen bg-background p-4 md:p-6" dir="rtl">
         <div className="max-w-5xl mx-auto space-y-6">
+          {/* Coming Soon Banner */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-3">
+            <span className="text-2xl">🚧</span>
+            <div>
+              <p className="font-semibold text-amber-800 text-sm">{tc("هذه الميزة قيد التطوير", "This feature is under development")}</p>
+              <p className="text-xs text-amber-600">{tc("البيانات المعروضة تجريبية فقط — الطلبات لا تُرسل فعلياً", "Data shown is demo only — orders are not actually sent")}</p>
+            </div>
+          </div>
+
           {/* Header */}
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => setLocation('/manager/dashboard')}>

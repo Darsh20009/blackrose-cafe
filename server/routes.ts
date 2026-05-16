@@ -51,6 +51,7 @@ import { AccountingEngine } from "./accounting-engine";
 import { ErpAccountingService } from "./erp-accounting-service";
 import { deliveryService } from "./delivery-service";
 import { requireAuth, requireManager, requireAdmin, filterByBranch, requireKitchenAccess, requireCashierAccess, requireDeliveryAccess, requirePermission, requireCustomerAuth, type AuthRequest, type CustomerAuthRequest } from "./middleware/auth";
+import { logFromRequest, logAudit } from "./audit-logger";
 import { PermissionsEngine, PERMISSIONS } from "./permissions-engine";
 import { requireTenant, getTenantIdFromRequest } from "./middleware/tenant";
 import { wsManager } from "./websocket";
@@ -833,7 +834,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // --- Manually send promo to all customers ---
-  app.post("/api/push/send-promo", async (req: any, res) => {
+  app.post("/api/push/send-promo", requireAuth, requireAdmin, async (req: any, res) => {
     try {
       const { title, body, url } = req.body;
       if (!title || !body) return res.status(400).json({ error: "title and body are required" });
@@ -848,7 +849,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // --- Manually trigger admin daily summary ---
-  app.post("/api/push/admin-summary", async (req: any, res) => {
+  app.post("/api/push/admin-summary", requireAuth, requireAdmin, async (req: any, res) => {
     try {
       const { sendAdminDailySummaryNow } = await import("./smart-scheduler");
       await sendAdminDailySummaryNow();
@@ -1560,6 +1561,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await order.save();
       cache.invalidate('live-orders:');
 
+      // Audit log for status change
+      logFromRequest(req, {
+        action: status === 'cancelled' ? 'order.cancel' : 'order.status_change',
+        entityType: 'order',
+        entityId: orderId,
+        entityLabel: `طلب #${(order as any).orderNumber}`,
+        before: { status: oldStatus },
+        after: { status },
+        details: cancellationReason ? { reason: cancellationReason } : undefined,
+      });
+
       // Reverse totalSpent on loyalty card when order is cancelled by staff
       if (status === 'cancelled' && oldStatus !== 'cancelled' && order.customerId) {
         try {
@@ -1742,10 +1754,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/orders/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+      const existingOrder = await OrderModel.findOne({ id }).lean() as any;
       const deleted = await storage.deleteOrder(id);
       if (!deleted) return res.status(404).json({ error: "Order not found" });
       const branchId = req.employee?.branchId;
       wsManager.broadcastToBranch(branchId || 'all', { type: 'orders_updated' });
+      logFromRequest(req, {
+        action: 'order.delete',
+        entityType: 'order',
+        entityId: id,
+        entityLabel: existingOrder ? `طلب #${existingOrder.orderNumber}` : `Order ${id}`,
+        details: { orderNumber: existingOrder?.orderNumber, amount: existingOrder?.totalAmount },
+      });
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting order:", error);
@@ -2449,6 +2469,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       invalidateCoffeeItemsCache(tenantId || 'demo-tenant');
+      logFromRequest(req, {
+        action: 'product.delete',
+        entityType: 'product',
+        entityId: id,
+        entityLabel: deletedItem.nameAr || deletedItem.nameEn || id,
+      });
       res.json({ 
         success: true, 
         message: "تم حذف المشروب وجميع البيانات المرتبطة به بنجاح" 
@@ -5098,6 +5124,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         console.log(`[AUTH] Login successful: ${username} (${employee.role})`);
+        // Audit log for login
+        logAudit({
+          tenantId: employee.tenantId || 'demo-tenant',
+          branchId: employee.branchId,
+          action: 'employee.login',
+          entityType: 'employee',
+          entityId: employee.id || (employee._id as any)?.toString(),
+          entityLabel: employee.nameAr || employee.nameEn || username,
+          actorType: (employee.role === 'admin' || employee.role === 'owner') ? 'admin' : employee.role === 'manager' ? 'manager' : 'employee',
+          actorId: employee.id || (employee._id as any)?.toString(),
+          actorName: employee.nameAr || employee.nameEn || username,
+          actorRole: employee.role,
+          ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress,
+          details: { method: 'password' },
+        });
         // Don't send password back
         const employeeData = serializeDoc(employee);
         delete employeeData.password;
@@ -5722,7 +5763,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reset employee password by username
-  app.post("/api/employees/reset-password-by-username", async (req, res) => {
+  app.post("/api/employees/reset-password-by-username", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { username, newPassword } = req.body;
 
@@ -8826,7 +8867,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a new refund
-  app.post("/api/refunds", async (req: any, res) => {
+  app.post("/api/refunds", requireAuth, async (req: any, res) => {
     try {
       const { RefundOrderModel } = await import('@shared/schema');
       const { nanoid } = await import('nanoid');
@@ -11217,7 +11258,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/categories", async (req, res) => {
+  app.post("/api/categories", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { insertCategorySchema } = await import("@shared/schema");
       const validatedData = insertCategorySchema.parse(req.body);
@@ -11231,7 +11272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/categories/:id", async (req, res) => {
+  app.put("/api/categories/:id", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const category = await storage.updateCategory(id, req.body);
@@ -11244,7 +11285,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/categories/:id", async (req, res) => {
+  app.delete("/api/categories/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const deleted = await storage.deleteCategory(id);
@@ -11280,12 +11321,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // TEMPORARY: Reset manager password
-  app.post("/api/reset-manager", async (req, res) => {
+  app.post("/api/reset-manager", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
+      const { newPassword } = req.body;
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
+      }
       const manager = await storage.getEmployeeByUsername("manager");
       if (manager && manager._id) {
-        const hashedPassword = await bcrypt.hash("2030", 10);
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
         await storage.updateEmployee(manager._id.toString(), { password: hashedPassword });
+        logFromRequest(req, { action: 'employee.password_reset', entityType: 'employee', entityLabel: 'manager' });
         res.json({ message: "Manager password reset successfully" });
       } else {
         res.status(404).json({ error: "Manager not found" });
@@ -11350,8 +11396,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // TABLE MANAGEMENT ROUTES - إدارة الطاولات
 
-  // Cleanup: Clear all old table reservations (temporary endpoint)
-  app.post("/api/tables/cleanup-reservations", async (req, res) => {
+  // Cleanup: Clear all old table reservations
+  app.post("/api/tables/cleanup-reservations", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
       const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const tables = await storage.getTables(undefined, tenantId);
@@ -12329,7 +12375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Assign order to cashier (or accept pending order)
-  app.patch("/api/orders/:id/assign-cashier", async (req, res) => {
+  app.patch("/api/orders/:id/assign-cashier", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { cashierId } = req.body;
       const { OrderModel } = await import("@shared/schema");
@@ -12569,7 +12615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/admin/cashiers", async (req, res) => {
+  app.delete("/api/admin/cashiers", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const employees = await storage.getEmployees();
       const cashiers = employees.filter((e: any) => e.role === 'cashier');
@@ -13604,11 +13650,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reset only operational data (orders, accounting) - keep products, employees, images
-  app.delete("/api/admin/reset-orders-only", requireAuth, async (req: AuthRequest, res) => {
+  app.delete("/api/admin/reset-orders-only", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      if (req.employee?.role !== 'owner' && req.employee?.role !== 'admin') {
-        return res.status(403).json({ error: "فقط المالك أو المدير العام يمكنه تصفير البيانات" });
-      }
       const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const { OrderModel, CartItemModel } = await import("@shared/schema");
       const DailyAccounting = mongoose.models['DailyAccounting'];
@@ -14003,11 +14046,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reset all data (owner only)
-  app.post("/api/owner/reset-database", requireAuth, async (req: AuthRequest, res) => {
+  app.post("/api/owner/reset-database", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      if (req.employee?.role !== 'owner' && req.employee?.role !== 'admin') {
-        return res.status(403).json({ error: "فقط المالك أو المدير يمكنه إعادة تعيين قاعدة البيانات" });
-      }
 
       const { confirmPhrase } = req.body;
       
@@ -17002,7 +17042,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Marketing Email Route for Staff
-  app.post("/api/admin/broadcast-email", requireAuth, async (req: AuthRequest, res) => {
+  app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { subject, message, customerEmails } = req.body;
       
@@ -19534,6 +19574,144 @@ ${growthPct ? `- النمو مقارنة بالأسبوع الماضي: ${growth
     }
   });
 
+  // ─── AI Smart Report ───────────────────────────────────────────────────
+  app.post("/api/ai/smart-report", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { type, period } = req.body;
+      if (!type || !period) return res.status(400).json({ error: "type and period are required" });
+
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const todayStart = getSaudiStartOfDay();
+      const weekStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const monthStart = new Date(todayStart.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      const periodStart = period === 'today' ? todayStart : period === 'week' ? weekStart : monthStart;
+
+      const { OrderModel: SmartOrderModel } = await import("@shared/schema");
+      const orders = await SmartOrderModel.find({
+        tenantId,
+        createdAt: { $gte: periodStart }
+      }).lean();
+
+      const revenue = orders.reduce((s: number, o: any) => s + (o.totalAmount || 0), 0);
+      const avgOrder = orders.length > 0 ? revenue / orders.length : 0;
+
+      const itemCounts: Record<string, { count: number; revenue: number }> = {};
+      orders.forEach((o: any) => {
+        (o.items || []).forEach((item: any) => {
+          const name = item.nameAr || item.name || "؟";
+          if (!itemCounts[name]) itemCounts[name] = { count: 0, revenue: 0 };
+          itemCounts[name].count += item.quantity || 1;
+          itemCounts[name].revenue += (item.price || 0) * (item.quantity || 1);
+        });
+      });
+      const topItems = Object.entries(itemCounts).sort((a, b) => b[1].count - a[1].count).slice(0, 8);
+
+      const hourCounts: Record<number, number> = {};
+      orders.forEach((o: any) => {
+        const h = new Date(o.createdAt).getHours();
+        hourCounts[h] = (hourCounts[h] || 0) + 1;
+      });
+      const peakHour = Object.entries(hourCounts).sort((a, b) => Number(b[1]) - Number(a[1]))[0];
+
+      const employees = await storage.getEmployees();
+      const products = await getCachedCoffeeItems(tenantId);
+
+      const periodLabel = period === 'today' ? 'اليوم' : period === 'week' ? 'هذا الأسبوع' : 'هذا الشهر';
+
+      const contextData = `
+بيانات الكافيه للفترة (${periodLabel}):
+- إجمالي الطلبات: ${orders.length}
+- إجمالي الإيرادات: ${revenue.toFixed(2)} ريال
+- متوسط قيمة الطلب: ${avgOrder.toFixed(2)} ريال
+- وقت الذروة: ${peakHour ? `الساعة ${peakHour[0]}:00 (${peakHour[1]} طلب)` : "غير محدد"}
+- عدد الموظفين: ${employees.length}
+- عدد المنتجات: ${products.length}
+- أكثر المنتجات طلباً:
+${topItems.slice(0, 5).map((item, i) => `  ${i + 1}. ${item[0]}: ${item[1].count} طلب (${item[1].revenue.toFixed(0)} ريال)`).join("\n") || "  لا بيانات"}
+`;
+
+      const typePrompts: Record<string, string> = {
+        sales: "ركز على المبيعات والإيرادات والمنتجات والفترات الزمنية",
+        employees: "ركز على الموظفين والإنتاجية والأداء",
+        inventory: "ركز على المخزون والمنتجات والنقص المحتمل والهدر",
+        customers: "ركز على سلوك العملاء والولاء ومعدل التكرار",
+        full: "قدم تحليلاً شاملاً لجميع جوانب الكافيه",
+      };
+
+      const prompt = `أنت خبير تحليل أعمال لمقهى. ${typePrompts[type] || "قدم تحليلاً متكاملاً"}.
+
+${contextData}
+
+أنشئ تقريراً ذكياً منظماً بالتنسيق التالي (JSON فقط، لا تضف أي نص خارج الـ JSON):
+{
+  "summary": "ملخص تنفيذي من 2-3 جمل",
+  "kpis": [
+    {"label": "اسم المؤشر", "value": "القيمة مع الوحدة", "trend": "up|down|flat"},
+    ...
+  ],
+  "sections": [
+    {
+      "icon": "📊",
+      "title": "عنوان القسم",
+      "content": "فقرة تحليلية من 2-3 جمل",
+      "bullets": ["نقطة 1", "نقطة 2", "نقطة 3"],
+      "highlight": "أبرز إنجاز أو رقم في هذا القسم (اختياري)"
+    }
+  ],
+  "recommendations": ["توصية 1 قابلة للتنفيذ", "توصية 2", "توصية 3"],
+  "risks": ["خطر أو تحذير 1", "خطر أو تحذير 2"]
+}
+
+القواعد:
+- استخدم البيانات الحقيقية المتوفرة
+- اجعل التوصيات قابلة للتنفيذ وعملية
+- اذكر أرقاماً حقيقية من البيانات
+- 3-4 أقسام مناسبة لنوع التقرير
+- 3-4 مؤشرات KPI
+- JSON صحيح فقط`;
+
+      const groqKey = process.env.GROQ_API_KEY;
+      if (!groqKey) return res.status(500).json({ error: "مفتاح Groq غير مضبوط" });
+
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 1500,
+          temperature: 0.5,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error("Groq smart-report error:", errText);
+        return res.status(500).json({ error: "فشل الاتصال بـ Groq" });
+      }
+
+      const data = await response.json() as any;
+      const content = (data.choices?.[0]?.message?.content || "").trim();
+
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        const report = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+        res.json({
+          ...report,
+          type,
+          period,
+          generatedAt: new Date().toISOString(),
+        });
+      } catch (parseErr) {
+        res.status(500).json({ error: "فشل تحليل رد AI" });
+      }
+    } catch (error: any) {
+      console.error("Smart report error:", error);
+      res.status(500).json({ error: error.message || "خطأ في توليد التقرير" });
+    }
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
   app.post("/api/ai/menu-assist", async (req, res) => {
     try {
@@ -19756,6 +19934,37 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
     });
   }
   // ─────────────────────────────────────────────────────────────────────────────
+
+  // ─── AUDIT LOGS API ───────────────────────────────────────────────────────
+  app.get("/api/audit-logs", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { AuditLogModel } = await import("@shared/schema");
+      const employee = req.employee;
+      const tenantId = employee?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const { action, actorType, search, limit = '50', offset = '0' } = req.query as any;
+
+      const query: any = { tenantId };
+      if (action && action !== 'all') query.action = action;
+      if (actorType && actorType !== 'all') query.actorType = actorType;
+      if (search) {
+        query.$or = [
+          { actorName: { $regex: search, $options: 'i' } },
+          { entityLabel: { $regex: search, $options: 'i' } },
+          { entityId: { $regex: search, $options: 'i' } },
+        ];
+      }
+
+      const [logs, total] = await Promise.all([
+        AuditLogModel.find(query).sort({ createdAt: -1 }).skip(parseInt(offset)).limit(parseInt(limit)).lean(),
+        AuditLogModel.countDocuments(query),
+      ]);
+
+      res.json({ logs: logs.map(serializeDoc), total });
+    } catch (error) {
+      console.error("[AUDIT_LOGS] Error:", error);
+      res.status(500).json({ error: "Failed to fetch audit logs" });
+    }
+  });
 
   const httpServer = createServer(app);
   
