@@ -403,6 +403,10 @@ app.use(compression({
   }
 }));
 
+// API performance & error monitoring (Phase 5: Reliability)
+import { apiMetricsMiddleware } from "./middleware/api-metrics";
+app.use(apiMetricsMiddleware);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 

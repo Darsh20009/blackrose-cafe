@@ -5974,3 +5974,115 @@ const EmployeeBreakSchema = new Schema<IEmployeeBreak>({
 });
 EmployeeBreakSchema.index({ tenantId: 1, employeeId: 1, startedAt: -1 });
 export const EmployeeBreakModel = mongoose.models['EmployeeBreak'] || mongoose.model<IEmployeeBreak>('EmployeeBreak', EmployeeBreakSchema);
+
+// ════════════════════════════════════════════════════════════════════════════
+//  RELIABILITY SYSTEM (Phase 5) — Crash Recovery, Queue, Monitoring
+// ════════════════════════════════════════════════════════════════════════════
+
+// ─── CRASH RECOVERY: Saved POS Sessions ──────────────────────────────────
+export interface ICrashSession extends Document {
+  id: string;
+  tenantId: string;
+  branchId?: string;
+  ownerId: string;          // employee id
+  ownerName?: string;
+  deviceId?: string;
+  page: string;             // pos / cashier / kiosk / kitchen
+  sessionData: any;         // cart, customer info, payment state, etc
+  recovered: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const CrashSessionSchema = new Schema<ICrashSession>({
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, required: true, index: true },
+  branchId: String,
+  ownerId: { type: String, required: true, index: true },
+  ownerName: String,
+  deviceId: String,
+  page: { type: String, required: true },
+  sessionData: Schema.Types.Mixed,
+  recovered: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
+CrashSessionSchema.index({ tenantId: 1, ownerId: 1, recovered: 1, updatedAt: -1 });
+export const CrashSessionModel = mongoose.models['CrashSession'] || mongoose.model<ICrashSession>('CrashSession', CrashSessionSchema);
+
+// ─── QUEUE JOBS (Print, Sync, Notification, Kitchen) ────────────────────
+export interface IQueueJob extends Document {
+  id: string;
+  tenantId: string;
+  branchId?: string;
+  type: 'print' | 'sync' | 'notification' | 'kitchen' | 'webhook';
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'retrying';
+  priority: number;        // 1=high,5=low
+  payload: any;
+  attempts: number;
+  maxAttempts: number;
+  lastError?: string;
+  deviceId?: string;
+  targetEntity?: string;   // orderId, printerId etc.
+  durationMs?: number;
+  createdAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+const QueueJobSchema = new Schema<IQueueJob>({
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, required: true, index: true },
+  branchId: String,
+  type: { type: String, required: true, enum: ['print', 'sync', 'notification', 'kitchen', 'webhook'], index: true },
+  status: { type: String, default: 'pending', enum: ['pending', 'processing', 'completed', 'failed', 'retrying'], index: true },
+  priority: { type: Number, default: 3 },
+  payload: Schema.Types.Mixed,
+  attempts: { type: Number, default: 0 },
+  maxAttempts: { type: Number, default: 3 },
+  lastError: String,
+  deviceId: String,
+  targetEntity: String,
+  durationMs: Number,
+  createdAt: { type: Date, default: Date.now, index: true },
+  startedAt: Date,
+  completedAt: Date,
+});
+QueueJobSchema.index({ tenantId: 1, type: 1, status: 1, createdAt: -1 });
+export const QueueJobModel = mongoose.models['QueueJob'] || mongoose.model<IQueueJob>('QueueJob', QueueJobSchema);
+
+// ─── API METRICS (Performance & Error monitoring) ───────────────────────
+export interface IApiMetric extends Document {
+  id: string;
+  tenantId?: string;
+  method: string;
+  path: string;             // route template
+  statusCode: number;
+  durationMs: number;
+  isError: boolean;
+  errorMessage?: string;
+  userId?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  deviceId?: string;
+  createdAt: Date;
+}
+const ApiMetricSchema = new Schema<IApiMetric>({
+  id: { type: String, required: true, unique: true },
+  tenantId: String,
+  method: { type: String, required: true },
+  path: { type: String, required: true, index: true },
+  statusCode: { type: Number, required: true },
+  durationMs: { type: Number, required: true },
+  isError: { type: Boolean, default: false, index: true },
+  errorMessage: String,
+  userId: String,
+  ipAddress: String,
+  userAgent: String,
+  deviceId: String,
+  createdAt: { type: Date, default: Date.now, index: true },
+});
+ApiMetricSchema.index({ path: 1, createdAt: -1 });
+ApiMetricSchema.index({ isError: 1, createdAt: -1 });
+ApiMetricSchema.index({ createdAt: -1 });
+// TTL: auto-delete metrics older than 7 days to control storage
+ApiMetricSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });
+export const ApiMetricModel = mongoose.models['ApiMetric'] || mongoose.model<IApiMetric>('ApiMetric', ApiMetricSchema);

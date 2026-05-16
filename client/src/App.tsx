@@ -98,6 +98,7 @@ const CustomerReservations = lazy(() => import("@/pages/customer-reservations"))
 const AdminDashboard = lazy(() => import("@/pages/admin-dashboard"));
 const AdminEmployees = lazy(() => import("@/pages/admin-employees"));
 const EmployeesHub = lazy(() => import("@/pages/employees-hub"));
+const ReliabilityHub = lazy(() => import("@/pages/reliability-hub"));
 const AdminReports = lazy(() => import("@/pages/admin-reports"));
 const AdminSettings = lazy(() => import("@/pages/admin-settings"));
 const AdminBranches = lazy(() => import("@/pages/admin-branches"));
@@ -323,6 +324,7 @@ function AppRouter() {
       <Route path="/manager/inventory/stock-organization"><AuthGuard userType="manager"><StockOrganizationDashboard /></AuthGuard></Route>
       <Route path="/manager/inventory/hub"><AuthGuard userType="manager"><InventoryHub /></AuthGuard></Route>
       <Route path="/manager/employees/hub"><AuthGuard userType="employee" allowedRoles={["manager", "admin", "owner", "branch_manager"]}><EmployeesHub /></AuthGuard></Route>
+      <Route path="/manager/reliability"><AuthGuard userType="employee" allowedRoles={["manager", "admin", "owner", "branch_manager"]}><ReliabilityHub /></AuthGuard></Route>
       <Route path="/manager/delivery-services"><AuthGuard userType="manager"><DeliveryServiceStatus /></AuthGuard></Route>
       <Route path="/manager/delivery"><AuthGuard userType="manager"><ManagerDelivery /></AuthGuard></Route>
       <Route path="/manager/unified-reports"><AuthGuard userType="manager"><UnifiedReports /></AuthGuard></Route>

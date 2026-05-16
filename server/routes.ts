@@ -20520,6 +20520,297 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
     }
   });
 
+  // ════════════════════════════════════════════════════════════════════════
+  //  RELIABILITY SYSTEM (Phase 5)
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ─── CRASH RECOVERY ─────────────────────────────────────────────────────
+  app.post("/api/crash-sessions/save", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { CrashSessionModel } = await import("@shared/schema");
+      const employee = req.employee!;
+      const { page, sessionData, deviceId } = req.body || {};
+      if (!page || !sessionData) return res.status(400).json({ error: "page and sessionData required" });
+      const id = `crash-${employee.id}-${page}`;
+      await CrashSessionModel.findOneAndUpdate(
+        { id },
+        {
+          id,
+          tenantId: employee.tenantId || 'demo-tenant',
+          branchId: employee.branchId,
+          ownerId: employee.id,
+          ownerName: (employee as any).fullName || (employee as any).username,
+          deviceId,
+          page,
+          sessionData,
+          recovered: false,
+          updatedAt: new Date(),
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/crash-sessions/mine", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { CrashSessionModel } = await import("@shared/schema");
+      const employee = req.employee!;
+      const list = await CrashSessionModel.find({ ownerId: employee.id, recovered: false }).sort({ updatedAt: -1 }).limit(20).lean();
+      res.json(list.map(serializeDoc));
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/crash-sessions/:id/recover", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { CrashSessionModel } = await import("@shared/schema");
+      const employee = req.employee!;
+      const session = await CrashSessionModel.findOne({ id: req.params.id, ownerId: employee.id }).lean() as any;
+      if (!session) return res.status(404).json({ error: "Not found" });
+      await CrashSessionModel.updateOne({ id: req.params.id }, { $set: { recovered: true } });
+      res.json(serializeDoc(session));
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/crash-sessions/:id", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { CrashSessionModel } = await import("@shared/schema");
+      const employee = req.employee!;
+      await CrashSessionModel.deleteOne({ id: req.params.id, ownerId: employee.id });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/crash-sessions/all", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { CrashSessionModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const list = await CrashSessionModel.find({
+        $or: [{ tenantId }, { tenantId: { $exists: false } }],
+        recovered: false,
+      }).sort({ updatedAt: -1 }).limit(100).lean();
+      res.json(list.map(serializeDoc));
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ─── QUEUE JOBS ─────────────────────────────────────────────────────────
+  app.post("/api/queue-jobs", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { QueueJobModel } = await import("@shared/schema");
+      const employee = req.employee!;
+      const { type, payload, priority, deviceId, targetEntity, maxAttempts } = req.body || {};
+      if (!type) return res.status(400).json({ error: "type required" });
+      const job = await QueueJobModel.create({
+        id: nanoid(),
+        tenantId: employee.tenantId || 'demo-tenant',
+        branchId: employee.branchId,
+        type,
+        status: 'pending',
+        priority: priority || 3,
+        payload: payload || {},
+        attempts: 0,
+        maxAttempts: maxAttempts || 3,
+        deviceId,
+        targetEntity,
+        createdAt: new Date(),
+      });
+      res.status(201).json(serializeDoc(job.toObject()));
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/queue-jobs", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { QueueJobModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const { type, status, limit = '100' } = req.query as any;
+      const q: any = { $or: [{ tenantId }, { tenantId: { $exists: false } }] };
+      if (type && type !== 'all') q.type = type;
+      if (status && status !== 'all') q.status = status;
+      const jobs = await QueueJobModel.find(q).sort({ createdAt: -1 }).limit(parseInt(limit)).lean();
+      res.json(jobs.map(serializeDoc));
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/queue-jobs/stats", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { QueueJobModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const since = new Date(Date.now() - 24 * 3600 * 1000);
+      const all = await QueueJobModel.find({
+        $or: [{ tenantId }, { tenantId: { $exists: false } }],
+        createdAt: { $gte: since },
+      }).lean() as any[];
+      const byType: Record<string, any> = {};
+      const byStatus: Record<string, number> = { pending: 0, processing: 0, completed: 0, failed: 0, retrying: 0 };
+      for (const j of all) {
+        if (!byType[j.type]) byType[j.type] = { total: 0, pending: 0, completed: 0, failed: 0, avgDuration: 0, durations: [] };
+        byType[j.type].total++;
+        if (j.status === 'pending' || j.status === 'retrying') byType[j.type].pending++;
+        if (j.status === 'completed') {
+          byType[j.type].completed++;
+          if (j.durationMs) byType[j.type].durations.push(j.durationMs);
+        }
+        if (j.status === 'failed') byType[j.type].failed++;
+        byStatus[j.status] = (byStatus[j.status] || 0) + 1;
+      }
+      for (const k of Object.keys(byType)) {
+        const ds = byType[k].durations;
+        byType[k].avgDuration = ds.length ? Math.round(ds.reduce((a: number, b: number) => a + b, 0) / ds.length) : 0;
+        delete byType[k].durations;
+      }
+      res.json({ byType, byStatus, total: all.length, period: '24h' });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/queue-jobs/:id/retry", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { QueueJobModel } = await import("@shared/schema");
+      const job = await QueueJobModel.findOneAndUpdate(
+        { id: req.params.id },
+        { $set: { status: 'pending', lastError: null }, $inc: { attempts: 0 } },
+        { new: true }
+      ).lean() as any;
+      if (!job) return res.status(404).json({ error: "Not found" });
+      res.json(serializeDoc(job));
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/queue-jobs/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { QueueJobModel } = await import("@shared/schema");
+      await QueueJobModel.deleteOne({ id: req.params.id });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.patch("/api/queue-jobs/:id/status", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { QueueJobModel } = await import("@shared/schema");
+      const { status, lastError, durationMs } = req.body || {};
+      const update: any = { status };
+      if (status === 'processing') update.startedAt = new Date();
+      if (status === 'completed' || status === 'failed') update.completedAt = new Date();
+      if (lastError) update.lastError = lastError;
+      if (durationMs) update.durationMs = durationMs;
+      const inc: any = {};
+      if (status === 'processing' || status === 'failed') inc.attempts = 1;
+      const job = await QueueJobModel.findOneAndUpdate({ id: req.params.id }, { $set: update, $inc: inc }, { new: true }).lean() as any;
+      if (!job) return res.status(404).json({ error: "Not found" });
+      res.json(serializeDoc(job));
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ─── SYSTEM HEALTH & MONITORING ─────────────────────────────────────────
+  app.get("/api/system/health", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { ApiMetricModel, QueueJobModel, CrashSessionModel } = await import("@shared/schema");
+      const since = new Date(Date.now() - 60 * 60 * 1000);
+      const [metrics, failedQueue, activeCrashes] = await Promise.all([
+        ApiMetricModel.find({ createdAt: { $gte: since } }).lean() as any,
+        QueueJobModel.countDocuments({ status: 'failed', createdAt: { $gte: since } }),
+        CrashSessionModel.countDocuments({ recovered: false }),
+      ]);
+
+      const total = metrics.length || 1;
+      const errors = metrics.filter((m: any) => m.isError).length;
+      const errorRate = (errors / total) * 100;
+      const avgLatency = total ? Math.round(metrics.reduce((s: number, m: any) => s + m.durationMs, 0) / total) : 0;
+      const sortedDurations = metrics.map((m: any) => m.durationMs).sort((a: number, b: number) => a - b);
+      const p95 = sortedDurations[Math.floor(sortedDurations.length * 0.95)] || 0;
+      const p99 = sortedDurations[Math.floor(sortedDurations.length * 0.99)] || 0;
+
+      const memUsage = process.memoryUsage();
+      const uptimeHours = Math.round((process.uptime() / 3600) * 10) / 10;
+
+      const status = errorRate > 5 || p95 > 3000 ? 'critical'
+                   : errorRate > 1 || p95 > 1500 || failedQueue > 5 ? 'warning'
+                   : 'healthy';
+
+      res.json({
+        status,
+        errorRate: Math.round(errorRate * 100) / 100,
+        avgLatency,
+        p95Latency: p95,
+        p99Latency: p99,
+        totalRequests: total,
+        totalErrors: errors,
+        failedQueueJobs: failedQueue,
+        activeCrashSessions: activeCrashes,
+        memory: {
+          heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
+          heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
+          rssMB: Math.round(memUsage.rss / 1024 / 1024),
+        },
+        uptimeHours,
+        period: '1h',
+      });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/system/api-performance", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { ApiMetricModel } = await import("@shared/schema");
+      const hours = parseInt((req.query.hours as string) || '24');
+      const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+      const metrics = await ApiMetricModel.find({ createdAt: { $gte: since } }).lean() as any[];
+
+      // Group by path
+      const byPath: Record<string, any> = {};
+      for (const m of metrics) {
+        const k = `${m.method} ${m.path}`;
+        if (!byPath[k]) byPath[k] = { route: k, count: 0, errors: 0, durations: [] };
+        byPath[k].count++;
+        if (m.isError) byPath[k].errors++;
+        byPath[k].durations.push(m.durationMs);
+      }
+      const rows = Object.values(byPath).map((r: any) => {
+        const ds = r.durations.sort((a: number, b: number) => a - b);
+        return {
+          route: r.route,
+          count: r.count,
+          errors: r.errors,
+          errorRate: Math.round((r.errors / r.count) * 10000) / 100,
+          avgMs: Math.round(ds.reduce((s: number, d: number) => s + d, 0) / ds.length),
+          p95Ms: ds[Math.floor(ds.length * 0.95)] || 0,
+          maxMs: ds[ds.length - 1] || 0,
+        };
+      });
+      rows.sort((a: any, b: any) => b.avgMs - a.avgMs);
+      res.json({ rows: rows.slice(0, 100), period: `${hours}h`, totalRequests: metrics.length });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/system/devices", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { ApiMetricModel } = await import("@shared/schema");
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const metrics = await ApiMetricModel.find({ createdAt: { $gte: since }, userId: { $exists: true, $ne: null } }).lean() as any[];
+      const byDevice: Record<string, any> = {};
+      for (const m of metrics) {
+        const k = `${m.userId}::${m.ipAddress || 'unknown'}`;
+        if (!byDevice[k]) byDevice[k] = { userId: m.userId, ipAddress: m.ipAddress, userAgent: m.userAgent, count: 0, errors: 0, lastSeen: m.createdAt };
+        byDevice[k].count++;
+        if (m.isError) byDevice[k].errors++;
+        if (new Date(m.createdAt) > new Date(byDevice[k].lastSeen)) byDevice[k].lastSeen = m.createdAt;
+      }
+      const rows = Object.values(byDevice).map((d: any) => ({
+        ...d,
+        errorRate: Math.round((d.errors / d.count) * 10000) / 100,
+        healthy: (d.errors / d.count) < 0.05,
+      }));
+      rows.sort((a: any, b: any) => b.errors - a.errors);
+      res.json({ rows: rows.slice(0, 50), period: '24h' });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/system/recent-errors", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { ApiMetricModel } = await import("@shared/schema");
+      const errors = await ApiMetricModel.find({ isError: true }).sort({ createdAt: -1 }).limit(50).lean();
+      res.json(errors.map(serializeDoc));
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   const httpServer = createServer(app);
   
   // Setup WebSocket for real-time order updates
