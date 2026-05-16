@@ -801,81 +801,75 @@ export default function ManagerDashboard() {
      <main className="flex-1 overflow-y-auto pb-20 lg:pb-6">
        <div className="p-4 lg:p-6 space-y-6 max-w-[1400px] mx-auto">
 
-         {/* ── KPI CARDS ── */}
+         {/* ── KPI CARDS (clean white design) ── */}
          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-           {/* Revenue */}
-           <div className="relative overflow-hidden rounded-2xl p-4 lg:p-5" style={{ background: "linear-gradient(135deg, #0d2b1f 0%, #0a1a13 100%)", border: "1px solid #1a3d29" }}>
-             <div className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-10" style={{ background: "#2D9B6E", filter: "blur(30px)", transform: "translate(30%, -30%)" }} />
-             <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "#2D9B6E22" }}>
-               <DollarSign className="w-5 h-5" style={{ color: "#2D9B6E" }} />
+           {[
+             {
+               label: 'إجمالي المبيعات',
+               value: totalRevenue.toLocaleString('ar-SA', { maximumFractionDigits: 0 }),
+               sub: <><SarIcon /> <span>ريال سعودي</span>{growthRate !== 0 && (
+                 <span className={`mr-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${growthRate > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                   {growthRate > 0 ? '↑' : '↓'} {Math.abs(growthRate)}%
+                 </span>
+               )}</>,
+               icon: DollarSign,
+               iconBg: 'bg-emerald-50',
+               iconColor: 'text-emerald-600',
+               valueColor: 'text-emerald-700',
+             },
+             {
+               label: 'الطلبات',
+               value: filteredOrders.length.toLocaleString('ar-SA'),
+               sub: <><span className="text-emerald-600">{completedOrders.length} مكتمل</span><span className="text-muted-foreground mx-1">·</span><span className="text-amber-600">{filteredOrders.length - completedOrders.length} معلق</span></>,
+               icon: ShoppingBag,
+               iconBg: 'bg-blue-50',
+               iconColor: 'text-blue-600',
+               valueColor: 'text-foreground',
+             },
+             {
+               label: 'العملاء',
+               value: customers.length.toLocaleString('ar-SA'),
+               sub: <span className="text-muted-foreground">عميل مسجل</span>,
+               icon: Users,
+               iconBg: 'bg-violet-50',
+               iconColor: 'text-violet-600',
+               valueColor: 'text-foreground',
+             },
+             {
+               label: 'متوسط الطلب',
+               value: filteredOrders.length > 0 ? (totalRevenue / filteredOrders.length).toFixed(1) : '0',
+               sub: <><SarIcon /> <span>ريال / طلب</span></>,
+               icon: Target,
+               iconBg: 'bg-amber-50',
+               iconColor: 'text-amber-600',
+               valueColor: 'text-foreground',
+             },
+           ].map(k => (
+             <div key={k.label} className="bg-card border border-border rounded-2xl p-4 lg:p-5 hover:shadow-sm transition-shadow" data-testid={`kpi-${k.label}`}>
+               <div className="flex items-start justify-between mb-3">
+                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${k.iconBg}`}>
+                   <k.icon className={`w-5 h-5 ${k.iconColor}`} />
+                 </div>
+               </div>
+               <div className="text-muted-foreground text-xs mb-1">{k.label}</div>
+               <div className={`text-2xl lg:text-3xl font-bold leading-tight ${k.valueColor}`}>{k.value}</div>
+               <div className="text-xs mt-2 flex items-center gap-1 text-muted-foreground flex-wrap">{k.sub}</div>
              </div>
-             <div className="text-muted-foreground text-xs mb-1">إجمالي المبيعات</div>
-             <div className="text-2xl lg:text-3xl font-bold text-foreground">{totalRevenue.toLocaleString('ar-SA', { maximumFractionDigits: 0 })}</div>
-             <div className="text-[#2D9B6E] text-xs mt-1 flex items-center gap-1">
-               <SarIcon />
-               <span>ريال سعودي</span>
-               {growthRate !== 0 && (
-                 <Badge className="mr-1 text-[10px] h-4 px-1" style={{ background: growthRate > 0 ? "#0d2b1f" : "#2d0d0d", color: growthRate > 0 ? "#2D9B6E" : "#ef4444", border: "none" }}>
-                   {growthRate > 0 ? "↑" : "↓"} {Math.abs(growthRate)}%
-                 </Badge>
-               )}
-             </div>
-           </div>
-
-           {/* Orders */}
-           <div className="relative overflow-hidden rounded-2xl p-4 lg:p-5" style={{ background: "linear-gradient(135deg, #0d1b2b 0%, #0a1420 100%)", border: "1px solid #1a2d3d" }}>
-             <div className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-10" style={{ background: "#3b82f6", filter: "blur(30px)", transform: "translate(30%, -30%)" }} />
-             <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "#3b82f622" }}>
-               <ShoppingBag className="w-5 h-5 text-blue-400" />
-             </div>
-             <div className="text-muted-foreground text-xs mb-1">الطلبات</div>
-             <div className="text-2xl lg:text-3xl font-bold text-foreground">{filteredOrders.length.toLocaleString('ar-SA')}</div>
-             <div className="text-blue-400 text-xs mt-1 flex items-center gap-1">
-               <span>{completedOrders.length} مكتمل</span>
-               <span className="text-muted-foreground mx-1">•</span>
-               <span className="text-amber-400">{filteredOrders.length - completedOrders.length} معلق</span>
-             </div>
-           </div>
-
-           {/* Customers */}
-           <div className="relative overflow-hidden rounded-2xl p-4 lg:p-5" style={{ background: "linear-gradient(135deg, #1a0d2b 0%, #13091a 100%)", border: "1px solid #2d1a3d" }}>
-             <div className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-10" style={{ background: "#8b5cf6", filter: "blur(30px)", transform: "translate(30%, -30%)" }} />
-             <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "#8b5cf622" }}>
-               <Users className="w-5 h-5 text-purple-400" />
-             </div>
-             <div className="text-muted-foreground text-xs mb-1">العملاء</div>
-             <div className="text-2xl lg:text-3xl font-bold text-foreground">{customers.length.toLocaleString('ar-SA')}</div>
-             <div className="text-purple-400 text-xs mt-1">عميل مسجل</div>
-           </div>
-
-           {/* Avg Order */}
-           <div className="relative overflow-hidden rounded-2xl p-4 lg:p-5" style={{ background: "linear-gradient(135deg, #2b1a0d 0%, #1a1009 100%)", border: "1px solid #3d2a1a" }}>
-             <div className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-10" style={{ background: "#f59e0b", filter: "blur(30px)", transform: "translate(30%, -30%)" }} />
-             <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "#f59e0b22" }}>
-               <Target className="w-5 h-5 text-amber-400" />
-             </div>
-             <div className="text-muted-foreground text-xs mb-1">متوسط الطلب</div>
-             <div className="text-2xl lg:text-3xl font-bold text-foreground">
-               {filteredOrders.length > 0 ? (totalRevenue / filteredOrders.length).toFixed(1) : '0'}
-             </div>
-             <div className="text-amber-400 text-xs mt-1 flex items-center gap-1"><SarIcon /> ريال / طلب</div>
-           </div>
+           ))}
          </div>
 
-         {/* ── TODAY MINI STATS ── */}
-         <div className="grid grid-cols-3 gap-3">
-           <div className="bg-card border border-border rounded-xl p-3 text-center">
-             <div className="text-[#2D9B6E] font-bold text-xl">{todayOrders.length}</div>
-             <div className="text-muted-foreground text-xs mt-1">طلبات اليوم</div>
-           </div>
-           <div className="bg-card border border-border rounded-xl p-3 text-center">
-             <div className="text-[#3b82f6] font-bold text-xl">{todayRevenue.toFixed(0)}</div>
-             <div className="text-muted-foreground text-xs mt-1">مبيعات اليوم (ر.س)</div>
-           </div>
-           <div className="bg-card border border-border rounded-xl p-3 text-center">
-             <div className="text-[#f59e0b] font-bold text-xl">{employees.length}</div>
-             <div className="text-muted-foreground text-xs mt-1">الموظفون</div>
-           </div>
+         {/* ── TODAY MINI STATS (pill row) ── */}
+         <div className="bg-card border border-border rounded-2xl p-1 flex items-stretch divide-x divide-border rtl:divide-x-reverse">
+           {[
+             { label: 'طلبات اليوم',         value: todayOrders.length.toString(),       color: 'text-emerald-600' },
+             { label: 'مبيعات اليوم (ر.س)', value: todayRevenue.toFixed(0),              color: 'text-blue-600'    },
+             { label: 'الموظفون',             value: employees.length.toString(),          color: 'text-amber-600'   },
+           ].map(s => (
+             <div key={s.label} className="flex-1 px-3 py-3 text-center">
+               <div className={`font-bold text-xl ${s.color}`}>{s.value}</div>
+               <div className="text-muted-foreground text-[11px] mt-0.5">{s.label}</div>
+             </div>
+           ))}
          </div>
 
          {/* ── 🧪 المختبر التقني — موحَّد (Phase 5-9) ── */}
@@ -911,25 +905,23 @@ export default function ManagerDashboard() {
            </div>
          </details>
 
-         {/* ── AI BANNER ── */}
+         {/* ── AI BANNER (clean) ── */}
          <button
            onClick={() => setLocation("/manager/ai")}
-           className="w-full group relative overflow-hidden bg-gradient-to-l from-violet-950/40 to-purple-950/20 border border-violet-500/20 rounded-2xl p-4 flex items-center gap-4 hover:border-violet-500/40 transition-all"
+           className="w-full group bg-card border border-border rounded-2xl p-4 flex items-center gap-4 hover:border-violet-300 hover:bg-violet-50/30 transition-all"
+           data-testid="link-ai-center"
          >
-           <div className="absolute inset-0 bg-gradient-to-l from-violet-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-           <div className="w-12 h-12 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center shrink-0">
-             <Brain className="w-6 h-6 text-violet-400" />
+           <div className="w-12 h-12 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
+             <Brain className="w-6 h-6 text-violet-600" />
            </div>
            <div className="text-right flex-1 min-w-0">
              <div className="flex items-center gap-2 flex-wrap">
                <div className="text-foreground font-bold text-sm">مركز الذكاء الاصطناعي</div>
-               <span className="text-[10px] bg-violet-500/20 text-violet-400 border border-violet-500/30 px-2 py-0.5 rounded-full font-medium">جديد</span>
+               <span className="text-[10px] bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium">جديد</span>
              </div>
-             <div className="text-muted-foreground text-xs mt-0.5">تحليل مبيعاتك، احصل على رؤى ذكية، اسأل المساعد الـ AI عن أي شيء</div>
+             <div className="text-muted-foreground text-xs mt-0.5">تحليل المبيعات · رؤى ذكية · مساعد محادثة</div>
            </div>
-           <div className="text-violet-400 group-hover:translate-x-[-4px] transition-transform">
-             <Sparkles className="w-5 h-5" />
-           </div>
+           <Sparkles className="w-5 h-5 text-violet-500 group-hover:scale-110 transition-transform" />
          </button>
 
          {/* ── CHARTS ── */}

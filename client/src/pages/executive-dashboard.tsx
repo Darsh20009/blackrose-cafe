@@ -323,8 +323,8 @@ export default function ExecutiveDashboard() {
         <div className="dashboard-grid">
           <div className="kpi-card card-hover">
             <div className="flex items-start justify-between mb-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-slate-900" />
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <DollarSign className="w-5 h-5 text-primary" />
               </div>
               <Badge className="badge-premium badge-gold">
                 <TrendingUp className="w-3 h-3" />
@@ -337,8 +337,8 @@ export default function ExecutiveDashboard() {
 
           <div className="kpi-card card-hover">
             <div className="flex items-start justify-between mb-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-500 flex items-center justify-center">
-                <Wallet className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
+                <Wallet className="w-5 h-5 text-emerald-600" />
               </div>
               <Badge className="badge-premium badge-success">
                 <Activity className="w-3 h-3" />
@@ -351,8 +351,8 @@ export default function ExecutiveDashboard() {
 
           <div className="kpi-card card-hover">
             <div className="flex items-start justify-between mb-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-400 to-blue-500 flex items-center justify-center">
-                <ShoppingBag className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+                <ShoppingBag className="w-5 h-5 text-blue-600" />
               </div>
             </div>
             <p className="text-sm text-muted-foreground mb-1">عدد الطلبات</p>
@@ -361,8 +361,8 @@ export default function ExecutiveDashboard() {
 
           <div className="kpi-card card-hover">
             <div className="flex items-start justify-between mb-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-400 to-purple-500 flex items-center justify-center">
-                <Target className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 rounded-lg bg-violet-50 flex items-center justify-center">
+                <Target className="w-5 h-5 text-violet-600" />
               </div>
             </div>
             <p className="text-sm text-muted-foreground mb-1">متوسط قيمة الطلب</p>

@@ -238,41 +238,41 @@ export default function OwnerDashboard() {
   }
 
   return (
-    <div className="dark min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 p-4" dir="rtl">
+    <div className="min-h-screen bg-background p-4 lg:p-6" dir="rtl">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-700 rounded-full flex items-center justify-center">
-              <Shield className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+              <Shield className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-red-500">لوحة تحكم المالك</h1>
-              <p className="text-gray-400 text-xs">إدارة قاعدة البيانات</p>
+              <h1 className="text-xl font-bold text-foreground">لوحة تحكم المالك</h1>
+              <p className="text-muted-foreground text-xs">إدارة قاعدة البيانات والصلاحيات</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
               variant="outline"
+              size="sm"
               onClick={() => setLocation("/employee/menu-management")}
-              className="border-green-500/50 text-green-300 hover:bg-green-500/10"
               data-testid="button-owner-manage-drinks"
             >
               <Coffee className="w-4 h-4 ml-2" />
-              إدارة المشروبات
+              المشروبات
             </Button>
             <Button
               variant="outline"
+              size="sm"
               onClick={() => setLocation("/employee/menu-management?type=food")}
-              className="border-orange-500/50 text-orange-300 hover:bg-orange-500/10"
               data-testid="button-owner-manage-food"
             >
               <Utensils className="w-4 h-4 ml-2" />
-              إدارة المأكولات
+              المأكولات
             </Button>
             <Button
               variant="outline"
+              size="sm"
               onClick={fetchStats}
-              className="border-primary/50 text-accent"
               data-testid="button-refresh"
             >
               <RefreshCw className="w-4 h-4 ml-2" />
@@ -280,8 +280,8 @@ export default function OwnerDashboard() {
             </Button>
             <Button
               variant="outline"
+              size="sm"
               onClick={() => setLocation("/manager/dashboard")}
-              className="border-primary/50 text-accent"
               data-testid="button-back"
             >
               <ArrowRight className="w-4 h-4 ml-2" />
@@ -293,73 +293,36 @@ export default function OwnerDashboard() {
         {isLoading ? (
           <div className="text-center py-12">
             <div className="animate-spin w-10 h-10 border-2 border-primary border-t-transparent rounded-full mx-auto"></div>
-            <p className="text-gray-400 mt-4">جاري التحميل...</p>
+            <p className="text-muted-foreground mt-4">جاري التحميل...</p>
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <Card className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border-blue-500/20">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-blue-400" />
-                    <div>
-                      <p className="text-blue-400 text-2xl font-bold">{stats?.summary.todayOrders || 0}</p>
-                      <p className="text-gray-400 text-xs">{tc("طلبات اليوم", "Today's Orders")}</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4 mb-6">
+              {[
+                { label: tc("طلبات اليوم", "Today's Orders"), value: stats?.summary.todayOrders || 0, icon: BarChart3, iconBg: 'bg-blue-50', iconColor: 'text-blue-600' },
+                { label: tc("إجمالي الإيرادات", "Total Revenue"), value: <>{(stats?.summary.totalRevenue || 0).toLocaleString()} <SarIcon /></>, icon: CreditCard, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
+                { label: tc("العملاء", "Customers"), value: stats?.collections.customers?.count || 0, icon: Users, iconBg: 'bg-violet-50', iconColor: 'text-violet-600' },
+                { label: tc("الطلبات", "Orders"), value: stats?.collections.orders?.count || 0, icon: ShoppingCart, iconBg: 'bg-amber-50', iconColor: 'text-amber-600' },
+              ].map((k, i) => (
+                <Card key={i} className="bg-card border border-border hover:shadow-sm transition-shadow">
+                  <CardContent className="p-4">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${k.iconBg}`}>
+                      <k.icon className={`w-5 h-5 ${k.iconColor}`} />
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-to-br from-green-500/20 to-green-600/10 border-green-500/20">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="w-5 h-5 text-green-400" />
-                    <div>
-                      <p className="text-green-400 text-2xl font-bold">
-                        {(stats?.summary.totalRevenue || 0).toLocaleString()} <SarIcon />
-                      </p>
-                      <p className="text-gray-400 text-xs">{tc("إجمالي الإيرادات", "Total Revenue")}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border-purple-500/20">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-5 h-5 text-purple-400" />
-                    <div>
-                      <p className="text-purple-400 text-2xl font-bold">
-                        {stats?.collections.customers?.count || 0}
-                      </p>
-                      <p className="text-gray-400 text-xs">{tc("العملاء", "Customers")}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <ShoppingCart className="w-5 h-5 text-accent" />
-                    <div>
-                      <p className="text-accent text-2xl font-bold">
-                        {stats?.collections.orders?.count || 0}
-                      </p>
-                      <p className="text-gray-400 text-xs">{tc("الطلبات", "Orders")}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    <p className="text-muted-foreground text-xs mb-1">{k.label}</p>
+                    <p className="text-2xl font-bold text-foreground leading-tight">{k.value}</p>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
 
-            <Card className="bg-gradient-to-br from-background to-background border-primary/20 mb-6">
+            <Card className="bg-card border border-border mb-6">
               <CardHeader>
-                <CardTitle className="text-accent flex items-center gap-2">
-                  <Database className="w-5 h-5" />
+                <CardTitle className="text-foreground flex items-center gap-2">
+                  <Database className="w-5 h-5 text-primary" />
                   مجموعات قاعدة البيانات
                 </CardTitle>
-                <CardDescription className="text-gray-400">
+                <CardDescription className="text-muted-foreground">
                   اضغط على أي مجموعة لعرض بياناتها
                 </CardDescription>
               </CardHeader>
@@ -395,13 +358,13 @@ export default function OwnerDashboard() {
             </Card>
 
             {selectedCollection && (
-              <Card className="bg-gradient-to-br from-background to-background border-primary/20 mb-6">
+              <Card className="bg-card border border-border mb-6">
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle className="text-accent">
+                    <CardTitle className="text-foreground">
                       {stats?.collections[selectedCollection]?.nameAr || selectedCollection}
                     </CardTitle>
-                    <CardDescription className="text-gray-400">
+                    <CardDescription className="text-muted-foreground">
                       {collectionData?.pagination.total || 0} سجل
                     </CardDescription>
                   </div>
@@ -537,13 +500,13 @@ export default function OwnerDashboard() {
             )}
 
             {(employee.role === 'owner' || employee.role === 'admin') && (
-              <Card className="bg-gradient-to-br from-red-900/20 to-red-950/10 border-red-500/20">
+              <Card className="bg-rose-50/40 border border-rose-200">
                 <CardHeader>
-                  <CardTitle className="text-red-500 flex items-center gap-2">
+                  <CardTitle className="text-rose-700 flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5" />
                     منطقة الخطر
                   </CardTitle>
-                  <CardDescription className="text-gray-400">
+                  <CardDescription className="text-muted-foreground">
                     عمليات لا يمكن التراجع عنها
                   </CardDescription>
                 </CardHeader>
