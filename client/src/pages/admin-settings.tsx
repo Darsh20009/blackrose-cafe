@@ -39,6 +39,7 @@ interface MenuCategory {
 }
 
 function ShiftTimeSettingsCard() {
+  const tc = useTranslate();
   const { toast } = useToast();
   const { data: config } = useQuery<any>({ queryKey: ["/api/business-config"] });
   const [periods, setPeriods] = useState<Array<{start: number; end: number}>>([
@@ -61,9 +62,9 @@ function ShiftTimeSettingsCard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/business-config"] });
-      toast({ title: "تم الحفظ", description: "تم تحديث إعدادات الورديات" });
+      toast({ title: tc("تم الحفظ", "Saved"), description: tc("تم تحديث إعدادات الورديات", "Shift settings updated") });
     },
-    onError: () => toast({ title: "خطأ", description: "فشل في الحفظ", variant: "destructive" }),
+    onError: () => toast({ title: tc("خطأ", "Error"), description: tc("فشل في الحفظ", "Save failed"), variant: "destructive" }),
   });
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -86,7 +87,7 @@ function ShiftTimeSettingsCard() {
     const offsetHours = Math.round(diff / 60 * 2) / 2;
     setComputedOffset(offsetHours);
     setTzOffset(offsetHours);
-    toast({ title: "تم الحساب", description: `فارق التوقيت: UTC+${offsetHours}` });
+    toast({ title: tc("تم الحساب", "Computed"), description: tc(`فارق التوقيت: UTC+${offsetHours}`, `Timezone offset: UTC+${offsetHours}`) });
   };
 
   return (
@@ -97,8 +98,8 @@ function ShiftTimeSettingsCard() {
             <Zap className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <CardTitle className="text-xl font-bold">إعدادات الورديات التلقائية</CardTitle>
-            <CardDescription>حدد أوقات الورديات وضبط التوقيت المحلي للمكان</CardDescription>
+            <CardTitle className="text-xl font-bold">{tc("إعدادات الورديات التلقائية", "Automatic Shift Settings")}</CardTitle>
+            <CardDescription>{tc("حدد أوقات الورديات وضبط التوقيت المحلي للمكان", "Define shift times and set the local timezone")}</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -108,13 +109,13 @@ function ShiftTimeSettingsCard() {
         <div className="border rounded-lg p-4 space-y-3 bg-amber-50/30 dark:bg-amber-950/10 border-amber-200 dark:border-amber-800">
           <div className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
             <Clock className="w-4 h-4" />
-            ضبط التوقيت المحلي
+            {tc("ضبط التوقيت المحلي", "Local Timezone Setup")}
           </div>
-          <p className="text-xs text-muted-foreground">إذا كانت حسابات الوردية تظهر في وقت خاطئ، أدخل الوقت الحالي في مكانك لضبط الفارق تلقائياً.</p>
+          <p className="text-xs text-muted-foreground">{tc("إذا كانت حسابات الوردية تظهر في وقت خاطئ، أدخل الوقت الحالي في مكانك لضبط الفارق تلقائياً.", "If shift calculations show the wrong time, enter your current local time to compute the offset automatically.")}</p>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">فارق التوقيت الحالي (ساعات)</label>
+              <label className="text-xs text-muted-foreground block mb-1">{tc("فارق التوقيت الحالي (ساعات)", "Current timezone offset (hours)")}</label>
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
@@ -130,7 +131,7 @@ function ShiftTimeSettingsCard() {
               </div>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">الوقت المحلي المحسوب الآن</label>
+              <label className="text-xs text-muted-foreground block mb-1">{tc("الوقت المحلي المحسوب الآن", "Current computed local time")}</label>
               <div className="flex items-center gap-2 h-10 border rounded-md px-3 bg-muted/30 font-mono text-sm text-foreground">
                 {computedLocalStr}
               </div>
@@ -139,7 +140,7 @@ function ShiftTimeSettingsCard() {
 
           <div className="flex items-end gap-2">
             <div className="flex-1">
-              <label className="text-xs text-muted-foreground block mb-1">الوقت الحالي في مكانك (أدخله لحساب الفارق)</label>
+              <label className="text-xs text-muted-foreground block mb-1">{tc("الوقت الحالي في مكانك (أدخله لحساب الفارق)", "Your current local time (enter to compute offset)")}</label>
               <Input
                 type="time"
                 value={manualLocalTime}
@@ -150,13 +151,13 @@ function ShiftTimeSettingsCard() {
             </div>
             <Button size="sm" variant="outline" onClick={handleComputeOffset} className="gap-1 shrink-0">
               <Clock className="w-3 h-3" />
-              حساب الفارق
+              {tc("حساب الفارق", "Compute Offset")}
             </Button>
           </div>
 
           {computedOffset !== null && (
             <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 rounded p-2 text-xs text-green-700 dark:text-green-300">
-              ✓ الفارق المحسوب: UTC+{computedOffset} — سيُطبَّق على الورديات التلقائية عند الحفظ
+              {tc(`✓ الفارق المحسوب: UTC+${computedOffset} — سيُطبَّق على الورديات التلقائية عند الحفظ`, `✓ Computed offset: UTC+${computedOffset} — will be applied to auto shifts on save`)}
             </div>
           )}
         </div>
@@ -165,15 +166,15 @@ function ShiftTimeSettingsCard() {
         <div className="space-y-3">
           <div className="text-sm font-semibold flex items-center gap-2">
             <Zap className="w-4 h-4 text-blue-500" />
-            فترات الورديات
+            {tc("فترات الورديات", "Shift Periods")}
           </div>
           {periods.map((p, i) => (
             <div key={i} className="flex items-center gap-3 p-3 bg-muted/40 rounded-lg border">
               <Zap className="w-4 h-4 text-blue-500 shrink-0" />
-              <span className="text-sm font-medium shrink-0">وردية {i + 1}</span>
+              <span className="text-sm font-medium shrink-0">{tc(`وردية ${i + 1}`, `Shift ${i + 1}`)}</span>
               <div className="flex items-center gap-2 flex-1">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">من</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{tc("من", "From")}</label>
                   <select
                     value={p.start}
                     onChange={e => {
@@ -188,7 +189,7 @@ function ShiftTimeSettingsCard() {
                 </div>
                 <span className="text-muted-foreground mt-4">—</span>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">إلى</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{tc("إلى", "To")}</label>
                   <select
                     value={p.end}
                     onChange={e => {
@@ -202,7 +203,7 @@ function ShiftTimeSettingsCard() {
                   </select>
                 </div>
                 {p.end < p.start && (
-                  <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded mt-4">تمتد لليوم التالي</span>
+                  <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded mt-4">{tc("تمتد لليوم التالي", "Extends to next day")}</span>
                 )}
               </div>
               {periods.length > 1 && (
@@ -227,7 +228,7 @@ function ShiftTimeSettingsCard() {
             onClick={() => setPeriods([...periods, { start: 0, end: 12 }])}
           >
             <Plus className="w-4 h-4" />
-            إضافة وردية
+            {tc("إضافة وردية", "Add Shift")}
           </Button>
           <Button
             size="sm"
@@ -236,13 +237,13 @@ function ShiftTimeSettingsCard() {
             onClick={() => saveMutation.mutate({ shiftPeriods: periods, timezoneOffsetHours: tzOffset })}
           >
             <Save className="w-4 h-4" />
-            {saveMutation.isPending ? "جاري الحفظ..." : "حفظ الإعدادات"}
+            {saveMutation.isPending ? tc("جاري الحفظ...", "Saving...") : tc("حفظ الإعدادات", "Save Settings")}
           </Button>
         </div>
 
         <div className="bg-blue-50 dark:bg-blue-950/20 p-3 rounded-lg text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
           <Zap className="w-4 h-4 shrink-0 mt-0.5" />
-          <p>الورديات التلقائية تُحسب من الطلبات المُسجَّلة في كل فترة. ضبط التوقيت يضمن أن الوردية تبدأ وتنتهي في الوقت الصحيح حسب موقعك.</p>
+          <p>{tc("الورديات التلقائية تُحسب من الطلبات المُسجَّلة في كل فترة. ضبط التوقيت يضمن أن الوردية تبدأ وتنتهي في الوقت الصحيح حسب موقعك.", "Automatic shifts are calculated from orders recorded in each period. Setting the timezone ensures shifts start and end at the correct local time.")}</p>
         </div>
       </CardContent>
     </Card>
@@ -354,10 +355,10 @@ export default function AdminSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payment-gateway/config"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payment-methods"] });
-      toast({ title: "تم الحفظ", description: "تم حفظ إعدادات الدفع بنجاح" });
+      toast({ title: tc("تم الحفظ","Saved"), description: tc("تم حفظ إعدادات الدفع بنجاح","Payment settings saved successfully") });
     },
     onError: (error: Error) => {
-      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+      toast({ title: tc("خطأ","Error"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -410,7 +411,7 @@ export default function AdminSettings() {
       const data = await res.json();
       setTestResult(data);
     } catch {
-      setTestResult({ success: false, message: "فشل في الاتصال" });
+      setTestResult({ success: false, message: tc("فشل في الاتصال","Connection failed") });
     } finally {
       setIsTesting(false);
     }
@@ -452,13 +453,13 @@ export default function AdminSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/business-config"] });
       toast({
-        title: "تم التحديث",
-        description: "تم حفظ التغييرات بنجاح",
+        title: tc("تم التحديث","Updated"),
+        description: tc("تم حفظ التغييرات بنجاح","Changes saved successfully"),
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "خطأ",
+        title: tc("خطأ","Error"),
         description: error.message,
         variant: "destructive",
       });
@@ -636,10 +637,10 @@ export default function AdminSettings() {
       setNewCodeValue(10);
       setNewCodeMaxUses(100);
       setNewCodeVisible(true);
-      toast({ title: "تم إنشاء كود الخصم بنجاح" });
+      toast({ title: tc("تم إنشاء كود الخصم بنجاح","Discount code created successfully") });
     },
     onError: (error: Error) => {
-      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+      toast({ title: tc("خطأ","Error"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -650,10 +651,10 @@ export default function AdminSettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/discount-codes"] });
-      toast({ title: "تم تحديث حالة الكود" });
+      toast({ title: tc("تم تحديث حالة الكود","Code status updated") });
     },
     onError: (error: Error) => {
-      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+      toast({ title: tc("خطأ","Error"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -664,10 +665,10 @@ export default function AdminSettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/discount-codes"] });
-      toast({ title: "تم تحديث ظهور الكود" });
+      toast({ title: tc("تم تحديث ظهور الكود","Code visibility updated") });
     },
     onError: (error: Error) => {
-      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+      toast({ title: tc("خطأ","Error"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -702,13 +703,13 @@ export default function AdminSettings() {
   };
 
   const daysAr: Record<string, string> = {
-    monday: "الإثنين",
-    tuesday: "الثلاثاء",
-    wednesday: "الأربعاء",
-    thursday: "الخميس",
-    friday: "الجمعة",
-    saturday: "السبت",
-    sunday: "الأحد",
+    monday: tc("الإثنين", "Monday"),
+    tuesday: tc("الثلاثاء", "Tuesday"),
+    wednesday: tc("الأربعاء", "Wednesday"),
+    thursday: tc("الخميس", "Thursday"),
+    friday: tc("الجمعة", "Friday"),
+    saturday: tc("السبت", "Saturday"),
+    sunday: tc("الأحد", "Sunday"),
   };
 
   const createCategoryMutation = useMutation({
@@ -722,10 +723,10 @@ export default function AdminSettings() {
       setNewCategoryNameEn("");
       setNewCategoryDepartment('drinks');
       setNewCategoryIcon('Coffee');
-      toast({ title: "تم إضافة القسم الفرعي بنجاح" });
+      toast({ title: tc("تم إضافة القسم الفرعي بنجاح","Sub-category added successfully") });
     },
     onError: () => {
-      toast({ title: "فشل في إضافة القسم", variant: "destructive" });
+      toast({ title: tc("فشل في إضافة القسم","Failed to add category"), variant: "destructive" });
     }
   });
 
@@ -736,10 +737,10 @@ export default function AdminSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/menu-categories"] });
       setEditingCategoryId(null);
-      toast({ title: "تم تحديث القسم بنجاح" });
+      toast({ title: tc("تم تحديث القسم بنجاح","Category updated successfully") });
     },
     onError: () => {
-      toast({ title: "فشل في تحديث القسم", variant: "destructive" });
+      toast({ title: tc("فشل في تحديث القسم","Failed to update category"), variant: "destructive" });
     }
   });
 
@@ -753,13 +754,15 @@ export default function AdminSettings() {
       setDeletingCategory(null);
       const moved = data?.reassignedCount || 0;
       toast({
-        title: "تم حذف القسم بنجاح",
-        description: moved > 0 ? `تم نقل ${moved} صنف إلى أقسام مناسبة تلقائياً` : "لم تكن هناك أصناف في هذا القسم",
+        title: tc("تم حذف القسم بنجاح","Category deleted successfully"),
+        description: moved > 0
+          ? tc(`تم نقل ${moved} صنف إلى أقسام مناسبة تلقائياً`, `${moved} item(s) automatically moved to suitable categories`)
+          : tc("لم تكن هناك أصناف في هذا القسم","There were no items in this category"),
         className: "bg-green-600 text-white"
       });
     },
     onError: (error: any) => {
-      const msg = error?.message || "فشل في حذف القسم";
+      const msg = error?.message || tc("فشل في حذف القسم","Failed to delete category");
       toast({ title: msg, variant: "destructive" });
     }
   });
@@ -779,13 +782,13 @@ export default function AdminSettings() {
   };
 
   const iconOptions = [
-    { value: 'Coffee', label: 'قهوة', Icon: Coffee },
-    { value: 'Flame', label: 'ساخن', Icon: Flame },
-    { value: 'Snowflake', label: 'بارد', Icon: Snowflake },
-    { value: 'Star', label: 'مميز', Icon: Star },
-    { value: 'Cake', label: 'حلويات', Icon: Cake },
-    { value: 'Utensils', label: 'مأكولات', Icon: Utensils },
-    { value: 'Sparkles', label: 'خاص', Icon: Sparkles },
+    { value: 'Coffee', label: tc('قهوة','Coffee'), Icon: Coffee },
+    { value: 'Flame', label: tc('ساخن','Hot'), Icon: Flame },
+    { value: 'Snowflake', label: tc('بارد','Cold'), Icon: Snowflake },
+    { value: 'Star', label: tc('مميز','Featured'), Icon: Star },
+    { value: 'Cake', label: tc('حلويات','Desserts'), Icon: Cake },
+    { value: 'Utensils', label: tc('مأكولات','Food'), Icon: Utensils },
+    { value: 'Sparkles', label: tc('خاص','Special'), Icon: Sparkles },
   ];
 
   const getIconComponent = (iconName: string) => {
@@ -802,36 +805,37 @@ export default function AdminSettings() {
   }
 
   return (
-    <div className="p-6 space-y-6 bg-white dark:bg-background min-h-screen" dir="rtl">
+    <div className="p-6 space-y-6 bg-white dark:bg-background min-h-screen" dir={tc('rtl','ltr')}>
 
       {/* Smart Delete Category Dialog */}
       <Dialog open={!!deletingCategory} onOpenChange={(open) => { if (!open) setDeletingCategory(null); }}>
-        <DialogContent className="max-w-md" dir="rtl">
+        <DialogContent className="max-w-md" dir={tc('rtl','ltr')}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
               <Trash2 className="w-5 h-5" />
-              حذف القسم: {deletingCategory?.nameAr}
+              {tc(`حذف القسم: ${deletingCategory?.nameAr || ''}`, `Delete Category: ${deletingCategory?.nameEn || deletingCategory?.nameAr || ''}`)}
             </DialogTitle>
             <DialogDescription>
-              سيتم نقل الأصناف الموجودة في هذا القسم تلقائياً إلى أقسام مناسبة بناءً على نوعها.
+              {tc("سيتم نقل الأصناف الموجودة في هذا القسم تلقائياً إلى أقسام مناسبة بناءً على نوعها.",
+                  "Items in this category will be automatically moved to suitable categories based on their type.")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             {loadingPreview ? (
               <div className="flex items-center justify-center py-6 text-muted-foreground">
                 <Loader2 className="w-5 h-5 animate-spin ml-2" />
-                جاري فحص الأصناف...
+                {tc("جاري فحص الأصناف...","Scanning items...")}
               </div>
             ) : categoryItemsPreview.length === 0 ? (
               <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg text-green-700 text-sm">
                 <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                لا توجد أصناف في هذا القسم، يمكن الحذف بأمان.
+                {tc("لا توجد أصناف في هذا القسم، يمكن الحذف بأمان.","No items in this category — safe to delete.")}
               </div>
             ) : (
               <div className="space-y-2">
                 <p className="text-sm font-medium text-amber-700 flex items-center gap-1.5">
                   <AlertTriangle className="w-4 h-4" />
-                  {categoryItemsPreview.length} صنف سيتم نقله تلقائياً:
+                  {tc(`${categoryItemsPreview.length} صنف سيتم نقله تلقائياً:`, `${categoryItemsPreview.length} item(s) will be moved automatically:`)}
                 </p>
                 <div className="bg-amber-50 rounded-lg p-3 max-h-40 overflow-y-auto space-y-1">
                   {categoryItemsPreview.map((item, i) => (
@@ -841,7 +845,7 @@ export default function AdminSettings() {
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground">سيقوم النظام بتحليل كل صنف وإعادة تصنيفه بذكاء للقسم الأنسب.</p>
+                <p className="text-xs text-muted-foreground">{tc("سيقوم النظام بتحليل كل صنف وإعادة تصنيفه بذكاء للقسم الأنسب.","The system will analyze each item and intelligently reassign it to the most suitable category.")}</p>
               </div>
             )}
           </div>
@@ -853,10 +857,10 @@ export default function AdminSettings() {
               data-testid="button-confirm-delete-category"
             >
               {deleteCategoryMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Trash2 className="w-4 h-4 ml-1" />}
-              {categoryItemsPreview.length > 0 ? "حذف ونقل الأصناف" : "حذف القسم"}
+              {categoryItemsPreview.length > 0 ? tc("حذف ونقل الأصناف","Delete & Move Items") : tc("حذف القسم","Delete Category")}
             </Button>
             <Button variant="outline" onClick={() => setDeletingCategory(null)} data-testid="button-cancel-delete-category">
-              إلغاء
+              {tc("إلغاء","Cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>

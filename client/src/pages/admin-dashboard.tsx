@@ -29,7 +29,7 @@ export default function AdminDashboard() {
   const [loadingInsights, setLoadingInsights] = useState(false);
 
   useEffect(() => {
-    document.title = "لوحة تحكم الإدارة - BLACK ROSE CAFE";
+    document.title = tc("لوحة تحكم الإدارة", "Admin Dashboard") + " - BLACK ROSE CAFE";
     const stored = localStorage.getItem("currentEmployee");
     if (stored) {
       try { setManager(JSON.parse(stored)); } catch {}
@@ -169,7 +169,7 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className="dark flex h-screen overflow-hidden bg-[#070707]" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
+    <div className="dark flex h-screen overflow-hidden bg-[#070707]" dir={tc('rtl','ltr')} style={{ fontFamily: "'Cairo', sans-serif" }}>
       <ManagerSidebar
         manager={manager}
         onLogout={handleLogout}

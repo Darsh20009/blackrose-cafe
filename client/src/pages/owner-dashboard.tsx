@@ -148,11 +148,14 @@ export default function OwnerDashboard() {
     }
   };
 
+  const deleteKeyword = tc('حذف', 'DELETE');
+  const resetKeyword = tc('احذف جميع البيانات', 'DELETE ALL DATA');
+
   const handleDeleteCollection = async (collection: string) => {
-    if (deleteConfirm !== 'حذف') {
+    if (deleteConfirm !== deleteKeyword) {
       toast({
         title: tc("خطأ", "Error"),
-        description: "يرجى كتابة 'حذف' للتأكيد",
+        description: tc(`يرجى كتابة '${deleteKeyword}' للتأكيد`, `Please type '${deleteKeyword}' to confirm`),
         variant: "destructive"
       });
       return;
@@ -204,7 +207,7 @@ export default function OwnerDashboard() {
   };
 
   const handleResetOrdersOnly = async () => {
-    if (!confirm("سيتم حذف جميع الطلبات والمحاسبة. المنتجات والموظفون والصور ستبقى. هل أنت متأكد؟")) return;
+    if (!confirm(tc("سيتم حذف جميع الطلبات والمحاسبة. المنتجات والموظفون والصور ستبقى. هل أنت متأكد؟", "All orders and accounting will be deleted. Products, employees and images will be preserved. Are you sure?"))) return;
     try {
       const response = await apiRequest('DELETE', '/api/admin/reset-orders-only');
       const data = await response.json();
@@ -223,10 +226,10 @@ export default function OwnerDashboard() {
   };
 
   const handleResetDatabase = async () => {
-    if (resetConfirm !== 'احذف جميع البيانات') {
+    if (resetConfirm !== resetKeyword) {
       toast({
         title: tc("خطأ", "Error"),
-        description: "يرجى كتابة العبارة الصحيحة للتأكيد",
+        description: tc("يرجى كتابة العبارة الصحيحة للتأكيد", "Please type the correct confirmation phrase"),
         variant: "destructive"
       });
       return;
@@ -260,7 +263,7 @@ export default function OwnerDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 lg:p-6" dir="rtl">
+    <div className="min-h-screen bg-background p-4 lg:p-6" dir={tc('rtl','ltr')}>
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <div className="flex items-center gap-3">
@@ -268,8 +271,8 @@ export default function OwnerDashboard() {
               <Shield className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">لوحة تحكم المالك</h1>
-              <p className="text-muted-foreground text-xs">إدارة قاعدة البيانات والصلاحيات</p>
+              <h1 className="text-xl font-bold text-foreground">{tc("لوحة تحكم المالك", "Owner Dashboard")}</h1>
+              <p className="text-muted-foreground text-xs">{tc("إدارة قاعدة البيانات والصلاحيات", "Database & permissions management")}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -280,7 +283,7 @@ export default function OwnerDashboard() {
               data-testid="button-owner-manage-drinks"
             >
               <Coffee className="w-4 h-4 ml-2" />
-              المشروبات
+              {tc("المشروبات", "Drinks")}
             </Button>
             <Button
               variant="outline"
@@ -289,7 +292,7 @@ export default function OwnerDashboard() {
               data-testid="button-owner-manage-food"
             >
               <Utensils className="w-4 h-4 ml-2" />
-              المأكولات
+              {tc("المأكولات", "Food")}
             </Button>
             <Button
               variant="outline"
@@ -298,7 +301,7 @@ export default function OwnerDashboard() {
               data-testid="button-refresh"
             >
               <RefreshCw className="w-4 h-4 ml-2" />
-              تحديث
+              {tc("تحديث", "Refresh")}
             </Button>
             <Button
               variant="outline"
@@ -307,7 +310,7 @@ export default function OwnerDashboard() {
               data-testid="button-back"
             >
               <ArrowRight className="w-4 h-4 ml-2" />
-              العودة
+              {tc("العودة", "Back")}
             </Button>
           </div>
         </div>
@@ -370,7 +373,7 @@ export default function OwnerDashboard() {
         {isLoading ? (
           <div className="text-center py-12">
             <div className="animate-spin w-10 h-10 border-2 border-primary border-t-transparent rounded-full mx-auto"></div>
-            <p className="text-muted-foreground mt-4">جاري التحميل...</p>
+            <p className="text-muted-foreground mt-4">{tc("جاري التحميل...", "Loading...")}</p>
           </div>
         ) : (
           <>
@@ -397,10 +400,10 @@ export default function OwnerDashboard() {
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Database className="w-5 h-5 text-primary" />
-                  مجموعات قاعدة البيانات
+                  {tc("مجموعات قاعدة البيانات", "Database Collections")}
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  اضغط على أي مجموعة لعرض بياناتها
+                  {tc("اضغط على أي مجموعة لعرض بياناتها", "Click any collection to view its data")}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -442,7 +445,7 @@ export default function OwnerDashboard() {
                       {stats?.collections[selectedCollection]?.nameAr || selectedCollection}
                     </CardTitle>
                     <CardDescription className="text-muted-foreground">
-                      {collectionData?.pagination.total || 0} سجل
+                      {collectionData?.pagination.total || 0} {tc("سجل", "records")}
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
@@ -451,21 +454,21 @@ export default function OwnerDashboard() {
                         <DialogTrigger asChild>
                           <Button variant="destructive" size="sm" data-testid="button-delete-collection">
                             <Trash2 className="w-4 h-4 ml-2" />
-                            حذف الكل
+                            {tc("حذف الكل", "Delete All")}
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="bg-[#2d1f1a] border-primary/20">
                           <DialogHeader>
-                            <DialogTitle className="text-red-500">تأكيد الحذف</DialogTitle>
+                            <DialogTitle className="text-red-500">{tc("تأكيد الحذف", "Confirm Delete")}</DialogTitle>
                             <DialogDescription className="text-gray-400">
-                              سيتم حذف جميع سجلات {stats?.collections[selectedCollection]?.nameAr}.
-                              اكتب "حذف" للتأكيد.
+                              {tc(`سيتم حذف جميع سجلات ${stats?.collections[selectedCollection]?.nameAr}. اكتب "${deleteKeyword}" للتأكيد.`,
+                                  `All records of ${selectedCollection} will be deleted. Type "${deleteKeyword}" to confirm.`)}
                             </DialogDescription>
                           </DialogHeader>
                           <Input
                             value={deleteConfirm}
                             onChange={(e) => setDeleteConfirm(e.target.value)}
-                            placeholder="اكتب: حذف"
+                            placeholder={tc(`اكتب: ${deleteKeyword}`, `Type: ${deleteKeyword}`)}
                             className="bg-[#1a1410] border-red-500/50 text-white"
                             data-testid="input-delete-confirm"
                           />
@@ -473,10 +476,10 @@ export default function OwnerDashboard() {
                             <Button
                               variant="destructive"
                               onClick={() => handleDeleteCollection(selectedCollection)}
-                              disabled={isDeleting || deleteConfirm !== 'حذف'}
+                              disabled={isDeleting || deleteConfirm !== deleteKeyword}
                               data-testid="button-confirm-delete"
                             >
-                              {isDeleting ? 'جاري الحذف...' : 'تأكيد الحذف'}
+                              {isDeleting ? tc('جاري الحذف...', 'Deleting...') : tc('تأكيد الحذف', 'Confirm Delete')}
                             </Button>
                           </DialogFooter>
                         </DialogContent>
@@ -492,7 +495,7 @@ export default function OwnerDashboard() {
                       className="text-gray-400"
                       data-testid="button-close-collection"
                     >
-                      إغلاق
+                      {tc("إغلاق", "Close")}
                     </Button>
                   </div>
                 </CardHeader>
@@ -508,7 +511,7 @@ export default function OwnerDashboard() {
                                   {key}
                                 </th>
                               ))}
-                              <th className="text-right py-2 px-3 text-gray-400 font-medium">إجراءات</th>
+                              <th className="text-right py-2 px-3 text-gray-400 font-medium">{tc("إجراءات", "Actions")}</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -551,7 +554,7 @@ export default function OwnerDashboard() {
                             <ChevronRight className="w-4 h-4" />
                           </Button>
                           <span className="text-gray-400">
-                            صفحة {currentPage} من {collectionData.pagination.pages}
+                            {tc(`صفحة ${currentPage} من ${collectionData.pagination.pages}`, `Page ${currentPage} of ${collectionData.pagination.pages}`)}
                           </span>
                           <Button
                             variant="outline"
@@ -569,7 +572,7 @@ export default function OwnerDashboard() {
                   ) : (
                     <div className="text-center py-8">
                       <Database className="w-12 h-12 text-gray-500 mx-auto mb-2" />
-                      <p className="text-gray-400">لا توجد بيانات</p>
+                      <p className="text-gray-400">{tc("لا توجد بيانات", "No data")}</p>
                     </div>
                   )}
                 </CardContent>
@@ -581,10 +584,10 @@ export default function OwnerDashboard() {
                 <CardHeader>
                   <CardTitle className="text-rose-700 flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5" />
-                    منطقة الخطر
+                    {tc("منطقة الخطر", "Danger Zone")}
                   </CardTitle>
                   <CardDescription className="text-muted-foreground">
-                    عمليات لا يمكن التراجع عنها
+                    {tc("عمليات لا يمكن التراجع عنها", "Operations that cannot be undone")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -607,29 +610,30 @@ export default function OwnerDashboard() {
                     <DialogTrigger asChild>
                       <Button variant="destructive" className="w-full" data-testid="button-reset-database">
                         <Trash2 className="w-4 h-4 ml-2" />
-                        إعادة تعيين قاعدة البيانات الكاملة
+                        {tc("إعادة تعيين قاعدة البيانات الكاملة", "Full Database Reset")}
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="bg-[#2d1f1a] border-red-500/20">
                       <DialogHeader>
                         <DialogTitle className="text-red-500 flex items-center gap-2">
                           <AlertTriangle className="w-5 h-5" />
-                          تحذير خطير
+                          {tc("تحذير خطير", "Critical Warning")}
                         </DialogTitle>
                         <DialogDescription className="text-gray-400">
-                          سيتم حذف جميع بيانات العمليات (الطلبات، العملاء، أكواد الخصم، بطاقات الولاء، سجلات الحضور).
+                          {tc("سيتم حذف جميع بيانات العمليات (الطلبات، العملاء، أكواد الخصم، بطاقات الولاء، سجلات الحضور).",
+                              "All operational data will be deleted (orders, customers, discount codes, loyalty cards, attendance records).")}
                           <br />
                           <br />
-                          <strong className="text-red-400">هذه العملية لا يمكن التراجع عنها!</strong>
+                          <strong className="text-red-400">{tc("هذه العملية لا يمكن التراجع عنها!", "This action cannot be undone!")}</strong>
                           <br />
                           <br />
-                          اكتب "احذف جميع البيانات" للتأكيد.
+                          {tc(`اكتب "${resetKeyword}" للتأكيد.`, `Type "${resetKeyword}" to confirm.`)}
                         </DialogDescription>
                       </DialogHeader>
                       <Input
                         value={resetConfirm}
                         onChange={(e) => setResetConfirm(e.target.value)}
-                        placeholder="اكتب: احذف جميع البيانات"
+                        placeholder={tc(`اكتب: ${resetKeyword}`, `Type: ${resetKeyword}`)}
                         className="bg-[#1a1410] border-red-500/50 text-white"
                         data-testid="input-reset-confirm"
                       />
@@ -639,15 +643,15 @@ export default function OwnerDashboard() {
                           onClick={() => setResetDialogOpen(false)}
                           className="border-gray-500/50 text-gray-400"
                         >
-                          إلغاء
+                          {tc("إلغاء", "Cancel")}
                         </Button>
                         <Button
                           variant="destructive"
                           onClick={handleResetDatabase}
-                          disabled={resetConfirm !== 'احذف جميع البيانات'}
+                          disabled={resetConfirm !== resetKeyword}
                           data-testid="button-confirm-reset"
                         >
-                          تأكيد إعادة التعيين
+                          {tc("تأكيد إعادة التعيين", "Confirm Reset")}
                         </Button>
                       </DialogFooter>
                     </DialogContent>
