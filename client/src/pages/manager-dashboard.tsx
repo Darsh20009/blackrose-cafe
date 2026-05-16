@@ -876,6 +876,25 @@ export default function ManagerDashboard() {
            </div>
          </div>
 
+         {/* ── AI AUTOMATION BANNER (Phase 6) ── */}
+         <button
+           onClick={() => setLocation("/manager/ai-automation")}
+           data-testid="link-ai-automation"
+           className="w-full group bg-gradient-to-l from-fuchsia-950/40 to-violet-950/20 border border-fuchsia-500/20 rounded-2xl p-4 flex items-center gap-4 hover:border-fuchsia-500/40 transition-all mb-3"
+         >
+           <div className="w-12 h-12 rounded-xl bg-fuchsia-600/20 border border-fuchsia-500/30 flex items-center justify-center shrink-0">
+             <Brain className="w-6 h-6 text-fuchsia-400" />
+           </div>
+           <div className="text-right flex-1 min-w-0">
+             <div className="flex items-center gap-2 flex-wrap">
+               <div className="text-foreground font-bold text-sm">الذكاء الاصطناعي والأتمتة</div>
+               <span className="text-[10px] bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30 px-2 py-0.5 rounded-full font-medium">المرحلة 6</span>
+             </div>
+             <div className="text-muted-foreground text-xs mt-0.5">اقتراحات ذكية · تنبؤ بالمبيعات · كشف السرقة · تقارير سرديّة · تنبؤ بنفاد المخزون</div>
+           </div>
+           <Sparkles className="w-5 h-5 text-fuchsia-400 group-hover:-translate-x-1 transition-transform" />
+         </button>
+
          {/* ── RELIABILITY BANNER ── */}
          <button
            onClick={() => setLocation("/manager/reliability")}

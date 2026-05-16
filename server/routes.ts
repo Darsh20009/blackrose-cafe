@@ -20811,6 +20811,470 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
+  // ════════════════════════════════════════════════════════════════════════
+  //  PHASE 6 — AI + AUTOMATION
+  //  Smart Suggestions · AI Reports · Inventory Forecasting
+  // ════════════════════════════════════════════════════════════════════════
+
+  // Helper: call Groq for natural-language generation
+  async function callGroq(systemPrompt: string, userPrompt: string, maxTokens = 600): Promise<string | null> {
+    const groqKey = process.env.GROQ_API_KEY;
+    if (!groqKey) return null;
+    try {
+      const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          temperature: 0.5,
+          max_tokens: maxTokens,
+        }),
+      });
+      const data = await r.json();
+      return data.choices?.[0]?.message?.content || null;
+    } catch (e) { return null; }
+  }
+
+  // ─── SMART SUGGESTIONS (Pattern detection — 5 categories) ───────────────
+  app.get("/api/ai/smart-suggestions", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { OrderModel, RawItemModel, EmployeeModel, ApiMetricModel, AuditLogModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const todayStart = getSaudiStartOfDay();
+      const weekStart = new Date(todayStart.getTime() - 7 * 24 * 3600 * 1000);
+      const monthStart = new Date(todayStart.getTime() - 30 * 24 * 3600 * 1000);
+
+      const [orders, rawItems, employees, apiErrors, audits] = await Promise.all([
+        OrderModel.find({ tenantId, createdAt: { $gte: monthStart } }).lean() as any,
+        RawItemModel.find({ $or: [{ tenantId }, { tenantId: { $exists: false } }], isActive: 1 }).lean() as any,
+        EmployeeModel.find({ $or: [{ tenantId }, { tenantId: { $exists: false } }] }).lean() as any,
+        ApiMetricModel.find({ isError: true, createdAt: { $gte: new Date(Date.now() - 24 * 3600 * 1000) } }).lean() as any,
+        AuditLogModel.find({ tenantId, action: { $in: ['cancel', 'discount', 'void', 'refund'] }, createdAt: { $gte: weekStart } }).lean() as any,
+      ]);
+
+      const suggestions: any[] = [];
+
+      // ── 1) MISSING/LOW PRODUCTS ──
+      const lowStock = rawItems.filter((r: any) => (r.currentStock || 0) <= r.minStockLevel);
+      const outStock = rawItems.filter((r: any) => (r.currentStock || 0) === 0);
+      if (outStock.length > 0) {
+        suggestions.push({
+          id: 'out-stock',
+          type: 'critical',
+          category: 'inventory',
+          icon: 'package',
+          title: `${outStock.length} منتج نافد كلياً`,
+          message: `المنتجات: ${outStock.slice(0, 3).map((i: any) => i.nameAr).join('، ')}${outStock.length > 3 ? '...' : ''}. اطلبها فوراً لتجنب توقف العمل.`,
+          action: 'اذهب للمشتريات',
+          actionLink: '/manager/inventory/purchases',
+          impact: 'high',
+        });
+      }
+      if (lowStock.length > outStock.length) {
+        const justLow = lowStock.filter((i: any) => (i.currentStock || 0) > 0).slice(0, 5);
+        suggestions.push({
+          id: 'low-stock',
+          type: 'warning',
+          category: 'inventory',
+          icon: 'alert-triangle',
+          title: `${justLow.length} منتج اقترب من النفاد`,
+          message: `${justLow.map((i: any) => `${i.nameAr} (${i.currentStock} ${i.unit})`).join('، ')}`,
+          action: 'مراجعة المخزون',
+          actionLink: '/manager/inventory/raw-items',
+          impact: 'medium',
+        });
+      }
+
+      // ── 2) BEST EMPLOYEE SHIFT TIMES (correlation analysis) ──
+      const empSales: Record<string, { hours: Record<number, number>, totalSales: number }> = {};
+      for (const o of orders) {
+        const eid = o.assignedCashierId || o.employeeId;
+        if (!eid) continue;
+        const hr = new Date(o.createdAt).getHours();
+        if (!empSales[eid]) empSales[eid] = { hours: {}, totalSales: 0 };
+        empSales[eid].hours[hr] = (empSales[eid].hours[hr] || 0) + (o.totalAmount || 0);
+        empSales[eid].totalSales += o.totalAmount || 0;
+      }
+      const topPerformers: any[] = [];
+      for (const [eid, data] of Object.entries(empSales)) {
+        const emp = employees.find((e: any) => e.id === eid);
+        if (!emp || data.totalSales < 100) continue;
+        const peakHour = Object.entries(data.hours).sort((a, b) => Number(b[1]) - Number(a[1]))[0];
+        if (peakHour) {
+          topPerformers.push({
+            name: emp.fullName || emp.username,
+            peakHour: parseInt(peakHour[0]),
+            peakSales: Number(peakHour[1]),
+          });
+        }
+      }
+      topPerformers.sort((a, b) => b.peakSales - a.peakSales);
+      if (topPerformers.length > 0) {
+        const top = topPerformers.slice(0, 3);
+        suggestions.push({
+          id: 'best-shifts',
+          type: 'info',
+          category: 'employees',
+          icon: 'users',
+          title: 'أفضل أوقات لكل موظف',
+          message: top.map((p: any) =>
+            `${p.name}: ${p.peakHour}:00 (${Math.round(p.peakSales)} ر.س)`
+          ).join(' · '),
+          action: 'إدارة الورديات',
+          actionLink: '/manager/employees/hub',
+          impact: 'medium',
+          extra: { performers: top },
+        });
+      }
+
+      // ── 3) SALES PREDICTION (next 7 days) ──
+      const dailyRev: Record<string, number> = {};
+      const dowRev: Record<number, { sum: number, count: number }> = {};
+      for (const o of orders) {
+        const d = new Date(o.createdAt);
+        const key = d.toISOString().slice(0, 10);
+        dailyRev[key] = (dailyRev[key] || 0) + (o.totalAmount || 0);
+        const dow = d.getDay();
+        if (!dowRev[dow]) dowRev[dow] = { sum: 0, count: 0 };
+      }
+      for (const [key, rev] of Object.entries(dailyRev)) {
+        const dow = new Date(key).getDay();
+        dowRev[dow].sum += rev;
+        dowRev[dow].count++;
+      }
+      const dowAvg: Record<number, number> = {};
+      for (const [dow, v] of Object.entries(dowRev)) {
+        dowAvg[parseInt(dow)] = v.count > 0 ? v.sum / v.count : 0;
+      }
+      const next7: any[] = [];
+      const dayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+      for (let i = 1; i <= 7; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() + i);
+        const dow = d.getDay();
+        next7.push({
+          date: d.toISOString().slice(0, 10),
+          dayName: dayNames[dow],
+          predictedRevenue: Math.round(dowAvg[dow] || 0),
+        });
+      }
+      const totalPredicted = next7.reduce((s, d) => s + d.predictedRevenue, 0);
+      const lastWeekRev = Object.entries(dailyRev)
+        .filter(([k]) => new Date(k) >= weekStart)
+        .reduce((s, [, v]) => s + v, 0);
+      const trend = lastWeekRev > 0 ? ((totalPredicted - lastWeekRev) / lastWeekRev) * 100 : 0;
+
+      if (orders.length > 10) {
+        suggestions.push({
+          id: 'sales-forecast',
+          type: trend < -5 ? 'warning' : 'success',
+          category: 'sales',
+          icon: 'trending-up',
+          title: `توقع المبيعات للأسبوع القادم: ${Math.round(totalPredicted).toLocaleString()} ر.س`,
+          message: trend > 0
+            ? `متوقع نمو ${Math.abs(trend).toFixed(0)}% مقارنة بالأسبوع الماضي`
+            : trend < -5
+            ? `تحذير: انخفاض متوقع ${Math.abs(trend).toFixed(0)}% — راجع العروض والتسويق`
+            : `المبيعات مستقرة بمعدل ${Math.round(totalPredicted / 7).toLocaleString()} ر.س يومياً`,
+          action: 'عرض التحليلات',
+          actionLink: '/manager/bi-analytics',
+          impact: trend < -10 ? 'high' : 'medium',
+          extra: { next7, trend: Math.round(trend) },
+        });
+      }
+
+      // ── 4) THEFT/FRAUD DETECTION ──
+      const cancelByEmp: Record<string, number> = {};
+      const discountByEmp: Record<string, number> = {};
+      for (const a of audits) {
+        if (!a.actorId) continue;
+        if (a.action === 'cancel' || a.action === 'void') cancelByEmp[a.actorId] = (cancelByEmp[a.actorId] || 0) + 1;
+        if (a.action === 'discount' || a.action === 'refund') discountByEmp[a.actorId] = (discountByEmp[a.actorId] || 0) + 1;
+      }
+      const suspiciousEmps: any[] = [];
+      for (const [eid, count] of Object.entries(cancelByEmp)) {
+        if (count >= 5) {
+          const emp = employees.find((e: any) => e.id === eid);
+          suspiciousEmps.push({
+            name: emp?.fullName || emp?.username || eid,
+            cancels: count,
+            discounts: discountByEmp[eid] || 0,
+            reason: count >= 10 ? 'إلغاءات كثيرة جداً' : 'إلغاءات أعلى من المعدل',
+          });
+        }
+      }
+      if (suspiciousEmps.length > 0) {
+        suggestions.push({
+          id: 'theft-alert',
+          type: 'critical',
+          category: 'security',
+          icon: 'shield-alert',
+          title: `${suspiciousEmps.length} نشاط مشبوه يستحق المراجعة`,
+          message: suspiciousEmps.slice(0, 3).map((e: any) =>
+            `${e.name}: ${e.cancels} إلغاء${e.discounts > 0 ? ` + ${e.discounts} خصم` : ''}`
+          ).join(' · '),
+          action: 'مراجعة سجل التدقيق',
+          actionLink: '/manager/reliability',
+          impact: 'high',
+          extra: { suspicious: suspiciousEmps },
+        });
+      }
+
+      // ── 5) ERROR/PERFORMANCE DETECTION ──
+      if (apiErrors.length >= 10) {
+        const byPath: Record<string, number> = {};
+        for (const e of apiErrors) byPath[e.path] = (byPath[e.path] || 0) + 1;
+        const topPath = Object.entries(byPath).sort((a, b) => b[1] - a[1])[0];
+        suggestions.push({
+          id: 'system-errors',
+          type: apiErrors.length >= 50 ? 'critical' : 'warning',
+          category: 'system',
+          icon: 'alert-circle',
+          title: `${apiErrors.length} خطأ في النظام آخر 24 ساعة`,
+          message: topPath ? `أكثر مسار يفشل: ${topPath[0]} (${topPath[1]} مرة)` : 'يحتاج لمراجعة',
+          action: 'مراجعة الموثوقية',
+          actionLink: '/manager/reliability',
+          impact: 'high',
+        });
+      }
+
+      // ── 6) DEAD HOURS DETECTION ──
+      const hourCounts: Record<number, number> = {};
+      const recentOrders = orders.filter((o: any) => new Date(o.createdAt) >= weekStart);
+      for (const o of recentOrders) {
+        const h = new Date(o.createdAt).getHours();
+        hourCounts[h] = (hourCounts[h] || 0) + 1;
+      }
+      const businessHours = Array.from({ length: 17 }, (_, i) => i + 7); // 7am-11pm
+      const deadHours = businessHours.filter(h => (hourCounts[h] || 0) <= 1);
+      if (deadHours.length >= 3) {
+        suggestions.push({
+          id: 'dead-hours',
+          type: 'info',
+          category: 'sales',
+          icon: 'clock',
+          title: `${deadHours.length} ساعات ميتة في اليوم`,
+          message: `الساعات: ${deadHours.slice(0, 5).map(h => `${h}:00`).join('، ')}. فكّر في عروض خاصة لهذه الفترات.`,
+          action: 'إنشاء عرض ترويجي',
+          actionLink: '/manager/promotions',
+          impact: 'medium',
+        });
+      }
+
+      // Sort by impact
+      const impactOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+      suggestions.sort((a: any, b: any) => impactOrder[a.impact] - impactOrder[b.impact]);
+
+      res.json({
+        suggestions,
+        summary: {
+          total: suggestions.length,
+          critical: suggestions.filter(s => s.type === 'critical').length,
+          warning: suggestions.filter(s => s.type === 'warning').length,
+          info: suggestions.filter(s => s.type === 'info' || s.type === 'success').length,
+        },
+        generatedAt: new Date(),
+      });
+    } catch (e: any) {
+      console.error("[smart-suggestions]", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── AI NARRATIVE REPORT (Natural-language story instead of tables) ─────
+  app.post("/api/ai/narrative-report", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { OrderModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const period = (req.body.period || 'week') as 'today' | 'week' | 'month';
+      const todayStart = getSaudiStartOfDay();
+      const since = new Date(todayStart.getTime() - (period === 'today' ? 0 : period === 'week' ? 7 : 30) * 24 * 3600 * 1000);
+      const prevSince = new Date(since.getTime() - (period === 'today' ? 1 : period === 'week' ? 7 : 30) * 24 * 3600 * 1000);
+
+      const [current, previous] = await Promise.all([
+        OrderModel.find({ tenantId, createdAt: { $gte: since } }).lean() as any,
+        OrderModel.find({ tenantId, createdAt: { $gte: prevSince, $lt: since } }).lean() as any,
+      ]);
+
+      const sumRev = (arr: any[]) => arr.reduce((s, o) => s + (o.totalAmount || 0), 0);
+      const curRev = sumRev(current);
+      const prevRev = sumRev(previous);
+      const growthPct = prevRev > 0 ? ((curRev - prevRev) / prevRev) * 100 : 0;
+
+      // Hour analysis
+      const hourBuckets = { morning: 0, afternoon: 0, evening: 0, night: 0 };
+      for (const o of current) {
+        const h = new Date(o.createdAt).getHours();
+        if (h < 12) hourBuckets.morning += o.totalAmount || 0;
+        else if (h < 17) hourBuckets.afternoon += o.totalAmount || 0;
+        else if (h < 21) hourBuckets.evening += o.totalAmount || 0;
+        else hourBuckets.night += o.totalAmount || 0;
+      }
+      const prevHours = { morning: 0, afternoon: 0, evening: 0, night: 0 };
+      for (const o of previous) {
+        const h = new Date(o.createdAt).getHours();
+        if (h < 12) prevHours.morning += o.totalAmount || 0;
+        else if (h < 17) prevHours.afternoon += o.totalAmount || 0;
+        else if (h < 21) prevHours.evening += o.totalAmount || 0;
+        else prevHours.night += o.totalAmount || 0;
+      }
+
+      // Top items
+      const itemCounts: Record<string, number> = {};
+      for (const o of current) {
+        for (const it of (o.items || [])) {
+          const n = it.nameAr || it.name || '؟';
+          itemCounts[n] = (itemCounts[n] || 0) + (it.quantity || 1);
+        }
+      }
+      const topItems = Object.entries(itemCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+      const stats = {
+        period,
+        currentRevenue: Math.round(curRev),
+        previousRevenue: Math.round(prevRev),
+        growthPct: Math.round(growthPct * 10) / 10,
+        currentOrders: current.length,
+        previousOrders: previous.length,
+        avgOrder: current.length ? Math.round(curRev / current.length) : 0,
+        hourBuckets: Object.fromEntries(Object.entries(hourBuckets).map(([k, v]) => [k, Math.round(v as number)])),
+        prevHours: Object.fromEntries(Object.entries(prevHours).map(([k, v]) => [k, Math.round(v as number)])),
+        topItems,
+      };
+
+      // Try Groq for natural narrative; otherwise rule-based
+      const periodLabel = period === 'today' ? 'اليوم' : period === 'week' ? 'هذا الأسبوع' : 'هذا الشهر';
+      const sys = `أنت محلل أعمال محترف لمقاهي. اكتب تقريراً سرديّاً بالعربية الفصحى (2-3 فقرات قصيرة) يشرح أداء المبيعات بشكل واضح وعملي. ركّز على: السبب الجذري لأي تغيّر، فترات اليوم الأقوى/الأضعف، توصيات محددة وقابلة للتنفيذ. تجنّب الأرقام الجافة وحدها — اشرحها.`;
+      const usr = `بيانات الفترة (${periodLabel}):\n${JSON.stringify(stats, null, 2)}`;
+      const narrative = await callGroq(sys, usr, 700);
+
+      // Fallback: rule-based narrative
+      let fallback = '';
+      if (!narrative) {
+        const direction = growthPct > 5 ? 'ارتفعت' : growthPct < -5 ? 'انخفضت' : 'استقرت';
+        const reasons: string[] = [];
+        for (const k of ['morning', 'afternoon', 'evening', 'night'] as const) {
+          const cur = hourBuckets[k]; const prv = prevHours[k];
+          if (prv > 0) {
+            const ch = ((cur - prv) / prv) * 100;
+            const labelMap = { morning: 'الصباح', afternoon: 'العصر', evening: 'المساء', night: 'الليل' };
+            if (Math.abs(ch) > 15) {
+              reasons.push(`${ch > 0 ? 'ارتفاع' : 'ضعف'} فترة ${labelMap[k]} بنسبة ${Math.abs(Math.round(ch))}%`);
+            }
+          }
+        }
+        fallback = `مبيعاتك ${direction} ${Math.abs(stats.growthPct)}% خلال ${periodLabel} لتصل إلى ${stats.currentRevenue.toLocaleString()} ر.س عبر ${stats.currentOrders} طلب بمتوسط ${stats.avgOrder} ر.س.\n\n${reasons.length ? `السبب الرئيسي: ${reasons.join('، ')}.` : ''}\n\nأكثر المنتجات مبيعاً: ${topItems.map(([n, c]) => `${n} (${c})`).join('، ')}.`;
+      }
+
+      res.json({
+        narrative: narrative || fallback,
+        source: narrative ? 'ai' : 'rule-based',
+        stats,
+        generatedAt: new Date(),
+      });
+    } catch (e: any) {
+      console.error("[narrative-report]", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── SMART INVENTORY FORECASTING ────────────────────────────────────────
+  app.get("/api/ai/inventory-forecast", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { OrderModel, RawItemModel, RecipeModel, CoffeeItemModel } = await import("@shared/schema");
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const since = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+
+      const [orders, rawItems, recipes, products] = await Promise.all([
+        OrderModel.find({ tenantId, createdAt: { $gte: since } }).lean() as any,
+        RawItemModel.find({ $or: [{ tenantId }, { tenantId: { $exists: false } }], isActive: 1 }).lean() as any,
+        RecipeModel.find({}).lean() as any,
+        CoffeeItemModel.find({}).lean() as any,
+      ]);
+
+      // Calculate consumption per raw item from orders × recipes
+      const productNameToId: Record<string, string> = {};
+      for (const p of products) productNameToId[p.nameAr] = p.id || p._id?.toString();
+
+      // Total qty sold per product
+      const productSold: Record<string, number> = {};
+      for (const o of orders) {
+        for (const it of (o.items || [])) {
+          const pid = it.coffeeItemId || it.itemId || productNameToId[it.nameAr];
+          if (pid) productSold[pid] = (productSold[pid] || 0) + (it.quantity || 1);
+        }
+      }
+
+      // Consumption per raw item
+      const consumption: Record<string, number> = {};
+      for (const r of recipes) {
+        const sold = productSold[r.coffeeItemId] || 0;
+        if (sold === 0) continue;
+        for (const ing of (r.ingredients || r.items || [])) {
+          const ridv = ing.rawItemId;
+          const qty = (ing.quantity || ing.qty || 0) * sold;
+          if (ridv) consumption[ridv] = (consumption[ridv] || 0) + qty;
+        }
+      }
+
+      const forecast = rawItems.map((r: any) => {
+        const consumed30 = consumption[r.id] || 0;
+        const dailyConsumption = consumed30 / 30;
+        const currentStock = r.currentStock || 0;
+        const daysRemaining = dailyConsumption > 0 ? currentStock / dailyConsumption : null;
+        const reorderDate = daysRemaining != null ? new Date(Date.now() + daysRemaining * 24 * 3600 * 1000) : null;
+        const recommendedOrderQty = Math.ceil(dailyConsumption * 14); // 2 weeks supply
+
+        let urgency: 'critical' | 'high' | 'medium' | 'low' | 'ok' = 'ok';
+        if (currentStock === 0) urgency = 'critical';
+        else if (daysRemaining != null && daysRemaining <= 3) urgency = 'critical';
+        else if (daysRemaining != null && daysRemaining <= 7) urgency = 'high';
+        else if (daysRemaining != null && daysRemaining <= 14) urgency = 'medium';
+        else if (currentStock <= r.minStockLevel) urgency = 'medium';
+        else if (daysRemaining != null && daysRemaining <= 30) urgency = 'low';
+
+        return {
+          id: r.id,
+          code: r.code,
+          nameAr: r.nameAr,
+          unit: r.unit,
+          currentStock,
+          minStockLevel: r.minStockLevel,
+          consumed30Days: Math.round(consumed30 * 100) / 100,
+          dailyConsumption: Math.round(dailyConsumption * 100) / 100,
+          daysRemaining: daysRemaining != null ? Math.round(daysRemaining) : null,
+          reorderDate,
+          recommendedOrderQty,
+          estimatedCost: Math.round(recommendedOrderQty * (r.unitCost || 0) * 100) / 100,
+          urgency,
+        };
+      });
+
+      // Sort: critical first
+      const order: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, ok: 4 };
+      forecast.sort((a: any, b: any) => order[a.urgency] - order[b.urgency]);
+
+      const summary = {
+        totalItems: forecast.length,
+        critical: forecast.filter((f: any) => f.urgency === 'critical').length,
+        high: forecast.filter((f: any) => f.urgency === 'high').length,
+        medium: forecast.filter((f: any) => f.urgency === 'medium').length,
+        totalReorderCost: forecast
+          .filter((f: any) => f.urgency === 'critical' || f.urgency === 'high')
+          .reduce((s: number, f: any) => s + f.estimatedCost, 0),
+      };
+
+      res.json({ forecast, summary, generatedAt: new Date() });
+    } catch (e: any) {
+      console.error("[inventory-forecast]", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   const httpServer = createServer(app);
   
   // Setup WebSocket for real-time order updates
