@@ -323,9 +323,20 @@ async function deductInventoryForOrder(orderId: string, branchId: string, employ
 
     const totalPointsToAward = orderItems.reduce((acc: any, item: any) => acc + (item.quantity * pointsPerDrink), 0);
     
-    // Award points — search by customerId first, then by customer phone as fallback
-    // Guard against duplicate awarding: skip if points were already awarded for this order
-    if (totalPointsToAward > 0 && !(order as any).pointsAwarded) {
+    // Award points — atomic lock prevents duplicate awarding in concurrent requests
+    // findOneAndUpdate with condition is atomic in MongoDB — only one concurrent call will get updated doc back
+    let pointsActuallyAwarded = false;
+    if (totalPointsToAward > 0) {
+      const atomicLock = await OrderModel.findOneAndUpdate(
+        { id: orderId, pointsAwarded: { $ne: true } },
+        { $set: { pointsAwarded: true } },
+        { new: false }
+      );
+      // Only proceed if WE were the ones who set pointsAwarded (atomicLock is the pre-update doc, not yet awarded)
+      pointsActuallyAwarded = !!atomicLock;
+    }
+
+    if (pointsActuallyAwarded) {
       try {
         // Update Customer document if customerId exists
         if (order.customerId) {
@@ -369,12 +380,10 @@ async function deductInventoryForOrder(orderId: string, branchId: string, employ
           console.warn(`[LOYALTY] No loyalty card found for order ${order.id} (customerId: ${order.customerId}, phone: ${order.customerPhone})`);
         }
 
-        // Mark points as awarded on the order to prevent future duplicates
-        await OrderModel.findOneAndUpdate({ id: orderId }, { pointsAwarded: true });
       } catch (e) {
         console.error("[LOYALTY] Failed to update loyalty card:", e);
       }
-    } else if ((order as any).pointsAwarded) {
+    } else if (totalPointsToAward > 0) {
       console.log(`[LOYALTY] Points already awarded for order ${order.id}, skipping`);
     }
 
@@ -1899,7 +1908,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/tables/all", async (req, res) => {
+  app.delete("/api/tables/all", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
       const result = await TableModel.deleteMany({});
       cache.invalidate('tables:');
@@ -2192,7 +2201,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Claim free drink - resets all customer points to 0
-  app.post("/api/loyalty/claim-free-drink", async (req, res) => {
+  app.post("/api/loyalty/claim-free-drink", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { phone } = req.body;
       if (!phone) return res.status(400).json({ error: "رقم الهاتف مطلوب" });
@@ -6270,6 +6279,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Customer logout - تسجيل خروج العميل
+  app.post("/api/customers/logout", (req, res) => {
+    if ((req.session as any).customer) {
+      delete (req.session as any).customer;
+    }
+    req.session.destroy((err) => {
+      if (err) console.error("[CUSTOMER_LOGOUT] Session destroy error:", err);
+      res.clearCookie('connect.sid');
+      res.json({ success: true });
+    });
+  });
+
   // Request password reset - طلب إعادة تعيين كلمة المرور
   app.post("/api/customers/forgot-password", async (req, res) => {
     try {
@@ -6583,7 +6604,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all customers (for admin/manager dashboard)
-  app.get("/api/customers", async (req, res) => {
+  app.get("/api/customers", requireAuth, async (req: AuthRequest, res) => {
     try {
       const customers = await storage.getCustomers();
       const serializedCustomers = customers.map(customer => {
@@ -9128,7 +9149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/orders", async (req: any, res) => {
+  app.get("/api/orders", requireAuth, async (req: any, res) => {
     try {
       const { OrderModel } = await import("@shared/schema");
       const { limit, offset, status, today, fromDate, period, branchId: qBranchId } = req.query;

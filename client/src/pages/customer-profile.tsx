@@ -217,10 +217,14 @@ export default function CustomerProfilePage() {
                         {t("orders.order_number")} {order.orderNumber}
                       </CardTitle>
                       <CardDescription className="text-muted-foreground text-xs">
-                        {new Date(order.createdAt).toLocaleDateString('ar-SA', {
-                          year: 'numeric', month: 'long', day: 'numeric',
-                          hour: '2-digit', minute: '2-digit'
-                        })}
+                        {order.createdAt ? (() => {
+                          try {
+                            return new Date(order.createdAt).toLocaleDateString('ar-SA', {
+                              year: 'numeric', month: 'long', day: 'numeric',
+                              hour: '2-digit', minute: '2-digit'
+                            });
+                          } catch { return '—'; }
+                        })() : '—'}
                       </CardDescription>
                     </div>
                     <div className="flex flex-col items-end gap-1">

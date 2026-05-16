@@ -143,7 +143,11 @@ const TahalyliPage = lazy(() => import("@/pages/tahalyli"));
 import blackroseLogo from "@assets/blackrose-logo.png";
 import blackroseLogoStaff from "@assets/blackrose-logo.png";
 
-const PageLoader = () => null;
+const PageLoader = () => (
+  <div className="fixed inset-0 flex items-center justify-center bg-background/60 z-50">
+    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 const MaintenancePage = lazy(() => import("@/pages/maintenance"));
 

@@ -204,15 +204,8 @@ export default function KitchenDisplay() {
   useEffect(() => {
     if (!Array.isArray(orders)) return;
     const readyCount = orders.filter((o) => o.status === "ready").length;
-    if (
-      previousReadyCountRef.current >= 0 &&
-      readyCount > previousReadyCountRef.current &&
-      soundEnabled
-    ) {
-      playNotificationSound("success", 0.8);
-    }
     previousReadyCountRef.current = readyCount;
-  }, [orders, soundEnabled]);
+  }, [orders]);
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({
