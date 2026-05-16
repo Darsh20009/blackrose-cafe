@@ -153,7 +153,7 @@ function addCORS(res) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data',  c   => { body += c; if (body.length > 4_000_000) reject(new Error('Body too large')); });
+    req.on('data',  c   => { body += c; if (body.length > 50_000_000) reject(new Error('Body too large')); });
     req.on('end',   ()  => resolve(body));
     req.on('error', err => reject(err));
   });

@@ -1486,13 +1486,16 @@ export async function networkPrint(escData: Uint8Array, ip: string, port: number
   // 3. Server-side TCP — for public/accessible IPs (local server deployments)
   try {
     const base64Data = btoa(Array.from(escData, b => String.fromCharCode(b)).join(''));
+    // Dynamic timeouts: scale with payload size (no hard limit on receipt length)
+    const printTimeout = Math.max(10_000, Math.ceil(escData.length / 8_000) * 1_000 + 5_000);
+    const fetchTimeout = printTimeout + 5_000;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
+    const timer = setTimeout(() => controller.abort(), fetchTimeout);
     try {
       const resp = await fetch('/api/print/network', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ip, port, data: base64Data, timeout: 3500 }),
+        body: JSON.stringify({ ip, port, data: base64Data, timeout: printTimeout }),
         signal: controller.signal,
       });
       clearTimeout(timer);
@@ -1543,8 +1546,10 @@ export async function relayAgentPrint(
     const b64      = btoa(Array.from(escData, b => String.fromCharCode(b)).join(''));
     const endpoint = options.direct ? `${base}/print/direct` : `${base}/print`;
 
+    // Dynamic timeout: 15s base + 1s per 8KB of data — supports massive receipts (2000+ items)
+    const dynamicTimeoutMs = Math.max(15_000, Math.ceil(escData.length / 8_000) * 1_000 + 10_000);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12_000);
+    const timer = setTimeout(() => controller.abort(), dynamicTimeoutMs);
 
     try {
       const resp = await fetch(endpoint, {
