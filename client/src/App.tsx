@@ -154,10 +154,28 @@ const DriveThroughPage = lazy(() => import("@/pages/drive-through"));
 const TahalyliPage = lazy(() => import("@/pages/tahalyli"));
 import blackroseLogo from "@assets/blackrose-logo.png";
 import blackroseLogoStaff from "@assets/blackrose-logo.png";
+import { brand } from "@/lib/brand";
 
 const PageLoader = () => (
-  <div className="fixed inset-0 flex items-center justify-center bg-background/60 z-50">
-    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+  <div className="fixed inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 z-50">
+    <div className="relative flex items-center justify-center">
+      {/* Rotating ring around the logo */}
+      <div className="absolute w-32 h-32 rounded-full border-[3px] border-primary/20 border-t-primary animate-spin" style={{ animationDuration: "1.1s" }} />
+      {/* Pulse halo */}
+      <div className="absolute w-32 h-32 rounded-full bg-primary/10 animate-ping" style={{ animationDuration: "1.6s" }} />
+      {/* Logo */}
+      <img
+        src={brand.logoCustomer}
+        alt={brand.nameEn}
+        className="relative w-20 h-20 object-contain drop-shadow-lg animate-pulse"
+        style={{ animationDuration: "1.4s" }}
+        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+      />
+    </div>
+    <div className="mt-8 text-center">
+      <p className="text-lg font-black text-foreground tracking-tight">{brand.nameEn}</p>
+      <p className="text-xs text-muted-foreground mt-1 tracking-wide">{brand.taglineEn}</p>
+    </div>
   </div>
 );
 
@@ -395,6 +413,33 @@ function AppContent() {
 
   // Proximity-based push notification (fires when customer is within 100 m of a branch)
   useProximityNotify();
+
+  // ⚡ Speed boost: prefetch the most-used route chunks while the browser is idle,
+  // so navigation feels instant after first paint.
+  useEffect(() => {
+    const idle: (cb: () => void) => number =
+      (window as any).requestIdleCallback || ((cb: () => void) => window.setTimeout(cb, 1200));
+    const id = idle(() => {
+      // Customer-facing common routes
+      import("@/pages/menu");
+      import("@/pages/cart-page");
+      import("@/pages/checkout");
+      import("@/pages/delivery-selection");
+      import("@/pages/tracking");
+      import("@/pages/my-orders");
+      import("@/components/cart-modal");
+      import("@/components/checkout-modal");
+      // Staff common routes (small, doesn't block anything)
+      import("@/pages/employee-login");
+      import("@/pages/employee-dashboard");
+      import("@/pages/employee-cashier");
+      import("@/pages/employee-orders");
+    });
+    return () => {
+      const cancel = (window as any).cancelIdleCallback;
+      if (cancel) cancel(id); else clearTimeout(id);
+    };
+  }, []);
 
   return (
     <>
