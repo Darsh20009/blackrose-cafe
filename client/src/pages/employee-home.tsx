@@ -59,6 +59,7 @@ export default function EmployeeHome() {
     { title: tc("طلب إجازة", "Leave Request"), icon: FileText, path: "/employee/leave-request", testId: "button-leave" },
     { title: tc("المطبخ", "Kitchen"), icon: ChefHat, path: "/employee/kitchen", testId: "button-kitchen" },
     { title: tc("ملفي الشخصي", "My Profile"), icon: User, path: "/employee/dashboard", testId: "button-hr" },
+    { title: tc("📖 دليل النظام", "📖 System Guide"), icon: FileText, path: "/guide", testId: "button-guide" },
   ];
 
   const managerAccess = [

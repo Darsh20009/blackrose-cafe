@@ -143,6 +143,7 @@ const WelcomePage = lazy(() => import("@/pages/welcome"));
 const PromoPage = lazy(() => import("@/pages/promo"));
 const PricingPage = lazy(() => import("@/pages/pricing"));
 const EmployeeHome = lazy(() => import("@/pages/employee-home"));
+const SystemGuide = lazy(() => import("@/pages/system-guide"));
 const QiroxLogin = lazy(() => import("@/pages/qirox-login"));
 const QiroxDashboard = lazy(() => import("@/pages/qirox-dashboard"));
 const HardwareManagement = lazy(() => import("@/pages/hardware-management"));
@@ -262,6 +263,8 @@ function AppRouter() {
       {/* Employee auth routes (public) */}
       <Route path="/employee">{() => { window.location.replace('/employee/login'); return null; }}</Route>
       <Route path="/employee/home">{() => <AuthGuard userType="employee"><EmployeeHome /></AuthGuard>}</Route>
+      <Route path="/guide"><SystemGuide /></Route>
+      <Route path="/help"><SystemGuide /></Route>
       <Route path="/employee/gateway"><EmployeeGateway /></Route>
       <Route path="/employee/login"><EmployeeLogin /></Route>
       <Route path="/employee/forgot-password"><EmployeeForgotPassword /></Route>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Zap, ShoppingCart, ChefHat, Calendar, ClipboardList, X, Search, Coffee } from "lucide-react";
+import { Zap, ShoppingCart, ChefHat, Calendar, ClipboardList, X, Search, Coffee, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTranslate } from "@/lib/useTranslate";
 import { useTranslation } from "react-i18next";
@@ -95,6 +95,15 @@ export function QuickActionBar() {
             {tc(a.labelAr, a.labelEn)}
           </Button>
         ))}
+        <Button
+          onClick={() => { setLocation("/guide"); setOpen(false); }}
+          variant="outline"
+          className="rounded-full shadow-lg gap-2 bg-background"
+          data-testid="quick-action-guide"
+        >
+          <BookOpen className="w-4 h-4" />
+          {tc("دليل النظام", "System Guide")}
+        </Button>
         <Button
           onClick={() => { openCommand(); setOpen(false); }}
           variant="outline"
