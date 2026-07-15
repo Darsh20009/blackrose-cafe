@@ -1,0 +1,10 @@
+{
+  "appId": "tasaliqurmash.com.sa",
+  "appName": "Tasali Qurumsh",
+  "webDir": "dist/public",
+  "bundledWebRuntime": false,
+  "ios": {
+    "contentInset": "always",
+    "minVersion": "16.0"
+  }
+}

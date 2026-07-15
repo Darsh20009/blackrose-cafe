@@ -1,0 +1,97 @@
+name: Flutter iOS Simulator Check
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+    paths:
+      - "flutter_app/**"
+
+jobs:
+  simulator-run:
+    name: Build & run on real iOS Simulator
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.32.0"
+          channel: "stable"
+
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Static analysis
+        run: flutter analyze
+
+      - name: List available simulators
+        run: xcrun simctl list devices available
+
+      - name: Boot iPhone 15 simulator
+        run: |
+          UDID=$(xcrun simctl list devices available | grep "iPhone 15 " | head -1 | grep -oE '[0-9A-F-]{36}')
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+
+      - name: Build debug app for simulator
+        run: flutter build ios --debug --simulator --no-codesign
+
+      - name: Install app on simulator
+        run: |
+          xcrun simctl install "$SIM_UDID" build/ios/iphonesimulator/Runner.app
+
+      - name: Start streaming device log (background)
+        run: |
+          mkdir -p screenshots
+          nohup xcrun simctl spawn "$SIM_UDID" log stream --level debug --style compact \
+            --predicate 'process == "Runner"' > screenshots/device-stream.log 2>&1 &
+          echo $! > /tmp/logstream.pid
+          sleep 2
+
+      - name: Launch app
+        run: xcrun simctl launch --console-pty "$SIM_UDID" blackrose.com.sa > screenshots/launch-console.log 2>&1 || true
+
+      - name: Wait for app to render
+        run: sleep 12
+
+      - name: Capture simulator screenshot
+        run: |
+          mkdir -p screenshots
+          xcrun simctl io "$SIM_UDID" screenshot screenshots/simulator-run.png
+
+      - name: Stop log stream and check for crash report
+        if: always()
+        run: |
+          kill "$(cat /tmp/logstream.pid)" 2>/dev/null || true
+          sleep 1
+          echo "----- launch-console.log -----"
+          cat screenshots/launch-console.log || true
+          echo "----- device-stream.log (tail) -----"
+          tail -n 200 screenshots/device-stream.log || true
+          echo "----- crash reports -----"
+          mkdir -p screenshots/crashes
+          find ~/Library/Logs/DiagnosticReports -iname "*Runner*" -newermt "-10 minutes" -exec cp {} screenshots/crashes/ \; 2>/dev/null || true
+          ls -la screenshots/crashes || true
+
+      - name: Upload screenshot and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-result
+          path: |
+            flutter_app/screenshots/simulator-run.png
+            flutter_app/screenshots/launch-console.log
+            flutter_app/screenshots/device-stream.log
+            flutter_app/screenshots/crashes
+          if-no-files-found: warn

@@ -1,0 +1,98 @@
+June 11, 2026 at 4:44 PM
+failed
+caf3938
+neww edit
+
+Rollback
+Exited with status 1 while building your code.
+Read our docs for common ways to troubleshoot your deploy.
+
+All logs
+Search
+Search
+
+Jun 11, 4:43 PM - 4:47 PM
+GMT+3
+
+
+
+==> Cloning from https://github.com/Darsh20009/tasali
+==> Checking out commit caf393824b78ab52502d4c7c5cc214caf3e7047e in branch main
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 272B done
+#1 DONE 0.0s
+#2 [internal] load metadata for docker.io/library/node:20-alpine
+#2 ...
+#3 [auth] library/node:pull render-prod/docker-mirror-repository/library/node:pull token for us-west1-docker.pkg.dev
+#3 DONE 0.0s
+#2 [internal] load metadata for docker.io/library/node:20-alpine
+#2 DONE 0.6s
+#4 [internal] load .dockerignore
+#4 transferring context: 92B done
+#4 DONE 0.0s
+#5 [internal] load build context
+#5 DONE 0.0s
+#6 [1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#6 resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 0.0s done
+#6 DONE 0.0s
+#7 importing cache manifest
+#7 inferred cache manifest type: application/vnd.oci.image.manifest.v1+json done
+#7 DONE 0.1s
+#5 [internal] load build context
+#5 transferring context: 115.40MB 0.6s done
+#5 DONE 0.7s
+#8 [2/6] WORKDIR /app
+#8 CACHED
+#8 [2/6] WORKDIR /app
+#8 extracting sha256:6a0ac1617861a677b045b7ff88545213ec31c0ff08763195a70a4a5adda577bb
+#8 extracting sha256:6a0ac1617861a677b045b7ff88545213ec31c0ff08763195a70a4a5adda577bb 0.1s done
+#8 extracting sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287
+#8 extracting sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287 1.7s done
+#8 DONE 2.4s
+#8 [2/6] WORKDIR /app
+#8 extracting sha256:b2cbbfe903b0821005780971ddc5892edcc4ce74c5a48d82e1d2b382edac3122 0.1s done
+#8 extracting sha256:fff4e2c1b189bf87d63ad8bd07f7f4eb288d6f2b6a07a8bb44c60e8c075d2096 0.0s done
+#8 extracting sha256:34198d2f91cb1b4ccbd933ac9bf4899b68fc43839b76ac082e222399ff75cdb5 0.0s done
+#8 DONE 2.5s
+#9 [3/6] COPY package.json package-lock.json* ./
+#9 DONE 0.0s
+#10 [4/6] RUN npm install --registry https://registry.npmjs.org
+#10 73.28 npm error code ENOTFOUND
+#10 73.28 npm error syscall getaddrinfo
+#10 73.28 npm error errno ENOTFOUND
+#10 73.28 npm error network request to http://package-firewall.replit.local/npm/vite/-/vite-5.4.21.tgz failed, reason: getaddrinfo ENOTFOUND package-firewall.replit.local
+#10 73.28 npm error network This is a problem related to network connectivity.
+#10 73.28 npm error network In most cases you are behind a proxy or have bad network settings.
+#10 73.28 npm error network
+#10 73.28 npm error network If you are behind a proxy, please make sure that the
+#10 73.28 npm error network 'proxy' config is set properly.  See: 'npm help config'
+#10 73.28 npm notice
+#10 73.28 npm notice New major version of npm available! 10.8.2 -> 11.16.0
+#10 73.28 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.16.0
+#10 73.28 npm notice To update run: npm install -g npm@11.16.0
+#10 73.28 npm notice
+#10 73.28 npm error A complete log of this run can be found in: /root/.npm/_logs/2026-06-11T13_44_53_281Z-debug-0.log
+#10 ERROR: process "/bin/sh -c npm install --registry https://registry.npmjs.org" did not complete successfully: exit code: 1
+------
+ > [4/6] RUN npm install --registry https://registry.npmjs.org:
+73.28 npm error network In most cases you are behind a proxy or have bad network settings.
+73.28 npm error network
+73.28 npm error network If you are behind a proxy, please make sure that the
+73.28 npm error network 'proxy' config is set properly.  See: 'npm help config'
+73.28 npm notice
+73.28 npm notice New major version of npm available! 10.8.2 -> 11.16.0
+73.28 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.16.0
+73.28 npm notice To update run: npm install -g npm@11.16.0
+73.28 npm notice
+73.28 npm error A complete log of this run can be found in: /root/.npm/_logs/2026-06-11T13_44_53_281Z-debug-0.log
+------
+Dockerfile:7
+--------------------
+   5 |     COPY package.json package-lock.json* ./
+   6 |     
+   7 | >>> RUN npm install --registry https://registry.npmjs.org
+   8 |     
+   9 |     COPY . .
+--------------------
+error: failed to solve: process "/bin/sh -c npm install --registry https://registry.npmjs.org" did not complete successfully: exit code: 1
+error: exit status 1

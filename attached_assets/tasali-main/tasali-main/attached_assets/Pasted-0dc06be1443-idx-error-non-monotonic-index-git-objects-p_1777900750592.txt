@@ -1,0 +1,131 @@
+0dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+Writing objects: 100% (1139/1139), 104.86 MiB | 5.02 MiB/s, done.
+Total 1139 (delta 501), reused 613 (delta 87), pack-reused 0
+remote: Resolving deltas: 100% (501/501), done.
+remote: fatal: did not receive expected object 667dca5a57b15867a72ba424ab27ff693ed2f79d
+error: remote unpack failed: index-pack failed
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+To github.com:Darsh20009/tasali-qurmash.git
+ ! [remote rejected] main -> main (failed)
+error: failed to push some refs to 'github.com:Darsh20009/tasali-qurmash.git'
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % # 1. احذف ملفات macOS المخفية من داخل Git
+find .git -name '._*' -delete
+
+# 2. أعد بناء فهرس Git
+git repack -a -d
+
+# 3. تحقق من سلامة الريبو
+git fsck --full
+
+# 4. جرب الـ push مرة
+zsh: command not found: #
+zsh: command not found: #
+Enumerating objects: 1158, done.
+Counting objects: 100% (1158/1158), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (1068/1068), done.
+Writing objects: 100% (1158/1158), done.
+Total 1158 (delta 515), reused 613 (delta 87), pack-reused 0
+zsh: command not found: #
+Checking object directories: 100% (256/256), done.
+Checking objects: 100% (1158/1158), done.
+zsh: command not found: #
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % git remote set-url origin git@github.com:Darsh20009/tasali-qurmash.git
+git push -u origin main      
+Enumerating objects: 1139, done.
+Counting objects: 100% (1139/1139), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (645/645), done.
+Writing objects: 100% (1139/1139), 104.86 MiB | 5.28 MiB/s, done.
+Total 1139 (delta 501), reused 1126 (delta 491), pack-reused 0
+remote: Resolving deltas: 100% (501/501), done.
+remote: fatal: did not receive expected object 667dca5a57b15867a72ba424ab27ff693ed2f79d
+error: remote unpack failed: index-pack failed
+To github.com:Darsh20009/tasali-qurmash.git
+ ! [remote rejected] main -> main (failed)
+error: failed to push some refs to 'github.com:Darsh20009/tasali-qurmash.git'
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % # 1. اطلع من المجلد الحالي
+cd ~
+
+# 2. انسخ الكود بدون مجلد .git التالف
+mkdir tasali-fresh
+cp -R tasali-qurmash-2/* tasali-fresh/
+cp tasali-qurmash-2/.env tasali-fresh/ 2>/dev/null
+
+# 3. ادخل المجلد الجديد وأنشئ git جديد نظيف
+cd tasali-fresh
+git init
+git add .
+git commit -m "Initial commit - Tasali Qurumsh"
+
+# 4. احذف الريبو القديم من GitHub (Settings > Delete)
+# 5. أنشئ ريبو جديد فاضي بنفس الاسم على GitHub (بدون README)
+
+# 6. اربط وارفع
+git remote add origin git@github.com:Darsh20009/tasali-qurmash.git
+git branch -M main
+git push -u origin main
+zsh: parse error near `)'
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % # 1. اطلع من المجلد الحالي
+cd ~
+
+# 2. انسخ الكود بدون مجلد .git التالف
+mkdir tasali-fresh
+cp -R tasali-qurmash-2/* tasali-fresh/
+cp tasali-qurmash-2/.env tasali-fresh/ 2>/dev/null
+
+# 3. ادخل المجلد الجديد وأنشئ git جديد نظيف
+cd tasali-fresh
+git init
+git add .
+git commit -m "Initial commit - Tasali Qurumsh"
+
+# 4. احذف الريبو القديم من GitHub (Settings > Delete)
+# 5. أنشئ ريبو جديد فاضي بنفس الاسم على GitHub (بدون README)
+
+# 6. اربط وارفع
+git remote add origin git@github.com:Darsh20009/tasali-qurmash.git
+git branch -M main
+git push -u origin main
+zsh: parse error near `)'
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % cd ~
+
+macbook@Darwishs-MacBook-Pro ~ % mkdir tasali-fresh
+cp -R tasali-qurmash-2/* tasali-fresh/
+cp tasali-qurmash-2/.env tasali-fresh/ 2>/dev/null
+
+zsh: no matches found: tasali-qurmash-2/*
+macbook@Darwishs-MacBook-Pro ~ % cd tasali-fresh
+git init
+git add .
+git commit -m "Initial commit - Tasali Qurumsh"
+
+Initialized empty Git repository in /Users/macbook/tasali-fresh/.git/
+On branch main
+
+Initial commit
+
+nothing to commit (create/copy files and use "git add" to track)
+macbook@Darwishs-MacBook-Pro tasali-fresh % git remote add origin git@github.com:Darsh20009/tasali-qurmash.git
+git branch -M main
+git push -u origin main
+
+
+error: src refspec main does not match any
+error: failed to push some refs to 'github.c

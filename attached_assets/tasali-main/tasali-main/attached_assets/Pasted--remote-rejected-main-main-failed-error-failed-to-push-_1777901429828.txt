@@ -1,0 +1,172 @@
+ ! [remote rejected] main -> main (failed)
+error: failed to push some refs to 'github.com:Darsh20009/tasali-qurmash.git'
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % # 1. اطلع من المجلد الحالي
+cd ~
+
+# 2. انسخ الكود بدون مجلد .git التالف
+mkdir tasali-fresh
+cp -R tasali-qurmash-2/* tasali-fresh/
+cp tasali-qurmash-2/.env tasali-fresh/ 2>/dev/null
+
+# 3. ادخل المجلد الجديد وأنشئ git جديد نظيف
+cd tasali-fresh
+git init
+git add .
+git commit -m "Initial commit - Tasali Qurumsh"
+
+# 4. احذف الريبو القديم من GitHub (Settings > Delete)
+# 5. أنشئ ريبو جديد فاضي بنفس الاسم على GitHub (بدون README)
+
+# 6. اربط وارفع
+git remote add origin git@github.com:Darsh20009/tasali-qurmash.git
+git branch -M main
+git push -u origin main
+zsh: parse error near `)'
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % # 1. اطلع من المجلد الحالي
+cd ~
+
+# 2. انسخ الكود بدون مجلد .git التالف
+mkdir tasali-fresh
+cp -R tasali-qurmash-2/* tasali-fresh/
+cp tasali-qurmash-2/.env tasali-fresh/ 2>/dev/null
+
+# 3. ادخل المجلد الجديد وأنشئ git جديد نظيف
+cd tasali-fresh
+git init
+git add .
+git commit -m "Initial commit - Tasali Qurumsh"
+
+# 4. احذف الريبو القديم من GitHub (Settings > Delete)
+# 5. أنشئ ريبو جديد فاضي بنفس الاسم على GitHub (بدون README)
+
+# 6. اربط وارفع
+git remote add origin git@github.com:Darsh20009/tasali-qurmash.git
+git branch -M main
+git push -u origin main
+zsh: parse error near `)'
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % cd ~
+
+macbook@Darwishs-MacBook-Pro ~ % mkdir tasali-fresh
+cp -R tasali-qurmash-2/* tasali-fresh/
+cp tasali-qurmash-2/.env tasali-fresh/ 2>/dev/null
+
+zsh: no matches found: tasali-qurmash-2/*
+macbook@Darwishs-MacBook-Pro ~ % cd tasali-fresh
+git init
+git add .
+git commit -m "Initial commit - Tasali Qurumsh"
+
+Initialized empty Git repository in /Users/macbook/tasali-fresh/.git/
+On branch main
+
+Initial commit
+
+nothing to commit (create/copy files and use "git add" to track)
+macbook@Darwishs-MacBook-Pro tasali-fresh % git remote add origin git@github.com:Darsh20009/tasali-qurmash.git
+git branch -M main
+git push -u origin main
+
+
+error: src refspec main does not match any
+error: failed to push some refs to 'github.com:Darsh20009/tasali-qurmash.git'
+macbook@Darwishs-MacBook-Pro tasali-fresh % cd ~
+macbook@Darwishs-MacBook-Pro ~ % rm -rf tasali-fresh
+macbook@Darwishs-MacBook-Pro ~ % cp -R tasali-qurmash-2 tasali-fresh
+cp: tasali-qurmash-2: No such file or directory
+macbook@Darwishs-MacBook-Pro ~ % ls ~/
+78910--000580200809		Pictures
+Applications			Public
+Autodesk			cyber.sh.save
+Desktop				done
+Documents			echo
+Downloads			esac
+Library				fi
+Movies				npm
+Music				qiroxApp
+OneDrive - Questindustries
+macbook@Darwishs-MacBook-Pro ~ % git init
+Initialized empty Git repository in /Users/macbook/.git/
+macbook@Darwishs-MacBook-Pro ~ % cd ~/Downloads/tasali-qurmash-2
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % git init
+Reinitialized existing Git repository in /Volumes/ExternalDis/Downloads/tasali-qurmash-2/.git/
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % git add .
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % git commit -m "Initial commit"
+[main e6d2945] Initial commit
+ 777 files changed, 0 insertions(+), 0 deletions(-)
+ create mode 100755 attached_assets/._Pasted-60dc06be1443-idx-error-non-monotonic-index-git-objects-_1777896773904.txt
+ create mode 100755 attached_assets/._Screen_Recording_2026-05-04_at_1.03.49_AM_1777845944391.mov
+ create mode 100755 attached_assets/._Screen_Recording_2026-05-04_at_2.29.17_PM_1777894451657.mov
+ create mode 100755 attached_assets/._Screenshot_2026-05-03_at_10.29.39_PM_1777836842979.png
+ create mode 100755 attached_assets/._Screenshot_2026-05-03_at_10.29.39_PM_1777837979931.png
+ create mode 100755 attached_assets/._Screenshot_2026-05-03_at_10.39.25_PM_1777844671717.png
+ create mode 100755 attached_assets/._Screenshot_2026-05-04_at_12.00.13_AM_1777842101194.png
+ create mode 100755 attached_assets/._Screenshot_2026-05-04_at_2.29.27_PM_1777894469233.png
+ create mode 100755 attached_assets/._black-rose-logo.png
+ create mode 100755 attached_assets/._employee-logo.png
+ create mode 100755 attached_assets/._logo.png
+ create mode 100755 attached_assets/._tasali-banner-1.png
+ create mode 100755 attached_assets/._tasali-banner-2.png
+ mode change 100644 => 100755 attached_assets/Pasted-60dc06be1443-idx-error-non-monotonic-index-git-objects-_1777896773904.txt
+ mode change 100644 => 100755 attached_assets/Screen_Recording_2026-05-04_at_1.03.49_AM_1777845944391.mov
+ mode change 100644 => 100755 attached_assets/Screen_Recording_2026-05-04_at_2.29.17_PM_1777894451657.mov
+ mode change 100644 => 100755 attached_assets/Screenshot_2026-05-03_at_10.29.39_PM_1777836842979.png
+ mode change 100644 => 100755 attached_assets/Screenshot_2026-05-03_at_10.29.39_PM_1777837979931.png
+ mode change 100644 => 100755 attached_assets/Screenshot_2026-05-03_at_10.39.25_PM_1777844671717.png
+ mode change 100644 => 100755 attached_assets/Screenshot_2026-05-04_at_12.00.13_AM_1777842101194.png
+ mode change 100644 => 100755 attached_assets/Screenshot_2026-05-04_at_2.29.27_PM_1777894469233.png
+ mode change 100644 => 100755 attached_assets/black-rose-logo.png
+ create mode 100755 attached_assets/drinks/._.gitkeep
+ mode change 100644 => 100755 attached_assets/employee-logo.png
+ mode change 100644 => 100755 attached_assets/logo.png
+ mode change 100644 => 100755 attached_assets/tasali-banner-1.png
+ mode change 100644 => 100755 attached_assets/tasali-banner-2.png
+ create mode 100755 client/src/assets/._employee-logo.png
+ create mode 100755 client/src/assets/._logo.png
+ create mode 100755 client/src/assets/._receipt-logo.png
+ create mode 100755 client/src/assets/._tasali-banner-1.png
+ create mode 100755 client/src/assets/._tasali-banner-2.png
+ mode change 100644 => 100755 client/src/assets/employee-logo.png
+ mode change 100644 => 100755 client/src/assets/logo.png
+ mode change 100644 => 100755 client/src/assets/receipt-logo.png
+ mode change 100644 => 100755 client/src/assets/tasali-banner-1.png
+ mode change 100644 => 100755 client/src/assets/tasali-banner-2.png
+ create mode 100755 client/src/components/._TasaliCard.tsx
+ create mode 100755 public/._android-chrome-192x192.png
+ create mode 100755 public/._android-chrome-512x512.png
+ create mode 100755 public/._app-icon.png
+ create mode 100755 public/._black-rose-logo.png
+ create mode 100755 public/._blackrose-logo.png
+ create mode 100755 public/._blackrose-staff-logo.png
+ create mode 100755 public/._employee-icon.png
+ create mode 100755 public/._employee-team-logo.png
+ create mode 100755 public/._favicon.png
+ create mode 100755 public/._icon.png
+ create mode 100755 public/._receipt-logo.png
+ mode change 100644 => 100755 public/android-chrome-192x192.png
+ mode change 100644 => 100755 public/android-chrome-512x512.png
+ mode change 100644 => 100755 public/app-icon.png
+ mode change 100644 => 100755 public/black-rose-logo.png
+ mode change 100644 => 100755 public/blackrose-logo.png
+ mode change 100644 => 100755 public/blackrose-staff-logo.png
+ mode change 100644 => 100755 public/employee-icon.png
+ mode change 100644 => 100755 public/employee-team-logo.png
+ mode change 100644 => 100755 public/favicon.png
+ mode change 100644 => 100755 public/icon.png
+ mode change 100644 => 100755 public/receipt-logo.png
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % git remote add origin git@github.com:Darsh20009/tasali-qurmash.git
+error: remote origin already exists.
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % git branch -M main
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % git push -u origin main
+Enumerating objects: 1183, done.
+Counting objects: 100% (1183/1183), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (688/688), done.
+Writing objects: 100% (1183/1183), 104.87 MiB | 5.49 MiB/s, done.
+Total 1183 (delta 519), reused 1111 (delta 491), pack-reused 0
+remote: Resolving deltas: 100% (519/519), done.
+remote: fatal: did not receive expected object 667dca5a57b15867a72ba424ab27ff693ed2f79d
+error: remote unpack failed: index-pack failed
+To github.com:Darsh20009/tasali-qurmash.git
+ ! [remote rejected] main -> main (failed)
+error: failed to push some refs to 'github.com:Darsh20009/tasali-qurmash.git'
+macbook@Darwishs-MacBook-Pro tasali-qurmash-2 % 

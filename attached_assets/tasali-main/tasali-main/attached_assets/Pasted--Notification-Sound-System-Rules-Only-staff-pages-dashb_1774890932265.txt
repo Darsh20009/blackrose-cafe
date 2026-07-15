@@ -1,0 +1,254 @@
+ * Notification Sound System
+ *
+ * Rules:
+ * - Only staff pages (dashboard, POS, kitchen, cashier) call playNotificationSound
+ * - websocket.ts NEVER plays sounds
+ * - Deduplication via localStorage prevents multi-tab double-plays
+ * - Online orders: play the real MP4 alert sound twice
+ * - POS/cashier orders: play a short double-beep
+ */
+
+export type NotificationSoundType =
+  | 'newOrder'
+  | 'onlineOrderVoice'
+  | 'cashierOrder'
+  | 'statusChange'
+  | 'success'
+  | 'alert';
+
+// --- AudioContext singleton ---
+let sharedCtx: AudioContext | null = null;
+
+function getCtx(): AudioContext | null {
+  try {
+    if (!sharedCtx || sharedCtx.state === 'closed') {
+      sharedCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (sharedCtx.state === 'suspended') {
+      sharedCtx.resume().catch(() => {});
+    }
+    return sharedCtx;
+  } catch {
+    return null;
+  }
+}
+
+// Resume AudioContext on user interaction (browser autoplay policy)
+if (typeof window !== 'undefined') {
+  const resume = () => {
+    if (sharedCtx && sharedCtx.state === 'suspended') {
+      sharedCtx.resume().catch(() => {});
+    }
+  };
+  ['click', 'keydown', 'touchstart', 'mousedown'].forEach(evt =>
+    document.addEventListener(evt, resume, { capture: true, passive: true })
+  );
+}
+
+// --- Deduplication: one tab plays, others skip (3s window) ---
+const DEDUP_KEY = 'sound_last_played';
+const DEDUP_WINDOW_MS = 3000;
+
+function isDuplicate(type: NotificationSoundType): boolean {
+  try {
+    const raw = localStorage.getItem(DEDUP_KEY);
+    if (!raw) return false;
+    const { t, soundType } = JSON.parse(raw);
+    return soundType === type && Date.now() - t < DEDUP_WINDOW_MS;
+  } catch {
+    return false;
+  }
+}
+
+function markPlayed(type: NotificationSoundType): void {
+  try {
+    localStorage.setItem(DEDUP_KEY, JSON.stringify({ t: Date.now(), soundType: type }));
+  } catch {}
+}
+
+// --- Play the real MP4 alert file (online orders only) ---
+async function playFileSound(volume = 1.0): Promise<void> {
+  return new Promise<void>((resolve) => {
+    try {
+      const audio = new Audio('/online-order-alert.mp4');
+      audio.volume = Math.max(0, Math.min(1, volume));
+      const cleanup = () => resolve();
+      audio.onended = cleanup;
+      audio.onerror = cleanup;
+      // Safety timeout — resolve after max 8 seconds
+      const timer = setTimeout(cleanup, 8000);
+      audio.onended = () => { clearTimeout(timer); resolve(); };
+      audio.onerror = () => { clearTimeout(timer); resolve(); };
+
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+      }
+    } catch {
+      resolve();
+    }
+  });
+}
+
+// --- WAV Beep Generator (used for POS / non-online orders) ---
+function generateBeepWav(frequencies: number[], durationMs: number, sampleRate = 22050): string {
+  const numSamples = Math.floor((sampleRate * durationMs) / 1000);
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+
+  const write = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+
+  write(0, 'RIFF');
+  view.setUint32(4, 36 + numSamples * 2, true);
+  write(8, 'WAVE');
+  write(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  write(36, 'data');
+  view.setUint32(40, numSamples * 2, true);
+
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    const attack = Math.min(1, i / (sampleRate * 0.01));
+    const fade = Math.min(1, (numSamples - i) / (numSamples * 0.25));
+    const env = attack * fade;
+    let sample = 0;
+    for (const f of frequencies) {
+      sample += Math.sin(2 * Math.PI * f * t) / frequencies.length;
+    }
+    view.setInt16(44 + i * 2, Math.round(sample * env * 28000), true);
+  }
+
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return 'data:audio/wav;base64,' + btoa(binary);
+}
+
+const audioCache: Partial<Record<NotificationSoundType, string>> = {};
+
+function getAudioDataUrl(type: NotificationSoundType): string {
+  if (!audioCache[type]) {
+    switch (type) {
+      case 'newOrder':
+        audioCache[type] = generateBeepWav([523, 659, 784], 350);
+        break;
+      case 'cashierOrder':
+        audioCache[type] = generateBeepWav([660, 880], 180);
+        break;
+      case 'success':
+        audioCache[type] = generateBeepWav([523, 659], 250);
+        break;
+      case 'statusChange':
+        audioCache[type] = generateBeepWav([440], 300);
+        break;
+      case 'alert':
+        audioCache[type] = generateBeepWav([880, 659], 300);
+        break;
+      default:
+        audioCache[type] = generateBeepWav([523, 659, 784], 350);
+    }
+  }
+  return audioCache[type]!;
+}
+
+function playBeepWebAudio(type: NotificationSoundType, volume: number): boolean {
+  try {
+    const ctx = getCtx();
+    if (!ctx || ctx.state !== 'running') return false;
+
+    const freqMap: Record<string, number[]> = {
+      newOrder: [523, 659, 784],
+      cashierOrder: [660, 880],
+      success: [523, 659],
+      statusChange: [440],
+      alert: [880, 659],
+    };
+    const freqs = freqMap[type] || [523, 659, 784];
+    const master = ctx.createGain();
+    master.gain.value = volume;
+    master.connect(ctx.destination);
+
+    freqs.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(master);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.12;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(1 / freqs.length, start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.28);
+      osc.start(start);
+      osc.stop(start + 0.3);
+    });
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function playBeep(type: NotificationSoundType, volume: number): Promise<void> {
+  if (playBeepWebAudio(type, volume)) return;
+
+  try {
+    const audio = new Audio(getAudioDataUrl(type));
+    audio.volume = Math.max(0, Math.min(1, volume));
+    await audio.play();
+    await new Promise<void>((resolve) => {
+      audio.onended = () => resolve();
+      audio.onerror = () => resolve();
+      setTimeout(resolve, 800);
+    });
+  } catch {
+    // Browser blocked audio
+  }
+}
+
+// --- Main export: playNotificationSound ---
+export async function playNotificationSound(
+  type: NotificationSoundType = 'newOrder',
+  volume: number = 0.85
+): Promise<void> {
+  if (isDuplicate(type)) return;
+  markPlayed(type);
+
+  if (type === 'onlineOrderVoice') {
+    // Play the real MP4 alert sound twice for online orders
+    await playFileSound(volume);
+    await new Promise(r => setTimeout(r, 600));
+    await playFileSound(volume);
+  } else if (type === 'newOrder') {
+    await playBeep('newOrder', volume);
+    await new Promise(r => setTimeout(r, 400));
+    await playBeep('newOrder', volume * 0.7);
+  } else if (type === 'cashierOrder') {
+    await playBeep('cashierOrder', volume);
+    await new Promise(r => setTimeout(r, 200));
+    await playBeep('cashierOrder', volume * 0.8);
+  } else {
+    await playBeep(type, volume);
+  }
+}
+
+export async function playNotificationSequence(
+  types: NotificationSoundType[],
+  delayMs = 300
+): Promise<void> {
+  for (const type of types) {
+    await playNotificationSound(type);
+    if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+  }
+}

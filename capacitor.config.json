@@ -1,0 +1,39 @@
+{
+  "appId": "blackrose.com.sa",
+  "appName": "Black Rose Cafe",
+  "webDir": "dist/public",
+  "bundledWebRuntime": false,
+  "server": {
+    "url": "https://blackrose.com.sa",
+    "cleartext": true
+  },
+  "ios": {
+    "minVersion": "16.0",
+    "buildVersion": "7",
+    "version": "2.7.0",
+    "backgroundColor": "#ffffff",
+    "scrollEnabled": true,
+    "allowsLinkPreview": false,
+    "handleApplicationNotifications": false,
+    "allowsBackForwardNavigationGestures": true,
+    "customUserAgentSuffix": "BlackRoseApp/2.7.0"
+  },
+  "android": {
+    "customUserAgentSuffix": "BlackRoseApp/2.7.0"
+  },
+  "plugins": {
+    "StatusBar": {
+      "style": "DEFAULT",
+      "overlaysWebView": true
+    },
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "launchShowDuration": 0,
+      "backgroundColor": "#0d0d0d",
+      "showSpinner": false
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}

@@ -1,0 +1,125 @@
+Read our docs for common ways to troubleshoot your deploy.
+
+All logs
+Search
+Search
+
+May 4, 4:59 PM - 5:02 PM
+GMT+3
+
+
+
+==> Cloning from https://github.com/Darsh20009/tasali
+==> Checking out commit b5407973d29ca8a894a9d0af62839334f38090ce in branch main
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 234B done
+#1 DONE 0.0s
+#2 [auth] library/node:pull render-prod/docker-mirror-repository/library/node:pull token for us-west1-docker.pkg.dev
+Menu
+#2 DONE 0.0s
+#3 [internal] load metadata for docker.io/library/node:20-alpine
+#3 DONE 0.6s
+#4 [internal] load .dockerignore
+#4 transferring context: 92B done
+#4 DONE 0.0s
+#5 [1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#5 resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 0.0s done
+#5 ...
+#6 [internal] load build context
+#6 transferring context: 38.26MB 0.4s done
+#6 DONE 1.2s
+#5 [1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#5 DONE 2.3s
+#5 [1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#5 extracting sha256:6a0ac1617861a677b045b7ff88545213ec31c0ff08763195a70a4a5adda577bb
+#5 extracting sha256:6a0ac1617861a677b045b7ff88545213ec31c0ff08763195a70a4a5adda577bb 0.5s done
+#5 DONE 2.7s
+#5 [1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#5 extracting sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287
+#5 extracting sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287 6.0s done
+#5 DONE 8.7s
+#5 [1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#5 extracting sha256:b2cbbfe903b0821005780971ddc5892edcc4ce74c5a48d82e1d2b382edac3122
+#5 extracting sha256:b2cbbfe903b0821005780971ddc5892edcc4ce74c5a48d82e1d2b382edac3122 0.2s done
+#5 DONE 8.9s
+#5 [1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#5 extracting sha256:fff4e2c1b189bf87d63ad8bd07f7f4eb288d6f2b6a07a8bb44c60e8c075d2096 0.0s done
+#5 DONE 8.9s
+#7 [2/6] WORKDIR /app
+#7 DONE 0.0s
+#8 [3/6] COPY package.json package-lock.json* ./
+#8 DONE 0.1s
+#9 [4/6] RUN npm install
+#9 5.898 npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+#9 21.48 
+#9 21.48 added 994 packages, and audited 995 packages in 21s
+#9 21.48 
+#9 21.48 211 packages are looking for funding
+#9 21.48   run `npm fund` for details
+#9 21.59 
+#9 21.59 49 vulnerabilities (5 low, 15 moderate, 27 high, 2 critical)
+#9 21.59 
+#9 21.59 To address issues that do not require attention, run:
+#9 21.59   npm audit fix
+#9 21.59 
+#9 21.59 To address all issues possible (including breaking changes), run:
+#9 21.59   npm audit fix --force
+#9 21.59 
+#9 21.59 Some issues need review, and may require choosing
+#9 21.59 a different dependency.
+#9 21.59 
+#9 21.59 Run `npm audit` for details.
+#9 21.59 npm notice
+#9 21.59 npm notice New major version of npm available! 10.8.2 -> 11.13.0
+#9 21.59 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.13.0
+#9 21.59 npm notice To update run: npm install -g npm@11.13.0
+#9 21.59 npm notice
+#9 DONE 28.5s
+#10 [5/6] COPY . .
+#10 DONE 1.0s
+#11 [6/6] RUN npm run build
+#11 0.257 
+#11 0.257 > tasali-qurmash@2.0.0 build
+#11 0.257 > vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --minify --outfile=dist/index.js
+#11 0.257 
+#11 0.513 vite v5.4.21 building for production...
+#11 0.586 transforming...
+#11 0.884 Browserslist: browsers data (caniuse-lite) is 8 months old. Please run:
+#11 0.884   npx update-browserslist-db@latest
+#11 0.884   Why you should do it regularly: https://github.com/browserslist/update-db#readme
+#11 3.916 
+#11 3.916 A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+#11 5.628 ✓ 226 modules transformed.
+#11 5.634 x Build failed in 5.10s
+#11 5.634 error during build:
+#11 5.634 [vite:asset] Could not load /app/attached_assets/logo.png (imported by client/src/components/global-prompts.tsx): ENOENT: no such file or directory, open '/app/attached_assets/logo.png'
+#11 5.634     at async open (node:internal/fs/promises:637:25)
+#11 5.634     at async Object.readFile (node:internal/fs/promises:1249:14)
+#11 5.634     at async fileToBuiltUrl (file:///app/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:20428:19)
+#11 5.634     at async Object.load (file:///app/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:20328:17)
+#11 5.634     at async PluginDriver.hookFirstAndGetPlugin (file:///app/node_modules/rollup/dist/es/shared/node-entry.js:20689:28)
+#11 5.634     at async file:///app/node_modules/rollup/dist/es/shared/node-entry.js:19809:33
+#11 5.634     at async Queue.work (file:///app/node_modules/rollup/dist/es/shared/node-entry.js:20899:32)
+#11 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+------
+ > [6/6] RUN npm run build:
+5.634 x Build failed in 5.10s
+5.634 error during build:
+5.634 [vite:asset] Could not load /app/attached_assets/logo.png (imported by client/src/components/global-prompts.tsx): ENOENT: no such file or directory, open '/app/attached_assets/logo.png'
+5.634     at async open (node:internal/fs/promises:637:25)
+5.634     at async Object.readFile (node:internal/fs/promises:1249:14)
+5.634     at async fileToBuiltUrl (file:///app/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:20428:19)
+5.634     at async Object.load (file:///app/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:20328:17)
+5.634     at async PluginDriver.hookFirstAndGetPlugin (file:///app/node_modules/rollup/dist/es/shared/node-entry.js:20689:28)
+5.634     at async file:///app/node_modules/rollup/dist/es/shared/node-entry.js:19809:33
+5.634     at async Queue.work (file:///app/node_modules/rollup/dist/es/shared/node-entry.js:20899:32)
+------
+Dockerfile:11
+--------------------
+   9 |     COPY . .
+  10 |     
+  11 | >>> RUN npm run build
+  12 |     
+  13 |     EXPOSE 5000
+--------------------
+error: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1

@@ -1,0 +1,45 @@
+{
+  "id": "/qirox-staff",
+  "name": "BLACK ROSE SYSTEMS",
+  "short_name": "BLACK ROSE Staff",
+  "description": "منصة إدارة الموظفين والعمليات والطلبات — BLACK ROSE SYSTEMS",
+  "start_url": "/employee/home?utm_source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#0A0A0A",
+  "theme_color": "#BE1845",
+  "orientation": "any",
+  "lang": "ar",
+  "dir": "rtl",
+  "categories": ["productivity", "business"],
+  "prefer_related_applications": false,
+  "handle_links": "preferred",
+  "launch_handler": { "client_mode": "navigate-existing" },
+  "icons": [
+    { "src": "/employee-logo-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/employee-logo-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/employee-logo-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/employee-logo-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "نقطة البيع",
+      "short_name": "POS",
+      "url": "/employee/pos?utm_source=shortcut",
+      "icons": [{ "src": "/employee-logo-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "شاشة المطبخ",
+      "short_name": "Kitchen",
+      "url": "/employee/kitchen?utm_source=shortcut",
+      "icons": [{ "src": "/employee-logo-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "الحضور",
+      "short_name": "Attendance",
+      "url": "/employee/attendance?utm_source=shortcut",
+      "icons": [{ "src": "/employee-logo-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

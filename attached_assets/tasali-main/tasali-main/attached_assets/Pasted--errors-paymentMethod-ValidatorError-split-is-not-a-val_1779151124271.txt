@@ -1,0 +1,44 @@
+  errors: {
+    paymentMethod: ValidatorError: `split` is not a valid enum value for path `paymentMethod`.
+        at validate (/home/runner/workspace/node_modules/mongoose/lib/schemaType.js:1417:13)
+        at SchemaType.doValidate (/home/runner/workspace/node_modules/mongoose/lib/schemaType.js:1401:7)
+        at /home/runner/workspace/node_modules/mongoose/lib/document.js:3115:18
+        at process.processTicksAndRejections (node:internal/process/task_queues:77:11) {
+      properties: [Object],
+      kind: 'enum',
+      path: 'paymentMethod',
+      value: 'split',
+      reason: undefined,
+      [Symbol(mongoose#validatorError)]: true
+    }
+  },
+  _message: 'Order validation failed'
+}
+Order creation error: Error: Order validation failed: paymentMethod: `split` is not a valid enum value for path `paymentMethod`.
+    at ValidationError.inspect (/home/runner/workspace/node_modules/mongoose/lib/error/validation.js:52:26)
+    at formatValue (node:internal/util/inspect:828:19)
+    at inspect (node:internal/util/inspect:371:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2367:40)
+    at formatWithOptions (node:internal/util/inspect:2229:10)
+    at console.value (node:internal/console/constructor:350:14)
+    at console.warn (node:internal/console/constructor:383:61)
+    at <anonymous> (/home/runner/workspace/server/routes.ts:1256:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+  errors: {
+    paymentMethod: ValidatorError: `split` is not a valid enum value for path `paymentMethod`.
+        at validate (/home/runner/workspace/node_modules/mongoose/lib/schemaType.js:1417:13)
+        at SchemaType.doValidate (/home/runner/workspace/node_modules/mongoose/lib/schemaType.js:1401:7)
+        at /home/runner/workspace/node_modules/mongoose/lib/document.js:3115:18
+        at process.processTicksAndRejections (node:internal/process/task_queues:77:11) {
+      properties: [Object],
+      kind: 'enum',
+      path: 'paymentMethod',
+      value: 'split',
+      reason: undefined,
+      [Symbol(mongoose#validatorError)]: true
+    }
+  },
+  _message: 'Order validation failed'
+}
+12:38:35 AM [express] POST /api/orders 500 in 441ms :: {"error":"Failed to create order"}
+12:38:35 AM [express] GET /api/orders/live 304 in 437ms :: [{"tenantId":"demo-tenant","branchId":"mai…

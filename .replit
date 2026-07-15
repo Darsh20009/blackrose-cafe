@@ -1,0 +1,71 @@
+modules = ["nodejs-20", "web", "python-3.11"]
+[nix]
+channel = "stable-25_05"
+packages = ["unzip"]
+
+[agent]
+expertMode = true
+integrations = ["javascript_object_storage:2.0.0"]
+stack = "FULLSTACK_JS"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev"
+waitForPort = 5000
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 5001
+externalPort = 3000
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["node", "./dist/index.js"]
+build = ["npm", "run", "build"]
+
+[userenv]
+
+[userenv.shared]
+SMTP_HOST = "mail.smtp2go.com"
+SMTP_PORT = "587"
+NOTIFICATION_EMAIL = "samialonini@gmail.com"
+SMTP_USER = "QIROX"
+SMTP_FROM = "info@qirox.online"
+VAPID_SUBJECT = "mailto:cafe@qiroxstudio.online"
+APPLE_PASS_TYPE_ID = "pass.blackrose.com.sa"
+APPLE_TEAM_ID = "V4K6RM59LS"
+VAPID_PUBLIC_KEY = "BKOY4KIIJMUY9cbTa3PLjlaaLMuJcbfwCIYNNgu5Gc02wqBuiTxFNi0sDoQp4t6qmFT9K7qpH8QC3Tvzfzbds8E"
+VITE_MAPKIT_TOKEN = "eyJraWQiOiIyMlk2OVNMUE5KIiwidHlwIjoiSldUIiwiYWxnIjoiRVMyNTYifQ.eyJpc3MiOiJWNEs2Uk01OUxTIiwiaWF0IjoxNzgxNzUwNTk0LCJzY29wZSI6ImVtYmVkX2FwaSIsImV4cCI6MTc4MjM3MDc5OX0.pvmNcsCWwdis7p4H1OXJSrQmZ2GXs5_ps-OT8-tADbte7keyIA8AJgVUNoiFuc8K7Z-M0SVCO44xqtjm5GzDAQ"
+MAPKIT_KEY_ID = "22Y69SLPNJ"
+MAPKIT_TEAM_ID = "V4K6RM59LS"
+MAPKIT_TOKEN_STATIC = "eyJraWQiOiJEMzY3ODRRMzdVIiwidHlwIjoiSldUIiwiYWxnIjoiRVMyNTYifQ.eyJpc3MiOiJWNEs2Uk01OUxTIiwiaWF0IjoxNzgyNzAzOTQ0LCJvcmlnaW4iOiI3ZDg1ZTgyYi1lZDQ2LTQxODUtODM4My1hODJlYjVjNDk3ODYtMDAtMm05cHdlMm42Z24weC5waWtlLnJlcGxpdC5kZXYiLCJzY29wZSI6Im1hcGtpdF9qcyJ9.lovgn0PeA2LN4DGrl8bkc9fd-tEY35_q6vRuGEMR4UbwpitovDoyNeByksBetTJxwYcPS5YrTGiv73WBJNE1vg"
+CPANEL_SMTP_HOST = "server222.web-hosting.com"
+CPANEL_SMTP_PORT = "465"
+CPANEL_SMTP_USER = "info@qirox.online"
+ADMIN_EMAIL = "samialonini@gmail.com"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000

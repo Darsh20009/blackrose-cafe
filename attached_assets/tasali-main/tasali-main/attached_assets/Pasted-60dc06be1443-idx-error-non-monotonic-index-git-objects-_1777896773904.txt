@@ -1,0 +1,69 @@
+60dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+Writing objects: 100% (1170/1170), 104.87 MiB | 5.10 MiB/s, done.
+Total 1170 (delta 507), reused 607 (delta 87), pack-reused 0
+remote: Resolving deltas: 100% (507/507), done.
+remote: fatal: did not receive expected object 667dca5a57b15867a72ba424ab27ff693ed2f79d
+error: remote unpack failed: index-pack failed
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+error: non-monotonic index .git/objects/pack/._pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+To github.com:Darsh20009/tasali-qurmash
+ ! [remote rejected] main -> main (failed)
+error: failed to push some refs to 'github.com:Darsh20009/tasali-qurmash'
+macbook@Darwishs-MacBook-Pro tasaliqurmash-1 % rm -f .git/objects/pack/._*
+macbook@Darwishs-MacBook-Pro tasaliqurmash-1 % ls .git/objects/pack/
+pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.idx
+pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.pack
+pack-1cc4ad93bce1a70a02f661bb70c060dc06be1443.rev
+macbook@Darwishs-MacBook-Pro tasaliqurmash-1 % git gc --prune=now
+git repack -a -d
+Enumerating objects: 1187, done.
+Counting objects: 100% (1187/1187), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (1096/1096), done.
+Writing objects: 100% (1187/1187), done.
+Total 1187 (delta 519), reused 607 (delta 87), pack-reused 0
+Enumerating objects: 1187, done.
+Counting objects: 100% (1187/1187), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (664/664), done.
+Writing objects: 100% (1187/1187), done.
+Total 1187 (delta 519), reused 1187 (delta 519), pack-reused 0
+macbook@Darwishs-MacBook-Pro tasaliqurmash-1 % git fsck --full
+Checking object directories: 100% (256/256), done.
+Checking objects: 100% (1187/1187), done.
+macbook@Darwishs-MacBook-Pro tasaliqurmash-1 % git push origin main
+Enumerating objects: 1170, done.
+Counting objects: 100% (1170/1170), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (671/671), done.
+Writing objects: 100% (1170/1170), 104.87 MiB | 5.08 MiB/s, done.
+Total 1170 (delta 506), reused 1156 (delta 495), pack-reused 0
+remote: Resolving deltas: 100% (506/506), done.
+remote: fatal: did not receive expected object 667dca5a57b15867a72ba424ab27ff693ed2f79d
+error: remote unpack failed: index-pack failed
+To github.com:Darsh20009/tasali-qurmash
+ ! [remote rejected] main -> main (failed)
+error: failed to push some refs to 'github.com:Darsh20009/tasali-qurmash'
+macbook@Darwishs-MacBook-Pro tasaliqurmash-1 % 

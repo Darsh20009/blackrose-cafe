@@ -1,0 +1,1 @@
+- [Brand Migration Lessons](brand-migration-lessons.md) — sed text replacements in JSX files require care: attribute values and text nodes need different patterns to avoid broken syntax.

@@ -1,0 +1,153 @@
+workflows:
+
+  ios-testflight:
+    name: iOS TestFlight
+    max_build_duration: 90
+    instance_type: mac_mini_m2
+
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: blackrose.com.sa
+      groups:
+        - app_store_connect
+      vars:
+        BUNDLE_ID: blackrose.com.sa
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+
+    scripts:
+      - name: Set up keychain
+        script: keychain initialize
+
+      - name: Fetch signing files
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+
+      - name: Add certificates
+        script: keychain add-certificates
+
+      - name: Set Xcode signing
+        script: xcode-project use-profiles
+
+      - name: Flutter pub get
+        script: flutter pub get
+
+      - name: Pod install
+        script: find . -name "Podfile" -execdir pod install \;
+
+      - name: Build IPA
+        script: |
+          flutter build ipa \
+            --release \
+            --build-name=1.0.0 \
+            --build-number=$BUILD_NUMBER
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        submit_to_app_store: false
+      email:
+        recipients:
+          - dev@qirox.cafe
+        notify:
+          success: true
+          failure: true
+
+  android-internal:
+    name: Android Google Play Internal
+    max_build_duration: 90
+    instance_type: linux_x2
+
+    environment:
+      flutter: stable
+      groups:
+        - google_play
+        - android_signing
+      vars:
+        PACKAGE_NAME: com.qirox.cafe
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+
+    scripts:
+      - name: Set up keystore
+        script: |
+          echo "$CM_KEYSTORE" | base64 --decode > keystore.jks
+          echo "storeFile=$(pwd)/keystore.jks" > android/key.properties
+          echo "storePassword=$CM_KEYSTORE_PASSWORD" >> android/key.properties
+          echo "keyAlias=$CM_KEY_ALIAS" >> android/key.properties
+          echo "keyPassword=$CM_KEY_PASSWORD" >> android/key.properties
+
+      - name: Flutter pub get
+        script: flutter pub get
+
+      - name: Build App Bundle
+        script: |
+          flutter build appbundle \
+            --release \
+            --build-name=1.0.0 \
+            --build-number=$BUILD_NUMBER
+
+    artifacts:
+      - build/app/outputs/bundle/release/*.aab
+      - build/app/outputs/mapping/release/mapping.txt
+
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: false
+      email:
+        recipients:
+          - dev@qirox.cafe
+        notify:
+          success: true
+          failure: true
+
+  android-debug:
+    name: Android Debug APK
+    max_build_duration: 30
+    instance_type: linux_x2
+
+    environment:
+      flutter: stable
+
+    scripts:
+      - name: Flutter pub get
+        script: flutter pub get
+
+      - name: Build debug APK
+        script: flutter build apk --debug
+
+    artifacts:
+      - build/app/outputs/apk/debug/*.apk
+
+    publishing:
+      email:
+        recipients:
+          - dev@qirox.cafe
+        notify:
+          success: true
+          failure: false

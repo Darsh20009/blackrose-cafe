@@ -1,0 +1,129 @@
+uly 9, 2026 at 5:47 AM
+failed
+5e5ab45
+Update admin email, ecosystem hub, and owner dashboard pages Rewrite client/src/pages/admin-email.tsx and client/src/pages/ecosystem-hub.tsx, and refactor client/src/pages/owner-dashboard.tsx with new components and UI elements. Replit-Commit-Author: Agent Replit-Commit-Session-Id: b331299f-f3f1-4eac-902f-211f29b61ebb Replit-Commit-Checkpoint-Type: full_checkpoint Replit-Commit-Event-Id: c602e468-349b-4801-aa5e-5356eb92a3b3 Replit-Commit-Screenshot-Url: https://storage.googleapis.com/screenshot-production-us-central1/2adb4bfe-e5d6-4136-9490-40a1808c44d0/b331299f-f3f1-4eac-902f-211f29b61ebb/Z2y9EXg Replit-Helium-Checkpoint-Created: true
+
+Rollback
+Exited with status 1 while building your code.
+Read our docs for common ways to troubleshoot your deploy.
+
+All logs
+Search
+Search logs
+
+Jul 9, 5:46 AM - 5:50 AM
+GMT+3
+
+
+
+==> Cloning from https://github.com/Darsh20009/tasali
+==> Checking out commit 5e5ab45d5aa50fc553a6995cc5cf37f0522f0d5b in branch main
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 532B done
+#1 DONE 0.0s
+#2 [internal] load metadata for docker.io/library/node:20-alpine
+#2 ...
+#3 [auth] library/node:pull render-prod/docker-mirror-repository/library/node:pull token for us-west1-docker.pkg.dev
+#3 DONE 0.0s
+#2 [internal] load metadata for docker.io/library/node:20-alpine
+#2 DONE 0.6s
+#4 [internal] load .dockerignore
+#4 transferring context: 92B done
+#4 DONE 0.0s
+#5 [internal] load build context
+#5 DONE 0.0s
+#6 [1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#6 resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 0.0s done
+#6 DONE 0.0s
+#7 importing cache manifest
+#7 inferred cache manifest type: application/vnd.oci.image.manifest.v1+json done
+#7 DONE 0.1s
+#5 [internal] load build context
+#5 transferring context: 54.11MB 0.4s done
+#5 DONE 0.4s
+#8 [2/6] WORKDIR /app
+#8 extracting sha256:6a0ac1617861a677b045b7ff88545213ec31c0ff08763195a70a4a5adda577bb 0.1s done
+#8 extracting sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287
+#8 extracting sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287 4.5s done
+#8 DONE 5.6s
+#8 [2/6] WORKDIR /app
+#8 extracting sha256:b2cbbfe903b0821005780971ddc5892edcc4ce74c5a48d82e1d2b382edac3122
+#8 extracting sha256:b2cbbfe903b0821005780971ddc5892edcc4ce74c5a48d82e1d2b382edac3122 1.9s done
+#8 DONE 7.5s
+#8 [2/6] WORKDIR /app
+#8 extracting sha256:fff4e2c1b189bf87d63ad8bd07f7f4eb288d6f2b6a07a8bb44c60e8c075d2096 0.0s done
+#8 extracting sha256:34198d2f91cb1b4ccbd933ac9bf4899b68fc43839b76ac082e222399ff75cdb5 0.0s done
+#8 DONE 7.5s
+#9 [3/6] COPY package.json package-lock.json* ./
+#9 DONE 0.0s
+#10 [4/6] RUN sed -i 's|http://package-firewall\.replit\.local/npm/|https://registry.npmjs.org/|g' package-lock.json 2>/dev/null || true &&     sed -i 's|https://package-firewall\.replit\.local/npm/|https://registry.npmjs.org/|g' package-lock.json 2>/dev/null || true &&     npm ci --registry https://registry.npmjs.org
+#10 16.37 
+#10 16.37 added 803 packages, and audited 804 packages in 16s
+#10 16.37 
+#10 16.37 203 packages are looking for funding
+#10 16.37   run `npm fund` for details
+#10 16.40 
+#10 16.40 8 vulnerabilities (4 moderate, 4 high)
+#10 16.40 
+#10 16.40 To address issues that do not require attention, run:
+#10 16.40   npm audit fix
+#10 16.40 
+#10 16.40 To address all issues possible (including breaking changes), run:
+#10 16.40   npm audit fix --force
+#10 16.40 
+#10 16.40 Some issues need review, and may require choosing
+#10 16.40 a different dependency.
+#10 16.40 
+#10 16.40 Run `npm audit` for details.
+#10 16.40 npm notice
+#10 16.40 npm notice New major version of npm available! 10.8.2 -> 12.0.0
+#10 16.40 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.0
+#10 16.40 npm notice To update run: npm install -g npm@12.0.0
+#10 16.40 npm notice
+#10 DONE 22.7s
+#11 [5/6] COPY . .
+#11 DONE 0.8s
+#12 [6/6] RUN npm run build
+#12 0.210 
+#12 0.210 > tasali-qurmash@2.0.0 build
+#12 0.210 > vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --minify --outfile=dist/index.js
+#12 0.210 
+#12 0.425 vite v5.4.21 building for production...
+#12 0.501 transforming...
+#12 3.983 
+#12 3.983 A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+#12 8.496 ✓ 3317 modules transformed.
+#12 8.503 x Build failed in 8.05s
+#12 8.503 error during build:
+#12 8.503 [vite:load-fallback] Could not load /app/client/src/lib/platform (imported by client/src/pages/onboarding.tsx): ENOENT: no such file or directory, open '/app/client/src/lib/platform'
+#12 8.503     at async open (node:internal/fs/promises:637:25)
+#12 8.503     at async Object.readFile (node:internal/fs/promises:1249:14)
+#12 8.503     at async Object.load (file:///app/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65357:25)
+#12 8.503     at async PluginDriver.hookFirstAndGetPlugin (file:///app/node_modules/rollup/dist/es/shared/node-entry.js:22859:28)
+#12 8.503     at async file:///app/node_modules/rollup/dist/es/shared/node-entry.js:21846:33
+#12 8.503     at async Queue.work (file:///app/node_modules/rollup/dist/es/shared/node-entry.js:23087:32)
+#12 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+------
+ > [6/6] RUN npm run build:
+8.496 ✓ 3317 modules transformed.
+8.503 x Build failed in 8.05s
+8.503 error during build:
+8.503 [vite:load-fallback] Could not load /app/client/src/lib/platform (imported by client/src/pages/onboarding.tsx): ENOENT: no such file or directory, open '/app/client/src/lib/platform'
+8.503     at async open (node:internal/fs/promises:637:25)
+8.503     at async Object.readFile (node:internal/fs/promises:1249:14)
+8.503     at async Object.load (file:///app/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65357:25)
+8.503     at async PluginDriver.hookFirstAndGetPlugin (file:///app/node_modules/rollup/dist/es/shared/node-entry.js:22859:28)
+8.503     at async file:///app/node_modules/rollup/dist/es/shared/node-entry.js:21846:33
+8.503     at async Queue.work (file:///app/node_modules/rollup/dist/es/shared/node-entry.js:23087:32)
+------
+Dockerfile:13
+--------------------
+  11 |     COPY . .
+  12 |     
+  13 | >>> RUN npm run build
+  14 |     
+  15 |     EXPOSE 5000
+--------------------
+error: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+error: exit status 1
+Need better ways to work with logs? Try theRender CLI, Render MCP Server, or set up a log stream integration 

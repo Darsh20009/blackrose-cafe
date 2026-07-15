@@ -1,0 +1,32 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "4CAyNicdwpeyxZvRPgxoP"
+uri = "file://SYSTEM_HEALTH_REPORT.md"
+type = "text"
+title = "تقرير صحة النظام الشامل — BLACK ROSE CAFE"
+
+[[outputs]]
+id = "nCiA7CBXDR1rnWS0U7dYu"
+uri = "file://SYSTEM_MAP.md"
+type = "text"
+title = "System Map — تشريح النظام الكامل"
+
+[[outputs]]
+id = "fNxQFhUvgyn3ZiSFgLmGN"
+uri = "file://public/ios-icons/icon-1024x1024.png"
+type = "image"
+title = "App Icon 1024×1024 — App Store Ready"
+
+[[outputs]]
+id = "UFsAPTuCUGy-piEK63WVC"
+uri = "file://screenshots/store-iphone-1.png"
+type = "image"
+title = "Screenshot 1 — Welcome (1242×2688)"
+
+[[outputs]]
+id = "xfCy2PsV4Iwu08Yp8L3A9"
+uri = "file://screenshots/store-iphone-2.png"
+type = "image"
+title = "Screenshot 2 — Menu (1242×2688)"
