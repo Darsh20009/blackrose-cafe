@@ -76,7 +76,18 @@ export default function CashierReservations() {
       const response = await fetch(`/api/tables/reservations/customer/${searchPhone}`, { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
-        setFilteredReservations(data);
+        // Map raw table objects (reservedFor) to Reservation shape
+        const mapped = Array.isArray(data)
+          ? data
+              .filter((t: any) => t?.reservedFor)
+              .map((t: any) => ({
+                tableId: t.id,
+                tableNumber: t.tableNumber,
+                branchId: t.branchId,
+                reservation: t.reservedFor,
+              }))
+          : [];
+        setFilteredReservations(mapped);
       }
     } catch (error) {
       toast({
