@@ -1838,6 +1838,7 @@ export default function ManagerDashboard() {
  </TabsContent>
  </Tabs>
          </div>
+       </div>
      </main>
  {import.meta.env.DEV && <DemoDataManager open={demoManagerOpen} onOpenChange={setDemoManagerOpen} />}
  </>
