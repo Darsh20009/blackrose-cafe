@@ -16,7 +16,7 @@ import { LoadingState, EmptyState, ErrorState } from "@/components/ui/states";
 import BranchLocationPicker from "@/components/branch-location-picker";
 import CouponManagement from "@/components/coupon-management";
 import { DeliveryManagement } from "@/components/delivery-management";
-import { ManagerSidebar, MobileBottomNav } from "@/components/manager-sidebar";
+// layout provided by ManagerLayout wrapper in App.tsx
 import { 
  Coffee, Users, ShoppingBag, TrendingUp, DollarSign, 
  Package, MapPin, Layers, ArrowLeft, Calendar, Warehouse,
@@ -79,7 +79,6 @@ function saudiStartOfDay(d?: Date): Date {
 
 export default function ManagerDashboard() {
  const [, setLocation] = useLocation();
- const [manager, setManager] = useState<Employee | null>(null);
  const [dateFilter, setDateFilter] = useState<DateFilterType>("thisMonth");
  const [customStart, setCustomStart] = useState<string>("");
  const [customEnd, setCustomEnd] = useState<string>("");
@@ -121,7 +120,8 @@ export default function ManagerDashboard() {
  const { toast } = useToast();
  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
  const [ordersDisplayLimit, setOrdersDisplayLimit] = useState(20);
- const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+ const { data: _session } = useQuery<any>({ queryKey: ['/api/verify-session'], staleTime: 60_000 });
+ const manager = (_session?.employee || _session?.manager || null) as Employee | null;
 
  const deleteOrdersMutation = useMutation({
    mutationFn: async (ids: string[]) => {
@@ -144,38 +144,7 @@ export default function ManagerDashboard() {
    deleteOrdersMutation.mutate(ids);
  };
 
- useEffect(() => {
- const checkSession = async () => {
- const storedEmployee = localStorage.getItem("currentEmployee");
- if (storedEmployee) {
- const emp = JSON.parse(storedEmployee);
- const managerRoles = ["manager", "admin", "owner", "branch_manager"];
- if (!managerRoles.includes(emp.role)) {
- localStorage.removeItem("currentEmployee");
- setLocation("/manager/dashboard");
- return;
- }
-
- try {
- const response = await fetch("/api/verify-session", { credentials: "include" });
- if (!response.ok) {
- localStorage.removeItem("currentEmployee");
- setLocation("/manager/login");
- return;
- }
- setManager(emp);
- } catch (error) {
- console.error("Session verification error:", error);
- localStorage.removeItem("currentEmployee");
- setLocation("/manager/login");
- }
- } else {
- setLocation("/manager/login");
- }
- };
-
- checkSession();
- }, [setLocation]);
+ // session is loaded via useQuery above; AuthGuard in App.tsx handles redirect
 
  const isAdmin = manager?.role === "admin" || manager?.role === "owner";
  const managerBranchId = manager?.branchId;
@@ -792,40 +761,22 @@ export default function ManagerDashboard() {
 
  return (
  <>
- <div className="flex h-screen overflow-hidden bg-background" style={{ fontFamily: "'Cairo', sans-serif" }}>
-
-   {/* ─── SIDEBAR ─── */}
-   <ManagerSidebar
-     manager={manager}
-     onLogout={handleLogout}
-     mobileOpen={mobileMenuOpen}
-     onMobileClose={() => setMobileMenuOpen(false)}
-     role={manager?.role}
-   />
-
-   {/* ─── MAIN CONTENT ─── */}
-   <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-
-     {/* TOP HEADER */}
-     <header className="flex-shrink-0 bg-background border-b border-border px-4 lg:px-6 py-3 flex items-center justify-between gap-3">
+     {/* ── Page sub-header: greeting + date filter (ManagerLayout provides the main topbar) ── */}
+     <header className="flex-shrink-0 bg-white border-b border-gray-100 px-4 lg:px-6 py-2.5 flex items-center justify-between gap-3">
        <div className="flex items-center gap-3">
-         <button
-           className="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-muted text-muted-foreground hover:text-foreground"
-           onClick={() => setMobileMenuOpen(true)}
-         >
-           <Menu className="w-5 h-5" />
-         </button>
          <div className="hidden sm:block">
            <div className="flex items-center gap-2">
-             <div className="text-foreground font-bold text-sm">{greeting}، <span className="text-[#2D9B6E]">{manager.fullName}</span></div>
+             <div className="text-foreground font-bold text-sm">{greeting}، <span className="text-emerald-600">{manager?.fullName || '...'}</span></div>
+             {manager?.role && (
              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
                manager.role === 'admin' ? 'bg-purple-500/15 text-purple-400 border-purple-500/30' :
                manager.role === 'owner' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' :
                manager.role === 'branch_manager' ? 'bg-blue-500/15 text-blue-400 border-blue-500/30' :
-               'bg-[#2D9B6E]/15 text-[#2D9B6E] border-[#2D9B6E]/30'
+               'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
              }`}>
                {manager.role === 'admin' ? 'مدير عام' : manager.role === 'owner' ? 'مالك' : manager.role === 'branch_manager' ? 'مدير فرع' : 'مدير'}
              </span>
+             )}
            </div>
            <div className="text-muted-foreground text-xs">{todayLabel}</div>
          </div>
@@ -1887,11 +1838,7 @@ export default function ManagerDashboard() {
  </TabsContent>
  </Tabs>
          </div>
-       </div>
      </main>
-   </div>
- </div>
- <MobileBottomNav manager={manager} />
  {import.meta.env.DEV && <DemoDataManager open={demoManagerOpen} onOpenChange={setDemoManagerOpen} />}
  </>
  );

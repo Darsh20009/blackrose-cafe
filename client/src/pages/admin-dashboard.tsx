@@ -15,7 +15,6 @@ import {
 } from "recharts";
 import SarIcon from "@/components/sar-icon";
 import { useTranslate } from "@/lib/useTranslate";
-import { ManagerSidebar, MobileBottomNav } from "@/components/manager-sidebar";
 import { apiRequest } from "@/lib/queryClient";
 
 const COLORS = ["#2D9B6E", "#3b82f6", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4"];
@@ -23,29 +22,21 @@ const COLORS = ["#2D9B6E", "#3b82f6", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4"
 export default function AdminDashboard() {
   const [, navigate] = useLocation();
   const tc = useTranslate();
-  const [manager, setManager] = useState<any>(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [loadingInsights, setLoadingInsights] = useState(false);
 
   useEffect(() => {
     document.title = tc("لوحة تحكم الإدارة", "Admin Dashboard") + " - BLACK ROSE CAFE";
-    const stored = localStorage.getItem("currentEmployee");
-    if (stored) {
-      try { setManager(JSON.parse(stored)); } catch {}
-    }
   }, []);
 
-  const { data: employees = [] } = useQuery<any[]>({ queryKey: ['/api/employees'] });
-  const { data: orders = [] } = useQuery<any[]>({ queryKey: ['/api/orders'] });
-  const { data: attendance = [] } = useQuery<any[]>({ queryKey: ['/api/attendance'], retry: false });
-  const { data: leaveRequests = [] } = useQuery<any[]>({ queryKey: ['/api/leave-requests'], retry: false });
-  const { data: businessConfig } = useQuery<any>({ queryKey: ['/api/business-config'] });
+  const { data: session } = useQuery<any>({ queryKey: ['/api/verify-session'] });
+  const manager = session?.employee || session?.manager || null;
 
-  const handleLogout = () => {
-    localStorage.removeItem("currentEmployee");
-    navigate("/manager/login");
-  };
+  const { data: employees = [] } = useQuery<any[]>({ queryKey: ['/api/employees'], staleTime: 60_000 });
+  const { data: orders = [] } = useQuery<any[]>({ queryKey: ['/api/orders'], staleTime: 30_000 });
+  const { data: attendance = [] } = useQuery<any[]>({ queryKey: ['/api/attendance'], retry: false, staleTime: 60_000 });
+  const { data: leaveRequests = [] } = useQuery<any[]>({ queryKey: ['/api/leave-requests'], retry: false, staleTime: 60_000 });
+  const { data: businessConfig } = useQuery<any>({ queryKey: ['/api/business-config'], staleTime: 300_000 });
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -169,51 +160,7 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background" dir={tc('rtl','ltr')} style={{ fontFamily: "'Cairo', sans-serif" }}>
-      <ManagerSidebar
-        manager={manager}
-        onLogout={handleLogout}
-        mobileOpen={mobileMenuOpen}
-        onMobileClose={() => setMobileMenuOpen(false)}
-        role={manager?.role}
-      />
-
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0 bg-background">
-        {/* Header */}
-        <header className="flex-shrink-0 bg-card border-b border-border px-4 lg:px-6 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <button
-              className="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-muted text-muted-foreground hover:text-foreground"
-              onClick={() => setMobileMenuOpen(true)}
-            >
-              <BarChart3 className="w-4 h-4" />
-            </button>
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="text-foreground font-bold text-sm">{tc("مرحباً،", "Hello,")} <span className="text-[#2D9B6E]">{manager?.fullName || tc("المدير", "Manager")}</span></div>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
-                  manager?.role === 'admin' ? 'bg-purple-500/15 text-purple-400 border-purple-500/30' :
-                  manager?.role === 'owner' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' :
-                  'bg-[#2D9B6E]/15 text-[#2D9B6E] border-[#2D9B6E]/30'
-                }`}>
-                  {manager?.role === 'admin' ? tc('مدير عام', 'Admin') : manager?.role === 'owner' ? tc('مالك', 'Owner') : tc('مدير', 'Manager')}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">{tc("نظرة شاملة على أداء الكافيه", "Complete cafe overview")}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs font-medium text-primary border-primary/20">
-              {businessConfig?.businessName || "BLACK ROSE CAFE"}
-            </Badge>
-            <Button variant="outline" size="sm" onClick={() => navigate('/admin/settings')}>
-              <Settings className="w-4 h-4" />
-            </Button>
-          </div>
-        </header>
-
-        {/* Main Content */}
-        <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-5 space-y-5 pb-20 lg:pb-5">
+        <div className="px-4 lg:px-6 py-5 space-y-5 pb-6">
 
           {/* KPI Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -468,8 +415,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <MobileBottomNav manager={manager} />
-      </div>
-    </div>
+        </div>
   );
 }

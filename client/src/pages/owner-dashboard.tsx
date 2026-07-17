@@ -21,7 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Employee } from "@shared/schema";
 import SarIcon from "@/components/sar-icon";
-import { ManagerSidebar, MobileBottomNav } from "@/components/manager-sidebar";
+// layout provided by ManagerLayout wrapper in App.tsx
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Cell, PieChart, Pie, Legend
@@ -334,23 +334,9 @@ export default function OwnerDashboard() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background" dir={tc('rtl','ltr')} style={{ fontFamily: "'Cairo', sans-serif" }}>
-      <ManagerSidebar
-        manager={employee as any}
-        onLogout={() => { localStorage.removeItem("currentEmployee"); setLocation("/employee/gateway"); }}
-        mobileOpen={mobileMenuOpen}
-        onMobileClose={() => setMobileMenuOpen(false)}
-        role={employee?.role}
-      />
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-      <header className="flex-shrink-0 bg-background border-b border-border px-4 lg:px-6 py-3 flex items-center justify-between gap-3">
+    <>
+      <header className="flex-shrink-0 bg-white border-b border-gray-100 px-4 lg:px-6 py-2.5 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <button
-            className="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-muted text-muted-foreground hover:text-foreground"
-            onClick={() => setMobileMenuOpen(true)}
-          >
-            <Menu className="w-5 h-5" />
-          </button>
           <div>
             <div className="flex items-center gap-2">
               <div className="text-foreground font-bold text-sm">{tc("مرحباً،", "Hello,")} <span className="text-[#2D9B6E]">{employee?.fullName}</span></div>
@@ -1029,8 +1015,6 @@ export default function OwnerDashboard() {
         )}
         </div>
         </main>
-        <MobileBottomNav manager={employee as any} />
-      </div>
-    </div>
+    </>
   );
 }
