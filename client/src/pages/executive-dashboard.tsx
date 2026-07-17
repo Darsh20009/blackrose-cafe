@@ -12,7 +12,7 @@ import {
   Coffee, Package, BarChart3, Calendar, ArrowUpRight, ArrowDownRight,
   Wallet, CreditCard, Building2, ChefHat, Settings, LogOut,
   FileText, PieChart, Activity, Target, Award, Sparkles,
-  GitCompare, UserCheck, Clock, Briefcase, Menu
+  GitCompare, UserCheck, Clock, Briefcase
 } from "lucide-react";
 // layout provided by ManagerLayout wrapper in App.tsx
 import { 
@@ -29,7 +29,6 @@ export default function ExecutiveDashboard() {
   const [, setLocation] = useLocation();
   const [manager, setManager] = useState<Employee | null>(null);
   const [dateFilter, setDateFilter] = useState<"today" | "week" | "month" | "year">("month");
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const storedEmployee = localStorage.getItem("currentEmployee");

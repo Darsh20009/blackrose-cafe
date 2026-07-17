@@ -105,8 +105,8 @@ export function AuthGuard({
           const defaultRedirects: Record<UserType, string> = {
             customer: "/auth",
             employee: "/employee/login",
-            manager: "/manager/login",
-            admin: "/admin/login",
+            manager: "/manager",
+            admin: "/admin",
           };
           setLocation(redirectTo || defaultRedirects[userType]);
           return;

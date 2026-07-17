@@ -49,8 +49,8 @@ const NAV_GROUPS: {
     label: "التقارير", labelEn: "Reports", icon: BarChart3,
     items: [
       { label: "التقارير الموحدة", labelEn: "Unified Reports", icon: BarChart2, path: "/manager/unified-reports" },
-      { label: "التحليلات المتقدمة", labelEn: "Advanced Analytics", icon: TrendingUp, path: "/manager/advanced-analytics" },
-      { label: "التقارير المالية", labelEn: "Financial Reports", icon: Banknote, path: "/manager/financial-reports" },
+      { label: "التحليلات المتقدمة", labelEn: "Advanced Analytics", icon: TrendingUp, path: "/manager/analytics" },
+      { label: "التقارير الذكية", labelEn: "Smart Reports", icon: Banknote, path: "/manager/smart-reports" },
       { label: "المحاسبة", labelEn: "Accounting", icon: Wallet, path: "/manager/accounting" },
       { label: "ZATCA فاتورة", labelEn: "ZATCA", icon: Shield, path: "/manager/zatca", roles: ["admin", "owner"] },
     ],
@@ -95,9 +95,9 @@ const NAV_GROUPS: {
     label: "التسويق", labelEn: "Marketing", icon: Megaphone,
     items: [
       { label: "برنامج النقاط", labelEn: "Loyalty", icon: Star, path: "/manager/loyalty" },
-      { label: "التسويق والعروض", labelEn: "Promotions", icon: Gift, path: "/manager/marketing" },
-      { label: "الإشعارات", labelEn: "Notifications", icon: Bell, path: "/manager/notifications" },
-      { label: "التسويق بالإيميل", labelEn: "Email Marketing", icon: MessageSquare, path: "/manager/email-marketing" },
+      { label: "العروض والخصومات", labelEn: "Promotions", icon: Gift, path: "/manager/promotions" },
+      { label: "الإشعارات", labelEn: "Notifications", icon: Bell, path: "/admin/notifications" },
+      { label: "التسويق بالإيميل", labelEn: "Email Marketing", icon: MessageSquare, path: "/admin/email" },
     ],
   },
 ];

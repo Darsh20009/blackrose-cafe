@@ -13,7 +13,7 @@ import {
   Coffee, Database, Trash2, RefreshCw, AlertTriangle, 
   ShoppingCart, Users, Package, GitBranch, Settings,
   Calendar, CreditCard, Table, Clock, ChevronLeft, ChevronRight,
-  Eye, BarChart3, Shield, ArrowRight, Utensils, Menu, TrendingUp, Store,
+  Eye, BarChart3, Shield, ArrowRight, Utensils, TrendingUp, Store,
   MonitorSmartphone, ChefHat, LayoutGrid, FileBarChart2, Wallet, MapPin, ExternalLink,
   Activity, Wifi, Globe, ShieldCheck, Bug
 } from "lucide-react";
@@ -91,7 +91,6 @@ export default function OwnerDashboard() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [employee, setEmployee] = useState<Employee | null>(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [stats, setStats] = useState<DatabaseStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
