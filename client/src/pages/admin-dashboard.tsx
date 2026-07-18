@@ -414,7 +414,5 @@ export default function AdminDashboard() {
             </Card>
           </div>
         </div>
-
-        </div>
   );
 }

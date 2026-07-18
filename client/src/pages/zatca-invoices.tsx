@@ -156,9 +156,10 @@ export default function ZATCAInvoicesPage() {
     crNumber: "", address: "", city: "", postalCode: "", buildingNumber: "",
   });
 
-  const { data: invoices = [], isLoading: isInvoicesLoading, refetch } = useQuery<TaxInvoice[]>({
+  const { data: invoicesRaw, isLoading: isInvoicesLoading, refetch } = useQuery<TaxInvoice[]>({
     queryKey: ["/api/zatca/invoices"],
   });
+  const invoices: TaxInvoice[] = Array.isArray(invoicesRaw) ? invoicesRaw : [];
 
   const { data: settings } = useQuery<ZATCASettings>({
     queryKey: ["/api/zatca/settings"],
