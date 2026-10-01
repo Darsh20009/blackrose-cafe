@@ -217,11 +217,15 @@ Fully dynamic plan management UI in the QIROX super admin panel:
 
 ## Quick Start
 
-- **Dev**: `NODE_ENV=development node_modules/.bin/tsx server/index.ts` (starts server + Vite middleware on port 5000)
+- **Dev**: `npm run dev` (starts Express + Vite middleware on `0.0.0.0:5000`; use Replit's Run button with the existing "Start application" workflow)
 - **Build**: `npm run build` (builds frontend to dist/public/ and bundles server to dist/index.js)
 - **Production**: `node dist/index.js` (serves pre-built assets)
 - **Port**: 5000 (webview)
 - **Workflow**: "Start application" workflow runs the dev command automatically on Replit
+- **Required secrets**: `MONGODB_URI`, `SESSION_SECRET`, `PORTAL_DEFAULT_PASSWORD` (owner account), and `ADMIN_DEFAULT_PASSWORD` (admin account). Store these in Replit Secrets, never in source files.
+- **Database safety**: Use a separate test MongoDB database for development. Existing startup code changes indexes, migrates table tenant IDs, publishes products to all branches, and synchronizes owner/admin passwords. Do not point the preview at production without reviewing these startup writes.
+- **Verification**: `/health` reports database connectivity; `/api/coffee-items` provides the public products API. The root route `/` shows the customer landing page.
+- **Optional services**: Browser push notifications require VAPID keys; email, payments, and Apple services require their own credentials and are not covered by basic web startup.
 
 ## Branding
 
