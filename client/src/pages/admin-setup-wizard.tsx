@@ -19,7 +19,7 @@ export default function AdminSetupWizard() {
 
   const [step, setStep] = useState<WizardStep>("welcome");
   const [dashStyle, setDashStyle] = useState<"detailed" | "simple">("detailed");
-  const [brandName, setBrandName] = useState(brand.nameAr);
+  const [brandName, setBrandName] = useState<string>(brand.nameAr);
 
   const tc = (ar: string, en: string) => (isAr ? ar : en);
   const stepIndex = STEPS.indexOf(step);
