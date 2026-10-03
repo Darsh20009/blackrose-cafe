@@ -16,7 +16,7 @@ export default function CustomerLogin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const tc = useTranslate();
-  const [mode, setMode] = useState<Mode>('choice');
+  const [mode, setMode] = useState<Mode>('whatsapp');
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
@@ -133,7 +133,7 @@ export default function CustomerLogin() {
               </Button>
 
               <Button
-                onClick={() => setLocation("/auth")}
+                onClick={() => setLocation("/auth?mode=password")}
                 className="w-full h-14 bg-gradient-to-r from-accent to-accent/90 hover:from-accent/95 hover:to-accent/85 text-accent-foreground text-base font-semibold"
                 data-testid="button-login"
               >

@@ -40,7 +40,7 @@ export default function ResetPassword() {
         description: tc("رابط إعادة التعيين غير صالح", "Reset link is invalid"),
         variant: "destructive"
       });
-      navigate("/auth");
+      navigate("/auth?mode=password");
       return;
     }
 
@@ -108,7 +108,7 @@ export default function ResetPassword() {
         description: tc("تم تغيير كلمة المرور بنجاح", "Password changed successfully"),
       });
 
-      setTimeout(() => navigate("/auth"), 3000);
+      setTimeout(() => navigate("/auth?mode=password"), 3000);
     } catch (error: any) {
       toast({
         title: tc("خطأ", "Error"),
@@ -248,7 +248,7 @@ export default function ResetPassword() {
                 </p>
               </div>
               <Button
-                onClick={() => navigate("/auth")}
+                onClick={() => navigate("/auth?mode=password")}
                 className="w-full bg-primary hover:bg-primary"
                 data-testid="button-go-to-login"
               >

@@ -96,7 +96,7 @@ export default function ForgotPassword() {
         email: verifiedEmail, phone: clean, newPassword: emailPassword,
       });
       toast({ title: tc("تم بنجاح!", "Success!"), description: tc("تم تغيير كلمة المرور. يمكنك تسجيل الدخول الآن", "Password changed. You can now log in") });
-      setTimeout(() => navigate("/auth"), 1500);
+      setTimeout(() => navigate("/auth?mode=password"), 1500);
     } catch (e: any) {
       err(e.message || tc("حدث خطأ", "An error occurred"));
     } finally { setLoading(false); }
@@ -144,7 +144,7 @@ export default function ForgotPassword() {
         phone: verifiedPhone, name: customerName.trim(), newPassword: phonePassword,
       });
       toast({ title: tc("تم بنجاح!", "Success!"), description: tc("تم تغيير كلمة المرور. يمكنك تسجيل الدخول الآن", "Password changed. You can now log in") });
-      setTimeout(() => navigate("/auth"), 1500);
+      setTimeout(() => navigate("/auth?mode=password"), 1500);
     } catch (e: any) {
       err(e.message || tc("حدث خطأ", "An error occurred"));
     } finally { setLoading(false); }
@@ -410,7 +410,7 @@ export default function ForgotPassword() {
               <span />
             )}
             <button
-              type="button" onClick={() => navigate("/auth")}
+              type="button" onClick={() => navigate("/auth?mode=password")}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors underline-offset-4 hover:underline"
               data-testid="link-back-to-login"
             >
