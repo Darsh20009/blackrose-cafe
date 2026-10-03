@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PhoneInput } from "@/components/phone-input";
 import { SmartIdentifierInput } from "@/components/smart-identifier-input";
-import { Phone, User, Lock, Mail, Eye, EyeOff, ShoppingBag, LogIn, UserPlus } from "lucide-react";
+import { Phone, User, Lock, Mail, Eye, EyeOff, ShoppingBag, LogIn, UserPlus, MessageCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
@@ -280,8 +280,11 @@ export default function CustomerAuthModal() {
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)} className="w-full mt-2">
-          <TabsList className="grid w-full grid-cols-3 bg-primary/10">
+        <Tabs value={mode} onValueChange={(v) => {
+          if (v === "whatsapp" && identifier.includes("@")) setIdentifier("");
+          setMode(v as Mode);
+        }} className="w-full mt-2">
+          <TabsList className="grid w-full grid-cols-4 bg-primary/10">
             <TabsTrigger value="guest" data-testid="tab-guest" className="gap-1">
               <ShoppingBag className="w-3.5 h-3.5" />
               <span className="text-xs">{isAr ? "بدون تسجيل" : "Guest"}</span>
@@ -289,6 +292,10 @@ export default function CustomerAuthModal() {
             <TabsTrigger value="login" data-testid="tab-login-modal" className="gap-1">
               <LogIn className="w-3.5 h-3.5" />
               <span className="text-xs">{isAr ? "دخول" : "Login"}</span>
+            </TabsTrigger>
+            <TabsTrigger value="whatsapp" data-testid="tab-whatsapp-modal" className="gap-1">
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span className="text-xs">{isAr ? "واتساب" : "WhatsApp"}</span>
             </TabsTrigger>
             <TabsTrigger value="register" data-testid="tab-register-modal" className="gap-1">
               <UserPlus className="w-3.5 h-3.5" />
@@ -343,20 +350,14 @@ export default function CustomerAuthModal() {
                   : (isAr ? "متابعة الطلب" : "Continue to Order")}
               </Button>
             </form>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={() => { setOtpSent(false); setOtpCode(""); setMode("whatsapp"); }}
-              data-testid="button-login-with-whatsapp-modal"
-            >
-              <MessageCircle className="w-4 h-4 ml-2" />
-              {isAr ? "الدخول برمز واتساب" : "Sign in with WhatsApp code"}
-            </Button>
           </TabsContent>
 
           <TabsContent value="whatsapp" className="space-y-4 mt-4">
-            <form onSubmit={handleWhatsAppVerify} className="space-y-4">
+            <form onSubmit={event => {
+              event.preventDefault();
+              if (otpSent) handleWhatsAppVerify(event);
+              else requestWhatsAppCode();
+            }} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="otp-name-modal">{isAr ? "الاسم (للحساب الجديد)" : "Name (for new accounts)"}</Label>
                 <Input

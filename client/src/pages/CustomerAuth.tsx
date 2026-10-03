@@ -285,6 +285,16 @@ export default function CustomerAuth() {
                   )}
                 </Button>
               </form>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => navigate("/customer-login")}
+                data-testid="button-whatsapp-login"
+              >
+                <Phone className="ml-2 h-4 w-4" />
+                {i18n.language === 'ar' ? "الدخول أو التسجيل برمز واتساب" : "Sign in or register with WhatsApp"}
+              </Button>
             </TabsContent>
 
             <TabsContent value="register" className="space-y-5 mt-5">
