@@ -65,6 +65,10 @@ CPANEL_SMTP_HOST = "server222.web-hosting.com"
 CPANEL_SMTP_PORT = "465"
 CPANEL_SMTP_USER = "info@qirox.online"
 ADMIN_EMAIL = "samialonini@gmail.com"
+QIROX_INTEGRATIONS_BASE_URL = "https://qiroxstudio.online"
+QIROX_PROJECT_ID = "6a7dc8b6a3aa8a86bcc3fb9e"
+
+[userenv.development]
 
 [postMerge]
 path = "scripts/post-merge.sh"

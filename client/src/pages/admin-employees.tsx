@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
-import { Plus, Search, Edit2, Trash2, ChevronDown, X, Download, Trash, Clock, Shield, QrCode } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, ChevronDown, X, Download, Trash, Clock, Shield, QrCode, UserCheck, UserX } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -32,6 +32,8 @@ interface Employee {
   permissions?: string[];
 }
 
+const isEmployeeActivated = (value: unknown) => value === 1 || value === true || value === "1";
+
 const WORK_DAYS = [
   { id: 'الأحد', name: 'الأحد' },
   { id: 'الاثنين', name: 'الاثنين' },
@@ -52,6 +54,14 @@ export default function AdminEmployees() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
+  const canActivateEmployees = (() => {
+    try {
+      const role = JSON.parse(localStorage.getItem("currentEmployee") || "{}").role;
+      return role === "admin" || role === "owner";
+    } catch {
+      return false;
+    }
+  })();
   const [formData, setFormData] = useState({
     fullName: '',
     username: '',
@@ -212,6 +222,24 @@ export default function AdminEmployees() {
     },
   });
 
+  const activationMutation = useMutation({
+    mutationFn: async ({ id, isActivated }: { id: string; isActivated: boolean }) => {
+      const res = await apiRequest("POST", `/api/employees/${id}/activation`, { isActivated });
+      return res.json();
+    },
+    onSuccess: (_employee, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      toast({
+        title: variables.isActivated
+          ? tc("تم تفعيل الموظف", "Employee activated")
+          : tc("تم إيقاف حساب الموظف", "Employee access disabled"),
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: tc("تعذر تغيير الحالة", "Could not change status"), description: err.message, variant: "destructive" });
+    },
+  });
+
   const handleSubmit = (e: any) => {
     e.preventDefault();
     const payload = {
@@ -231,7 +259,8 @@ export default function AdminEmployees() {
   const filteredEmployees = (employees as Employee[]).filter((emp: Employee) => {
     const matchSearch = emp.fullName?.includes(search) || emp.phone?.includes(search) || emp.username?.includes(search);
     const matchRole = roleFilter === 'all' || emp.role === roleFilter;
-    const matchStatus = statusFilter === 'all' || (statusFilter === 'active' ? emp.isActivated === 1 : emp.isActivated === 0);
+    const isActive = isEmployeeActivated(emp.isActivated);
+    const matchStatus = statusFilter === 'all' || (statusFilter === 'active' ? isActive : !isActive);
     return matchSearch && matchRole && matchStatus;
   });
 
@@ -268,7 +297,7 @@ export default function AdminEmployees() {
       emp.phone,
       emp.jobTitle,
       emp.role,
-      emp.isActivated === 1 ? 'نشط' : 'معطل',
+      isEmployeeActivated(emp.isActivated) ? 'نشط' : 'بانتظار التفعيل',
     ]);
 
     let csv = headers.join(',') + '\n';
@@ -679,15 +708,29 @@ export default function AdminEmployees() {
                         </td>
                         <td className="p-3">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                            emp.isActivated === 1
+                            isEmployeeActivated(emp.isActivated)
                               ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'
                               : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
                           }`}>
-                            {emp.isActivated === 1 ? tc('نشط','Active') : tc('معطل','Inactive')}
+                            {isEmployeeActivated(emp.isActivated) ? tc('نشط','Active') : tc('بانتظار التفعيل','Awaiting activation')}
                           </span>
                         </td>
                         <td className="p-3">
                           <div className="flex gap-1">
+                            {canActivateEmployees && !["admin", "owner"].includes(emp.role) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className={`h-8 w-8 p-0 ${isEmployeeActivated(emp.isActivated) ? "text-amber-600" : "text-emerald-600"}`}
+                                disabled={activationMutation.isPending}
+                                onClick={() => activationMutation.mutate({ id: emp.id, isActivated: !isEmployeeActivated(emp.isActivated) })}
+                                title={isEmployeeActivated(emp.isActivated) ? tc("إيقاف الحساب", "Disable account") : tc("تفعيل الحساب", "Activate account")}
+                                aria-label={isEmployeeActivated(emp.isActivated) ? tc("إيقاف الحساب", "Disable account") : tc("تفعيل الحساب", "Activate account")}
+                                data-testid={`button-activation-${emp.id}`}
+                              >
+                                {isEmployeeActivated(emp.isActivated) ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                              </Button>
+                            )}
                             <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
                               onClick={() => { setEditingId(emp.id); setBranchId((emp as any).branchId || ''); setFormData({ fullName: emp.fullName, username: emp.username, phone: emp.phone, jobTitle: emp.jobTitle, role: emp.role, shiftStartTime: (emp as any).shiftStartTime || '', shiftEndTime: (emp as any).shiftEndTime || '', workDays: (emp as any).workDays || [], allowedPages: (emp as any).allowedPages || [], permissions: (emp as any).permissions || [] }); setShowAddForm(false); }}
                               data-testid={`button-edit-${emp.id}`}>
@@ -727,11 +770,11 @@ export default function AdminEmployees() {
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <span className="font-semibold text-sm truncate">{emp.fullName}</span>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${
-                            emp.isActivated === 1
+                            isEmployeeActivated(emp.isActivated)
                               ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'
                               : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
                           }`}>
-                            {emp.isActivated === 1 ? tc('نشط','Active') : tc('معطل','Inactive')}
+                            {isEmployeeActivated(emp.isActivated) ? tc('نشط','Active') : tc('بانتظار التفعيل','Awaiting activation')}
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground mb-2">
@@ -744,6 +787,20 @@ export default function AdminEmployees() {
                         </span>
                       </div>
                       <div className="flex gap-1 shrink-0">
+                        {canActivateEmployees && !["admin", "owner"].includes(emp.role) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className={`h-8 w-8 p-0 ${isEmployeeActivated(emp.isActivated) ? "text-amber-600" : "text-emerald-600"}`}
+                            disabled={activationMutation.isPending}
+                            onClick={() => activationMutation.mutate({ id: emp.id, isActivated: !isEmployeeActivated(emp.isActivated) })}
+                            title={isEmployeeActivated(emp.isActivated) ? tc("إيقاف الحساب", "Disable account") : tc("تفعيل الحساب", "Activate account")}
+                            aria-label={isEmployeeActivated(emp.isActivated) ? tc("إيقاف الحساب", "Disable account") : tc("تفعيل الحساب", "Activate account")}
+                            data-testid={`button-mobile-activation-${emp.id}`}
+                          >
+                            {isEmployeeActivated(emp.isActivated) ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                          </Button>
+                        )}
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
                           onClick={() => { setEditingId(emp.id); setBranchId((emp as any).branchId || ''); setFormData({ fullName: emp.fullName, username: emp.username, phone: emp.phone, jobTitle: emp.jobTitle, role: emp.role, shiftStartTime: (emp as any).shiftStartTime || '', shiftEndTime: (emp as any).shiftEndTime || '', workDays: (emp as any).workDays || [], allowedPages: (emp as any).allowedPages || [], permissions: (emp as any).permissions || [] }); setShowAddForm(false); }}
                           data-testid={`button-mobile-edit-${emp.id}`}>

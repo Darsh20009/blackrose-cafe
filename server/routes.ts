@@ -60,6 +60,7 @@ import { deliveryService } from "./delivery-service";
 import { requireAuth, requireManager, requireAdmin, filterByBranch, requireKitchenAccess, requireCashierAccess, requireDeliveryAccess, requirePermission, requireCustomerAuth, type AuthRequest, type CustomerAuthRequest } from "./middleware/auth";
 import { logFromRequest, logAudit } from "./audit-logger";
 import { PermissionsEngine, PERMISSIONS } from "./permissions-engine";
+import { registerPhoneOtpAuthRoutes } from "./phone-otp-auth";
 import { requireTenant, getTenantIdFromRequest } from "./middleware/tenant";
 import { TenantModel } from "@shared/tenant-schema";
 import { wsManager } from "./websocket";
@@ -877,6 +878,7 @@ async function logPayment(data: {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  registerPhoneOtpAuthRoutes(app);
   registerObjectStorageRoutes(app);
 
   // ── Visitor tracking middleware ──────────────────────────────────────────
@@ -6118,7 +6120,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "بطاقة الموظف غير موجودة أو منتهية الصلاحية" });
       }
 
-      if (employee.isActivated === 0) {
+      if ([0, false, "0"].includes(employee.isActivated as any)) {
         return res.status(403).json({ error: "هذا الحساب غير مفعل" });
       }
 
@@ -6890,49 +6892,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Activate employee account
-  app.post("/api/employees/activate", async (req, res) => {
+  // Account activation is controlled by an authenticated administrator.
+  app.post("/api/employees/:id/activation", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { EmployeeModel } = await import("@shared/schema");
-      const { phone, fullName, password } = req.body;
-
-      if (!phone || !fullName || !password) {
-        return res.status(400).json({ error: "رقم الهاتف والاسم وكلمة المرور مطلوبة" });
+      const { id } = req.params;
+      const activate = req.body?.isActivated === true || req.body?.isActivated === 1;
+      const lookup = Types.ObjectId.isValid(id)
+        ? { $or: [{ id }, { _id: new Types.ObjectId(id) }] }
+        : { id };
+      const employee = await EmployeeModel.findOne(lookup);
+      if (!employee) return res.status(404).json({ error: "الموظف غير موجود" });
+      if (employee._id.toString() === req.employee?.id) {
+        return res.status(400).json({ error: "لا يمكن تعطيل حسابك الإداري من هنا" });
+      }
+      if (["admin", "owner"].includes(employee.role)) {
+        return res.status(403).json({ error: "لا يمكن تغيير تفعيل حساب إداري من هذه الشاشة" });
       }
 
-      // Look for employee that is NOT activated and matches name/phone
-      // We trim and use case-insensitive regex for fullName to be robust
-      const employee = await EmployeeModel.findOne({
-        phone: phone.trim(),
-        fullName: { $regex: new RegExp(`^${fullName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") },
-        isActivated: 0
-      });
-
-      if (!employee) {
-        return res.status(404).json({ error: "الموظف غير موجود أو تم تفعيله مسبقاً" });
-      }
-
-      // Hash password using bcrypt directly
-      const bcrypt = await import("bcryptjs");
-      const hashedPassword = await bcrypt.hash(password, 10);
-      
-      const updatedEmployee = await EmployeeModel.findByIdAndUpdate(employee._id, {
-        password: hashedPassword,
-        isActivated: 1,
-        updatedAt: new Date()
-      }, { new: true });
-
+      const updatedEmployee = await EmployeeModel.findByIdAndUpdate(
+        employee._id,
+        {
+          $set: {
+            isActivated: activate ? 1 : 0,
+            updatedAt: new Date(),
+            ...(activate ? {} : { lastRestoreKey: null, restoreKeyIssuedAt: null }),
+          },
+        },
+        { new: true },
+      );
       if (!updatedEmployee) {
-        return res.status(500).json({ error: "فشل تحديث بيانات الموظف" });
+        return res.status(500).json({ error: "تعذر تحديث حالة الموظف" });
       }
+
+      if (!activate) {
+        try {
+          const employeeId = employee._id.toString().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          await mongoose.connection.collection("sessions").deleteMany({
+            session: { $regex: new RegExp(`"employee"\\s*:\\s*\\{[^}]*"id"\\s*:\\s*"${employeeId}"`) },
+          });
+        } catch {
+          console.error("[AUTH] Could not revoke existing employee sessions");
+        }
+      }
+
+      logAudit({
+        tenantId: employee.tenantId || "demo-tenant",
+        branchId: employee.branchId,
+        action: activate ? "employee.activated" : "employee.deactivated",
+        entityType: "employee",
+        entityId: employee.id || employee._id.toString(),
+        entityLabel: employee.fullName || employee.username,
+        actorType: "admin",
+        actorId: req.employee?.id,
+        actorName: req.employee?.fullName,
+        actorRole: req.employee?.role,
+      });
 
       const serialized = serializeDoc(updatedEmployee);
       const { password: _, ...employeeData } = serialized;
       res.json(employeeData);
     } catch (error) {
-      console.error("Error activating employee:", error);
-      res.status(500).json({ error: "Failed to activate employee" });
+      console.error("Error updating employee activation");
+      res.status(500).json({ error: "تعذر تحديث حالة الموظف" });
     }
+  });
+
+  // Legacy self-activation is deliberately disabled: only an administrator can activate staff.
+  app.post("/api/employees/activate", (_req, res) => {
+    res.status(403).json({ error: "يجب على الإدارة تفعيل الحساب قبل تسجيل الدخول" });
   });
 
   // Reset employee password by username

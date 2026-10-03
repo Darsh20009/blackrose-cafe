@@ -4,13 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Phone, Zap, Star, ChevronRight } from "lucide-react";
+import { User, Phone, Zap, Star, ChevronRight, MessageCircle, Loader2 } from "lucide-react";
 import blackroseLogo from "@assets/blackrose-logo.png";
 import { customerStorage } from "@/lib/customer-storage";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslate } from "@/lib/useTranslate";
 
-type Mode = 'choice' | 'quick';
+type Mode = 'choice' | 'quick' | 'whatsapp';
 
 export default function CustomerLogin() {
   const [, setLocation] = useLocation();
@@ -20,6 +20,9 @@ export default function CustomerLogin() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
 
   useEffect(() => {
     document.title = tc("BLACK ROSE CAFE — ادخل الآن", "BLACK ROSE CAFE — Enter Now");
@@ -47,6 +50,57 @@ export default function CustomerLogin() {
     setLocation("/menu");
   };
 
+  const requestWhatsAppCode = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ userType: "customer", phone, name }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || tc("تعذر إرسال الرمز", "Could not send the code"));
+      setOtpSent(true);
+      setOtpCooldown(60);
+      toast({ title: tc("تحقق من واتساب", "Check WhatsApp"), description: data.message });
+    } catch (error: any) {
+      toast({ title: tc("تعذر إرسال الرمز", "Could not send the code"), description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyWhatsAppCode = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoading(true);
+    try {
+      const response = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ userType: "customer", phone, code: otp, name }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || tc("رمز التحقق غير صحيح", "Invalid verification code"));
+      localStorage.setItem("currentCustomer", JSON.stringify(data.user));
+      localStorage.removeItem("currentEmployee");
+      customerStorage.setGuestMode(false);
+      customerStorage.clearGuestInfo();
+      setLocation("/menu");
+    } catch (error: any) {
+      toast({ title: tc("تعذر تسجيل الدخول", "Could not sign in"), description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = window.setTimeout(() => setOtpCooldown(seconds => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [otpCooldown]);
+
   if (mode === 'choice') {
     return (
       <div className="min-h-screen bg-gradient-to-b from-background via-primary/5 to-background flex flex-col items-center justify-center p-4">
@@ -65,6 +119,19 @@ export default function CustomerLogin() {
               <CardDescription className="text-muted-foreground">{tc("اختر طريقة المتابعة", "Choose how to continue")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              <Button
+                onClick={() => { setMode('whatsapp'); setOtpSent(false); setOtp(""); }}
+                className="h-14 w-full bg-primary text-primary-foreground hover:bg-primary/90 text-base font-semibold"
+                data-testid="button-whatsapp-login"
+              >
+                <MessageCircle className="ml-2 h-5 w-5" />
+                <div className="flex-1 text-right">
+                  <div>{tc("الدخول أو التسجيل برقم الجوال", "Sign in or register with phone")}</div>
+                  <div className="text-xs font-normal opacity-80">{tc("رمز تحقق يصل عبر واتساب", "A verification code sent via WhatsApp")}</div>
+                </div>
+                <ChevronRight className="h-4 w-4 opacity-60" />
+              </Button>
+
               <Button
                 onClick={() => setLocation("/auth")}
                 className="w-full h-14 bg-gradient-to-r from-accent to-accent/90 hover:from-accent/95 hover:to-accent/85 text-accent-foreground text-base font-semibold"
@@ -107,6 +174,62 @@ export default function CustomerLogin() {
             </p>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (mode === 'whatsapp') {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <Card className="w-full max-w-md border-border bg-card">
+          <CardHeader className="text-center">
+            <MessageCircle className="mx-auto h-8 w-8 text-primary" />
+            <CardTitle className="text-2xl font-bold">{tc("الدخول برمز واتساب", "Sign in with WhatsApp")}</CardTitle>
+            <CardDescription>{tc("نرسل رمزاً مؤقتاً إلى رقمك. الحساب الجديد يُنشأ بعد تأكيد الرقم.", "We send a temporary code to your phone. New accounts are created after phone verification.")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={event => {
+              event.preventDefault();
+              if (otpSent) verifyWhatsAppCode(event);
+              else requestWhatsAppCode();
+            }} className="space-y-4">
+              <div>
+                <Label htmlFor="otp-name" className="mb-1.5 block">{tc("الاسم (للحساب الجديد)", "Name (for new accounts)")}</Label>
+                <Input id="otp-name" value={name} onChange={event => setName(event.target.value)}
+                  placeholder={tc("اسمك", "Your name")} autoComplete="name" data-testid="input-customer-otp-name" />
+              </div>
+              <div>
+                <Label htmlFor="otp-phone" className="mb-1.5 block">{tc("رقم الجوال السعودي", "Saudi mobile number")}</Label>
+                <Input id="otp-phone" type="tel" value={phone} onChange={event => setPhone(event.target.value)}
+                  placeholder="05xxxxxxxx أو +9665xxxxxxxx" dir="ltr" autoComplete="tel" disabled={otpSent}
+                  data-testid="input-customer-otp-phone" />
+              </div>
+              {otpSent && (
+                <div>
+                  <Label htmlFor="otp-code" className="mb-1.5 block">{tc("رمز التحقق", "Verification code")}</Label>
+                  <Input id="otp-code" value={otp} onChange={event => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000" inputMode="numeric" autoComplete="one-time-code" dir="ltr"
+                    className="text-center text-lg tracking-[0.3em]" data-testid="input-customer-otp-code" />
+                </div>
+              )}
+              <Button type="button" variant="outline" disabled={loading || otpCooldown > 0}
+                onClick={requestWhatsAppCode} className="w-full" data-testid="button-customer-send-otp">
+                {loading ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <MessageCircle className="ml-2 h-4 w-4" />}
+                {otpSent
+                  ? otpCooldown > 0 ? tc(`إعادة الإرسال بعد ${otpCooldown} ثانية`, `Resend in ${otpCooldown}s`) : tc("إعادة إرسال الرمز", "Resend code")
+                  : tc("إرسال الرمز عبر واتساب", "Send code via WhatsApp")}
+              </Button>
+              {otpSent && (
+                <Button type="submit" disabled={loading || otp.length !== 6} className="w-full" data-testid="button-customer-verify-otp">
+                  {tc("تأكيد الرمز والمتابعة", "Verify code and continue")}
+                </Button>
+              )}
+              <Button type="button" variant="ghost" className="w-full" onClick={() => setMode("choice")}>
+                {tc("العودة إلى خيارات الدخول", "Back to sign-in options")}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     );
   }

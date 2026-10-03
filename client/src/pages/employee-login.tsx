@@ -5,7 +5,7 @@ import { preCacheOnLogin } from "@/lib/offline-cashier";
 import { requestAndSubscribeEmployee } from "@/lib/push-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AtSign, Lock, Loader2, Eye, EyeOff, QrCode, Download, ArrowLeft } from "lucide-react";
+import { AtSign, Lock, Loader2, Eye, EyeOff, QrCode, Download, ArrowLeft, Phone, MessageCircle } from "lucide-react";
 import type { Employee } from "@shared/schema";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import blackroseLogoStaff from "@assets/blackrose-staff-logo.png";
@@ -91,6 +91,13 @@ export default function EmployeeLogin() {
   const tc = useTranslate();
   const [rememberMe, setRememberMe] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [authMethod, setAuthMethod] = useState<"whatsapp" | "password">("whatsapp");
+  const [otpPhone, setOtpPhone] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
+  const [otpNotice, setOtpNotice] = useState("");
 
   const animatedText = useTypingEffect([
     "QIROX STUDIO",
@@ -123,6 +130,22 @@ export default function EmployeeLogin() {
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
+  const completeEmployeeLogin = (employee: any) => {
+    if (employee.restoreKey) {
+      localStorage.setItem("qirox-restore-key", employee.restoreKey);
+      delete employee.restoreKey;
+    }
+    localStorage.setItem("currentEmployee", JSON.stringify(employee));
+    preCacheOnLogin().catch(() => {});
+    requestAndSubscribeEmployee(employee).catch(() => {});
+    const role = employee.role;
+    if (role === "admin") window.location.href = "/admin/dashboard";
+    else if (role === "owner") window.location.href = "/owner/dashboard";
+    else if (role === "manager" || role === "branch_manager") window.location.href = "/manager/dashboard";
+    else if (role === "cleaner") window.location.href = "/employee/attendance";
+    else window.location.href = "/employee/home";
+  };
+
   const loginMutation = useMutation({
     mutationFn: async (credentials: { username?: string; employeeId?: string; password?: string }) => {
       const isQRLogin = !!credentials.employeeId && !credentials.password;
@@ -137,21 +160,7 @@ export default function EmployeeLogin() {
       if (!response.ok) throw new Error(data?.error || tc("فشل تسجيل الدخول", "Login failed"));
       return data as Employee;
     },
-    onSuccess: (employee: any) => {
-      if (employee.restoreKey) {
-        localStorage.setItem("qirox-restore-key", employee.restoreKey);
-        delete employee.restoreKey;
-      }
-      localStorage.setItem("currentEmployee", JSON.stringify(employee));
-      preCacheOnLogin().catch(() => {});
-      requestAndSubscribeEmployee(employee).catch(() => {});
-      const role = employee.role;
-      if (role === "admin") window.location.href = "/admin/dashboard";
-      else if (role === "owner") window.location.href = "/owner/dashboard";
-      else if (role === "manager" || role === "branch_manager") window.location.href = "/manager/dashboard";
-      else if (role === "cleaner") window.location.href = "/employee/attendance";
-      else window.location.href = "/employee/home";
-    },
+    onSuccess: completeEmployeeLogin,
     onError: (err: any) => {
       setError(err?.message || tc("بيانات تسجيل الدخول غير صحيحة", "Invalid login credentials"));
       setPassword("");
@@ -167,6 +176,57 @@ export default function EmployeeLogin() {
     }
     loginMutation.mutate({ username: username.trim().toLowerCase(), password });
   };
+
+  const requestWhatsAppCode = async (event?: React.FormEvent) => {
+    event?.preventDefault();
+    setError("");
+    setOtpNotice("");
+    setOtpLoading(true);
+    try {
+      const response = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ userType: "employee", phone: otpPhone }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || tc("تعذر إرسال الرمز", "Could not send the code"));
+      setOtpSent(true);
+      setOtpCooldown(60);
+      setOtpNotice(data.message || tc("تحقق من واتساب", "Check WhatsApp for your code"));
+    } catch (error: any) {
+      setError(error.message || tc("تعذر إرسال الرمز", "Could not send the code"));
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const verifyWhatsAppCode = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError("");
+    setOtpLoading(true);
+    try {
+      const response = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ userType: "employee", phone: otpPhone, code: otpCode }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || tc("رمز التحقق غير صحيح", "Invalid verification code"));
+      completeEmployeeLogin({ ...data.user, restoreKey: data.restoreKey });
+    } catch (error: any) {
+      setError(error.message || tc("تعذر إكمال تسجيل الدخول", "Could not complete sign in"));
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = window.setTimeout(() => setOtpCooldown(seconds => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [otpCooldown]);
 
   useEffect(() => {
     if (!showQRScanner) return;
@@ -317,6 +377,86 @@ export default function EmployeeLogin() {
               </Button>
             </div>
           ) : (
+            authMethod === "whatsapp" ? (
+              <form onSubmit={otpSent ? verifyWhatsAppCode : requestWhatsAppCode} className="space-y-4">
+                <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-green-800">
+                    <MessageCircle className="h-4 w-4" />
+                    {tc("دخول الموظفين برمز واتساب", "Staff sign-in with WhatsApp")}
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-green-800/80">
+                    {tc("الحسابات غير النشطة تحتاج موافقة الإدارة أولاً. الرمز صالح لخمس دقائق.", "Inactive accounts need admin approval first. Codes expire after five minutes.")}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">{tc("رقم الجوال المسجل للموظف", "Employee phone number")}</label>
+                  <div className="relative">
+                    <Phone className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <Input
+                      type="tel"
+                      value={otpPhone}
+                      onChange={event => setOtpPhone(event.target.value)}
+                      placeholder="+966 5xxxxxxxx"
+                      dir="ltr"
+                      autoComplete="tel"
+                      disabled={otpSent || otpLoading}
+                      className="h-11 border-gray-200 bg-gray-50 pr-9 text-sm focus:bg-white"
+                      data-testid="input-employee-otp-phone"
+                    />
+                  </div>
+                </div>
+
+                {otpSent && (
+                  <>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700">{tc("رمز واتساب المكوّن من 6 أرقام", "6-digit WhatsApp code")}</label>
+                      <Input
+                        value={otpCode}
+                        onChange={event => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="000000"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        dir="ltr"
+                        className="h-12 border-gray-200 bg-gray-50 text-center text-lg tracking-[0.3em]"
+                        data-testid="input-employee-otp-code"
+                      />
+                    </div>
+                    {otpNotice && <p className="text-xs leading-5 text-gray-500">{otpNotice}</p>}
+                    <Button type="button" variant="ghost" disabled={otpLoading}
+                      onClick={() => { setOtpSent(false); setOtpCode(""); setOtpNotice(""); setError(""); }}>
+                      {tc("تغيير رقم الجوال", "Change phone number")}
+                    </Button>
+                    <Button type="button" variant="outline" disabled={otpLoading || otpCooldown > 0}
+                      onClick={() => requestWhatsAppCode()}>
+                      {otpCooldown > 0
+                        ? tc(`إعادة الإرسال بعد ${otpCooldown} ثانية`, `Resend in ${otpCooldown}s`)
+                        : tc("إعادة إرسال الرمز", "Resend code")}
+                    </Button>
+                  </>
+                )}
+
+                {error && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                    <p className="text-sm text-red-600" data-testid="text-error">{error}</p>
+                  </div>
+                )}
+
+                <Button type="submit" disabled={otpLoading || (otpSent && otpCode.length !== 6)}
+                  className="h-11 w-full rounded-xl font-bold text-sm" data-testid="button-whatsapp-otp">
+                  {otpLoading
+                    ? <><Loader2 className="ml-2 h-4 w-4 animate-spin" />{tc("جارٍ التحقق...", "Please wait...")}</>
+                    : otpSent ? tc("تأكيد الرمز والدخول", "Verify code and sign in") : tc("إرسال رمز واتساب", "Send WhatsApp code")}
+                </Button>
+
+                <div className="border-t border-gray-100 pt-3 text-center">
+                  <Button type="button" variant="ghost" onClick={() => { setAuthMethod("password"); setError(""); setOtpNotice(""); }}
+                    className="w-full text-sm text-gray-600" data-testid="button-password-alternative">
+                    {tc("الدخول ببيانات الحساب أو مسح البطاقة", "Use password or scan employee card")}
+                  </Button>
+                </div>
+              </form>
+            ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Username */}
               <div>
@@ -408,6 +548,12 @@ export default function EmployeeLogin() {
                 ) : tc("دخول", "Sign In")}
               </Button>
 
+              <Button type="button" variant="outline" onClick={() => { setAuthMethod("whatsapp"); setError(""); }}
+                className="w-full border-green-200 text-green-800 hover:bg-green-50" data-testid="button-whatsapp-alternative">
+                <MessageCircle className="ml-2 h-4 w-4" />
+                {tc("الدخول برمز واتساب", "Sign in with WhatsApp code")}
+              </Button>
+
               {/* Divider */}
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-px bg-gray-100" />
@@ -457,6 +603,7 @@ export default function EmployeeLogin() {
                 </Button>
               </div>
             </form>
+            )
           )}
 
           {/* Back */}

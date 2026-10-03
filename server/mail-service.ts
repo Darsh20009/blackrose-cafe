@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { sendQiroxEmail } from "./qirox-project-integrations";
 
 let transporter: any = null;
 let transporterInitialized = false;
@@ -103,10 +104,34 @@ export async function sendMail(opts: {
   html: string;
   text?: string;
 }): Promise<boolean> {
+  const recipients = Array.isArray(opts.to) ? opts.to : [opts.to];
+  if (process.env.QIROX_EMAIL_TOKEN && process.env.QIROX_PROJECT_ID) {
+    try {
+      const message = opts.text || opts.html
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/(p|div|tr|h[1-6])>/gi, "\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&amp;/gi, "&")
+        .replace(/&lt;/gi, "<")
+        .replace(/&gt;/gi, ">")
+        .replace(/&quot;/gi, '"')
+        .trim();
+      await Promise.all(recipients.map(email =>
+        sendQiroxEmail({ email: String(email).trim(), name: "" }, opts.subject, message),
+      ));
+      console.log(`✅ QIROX email delivered to ${recipients.length} recipient(s)`);
+      return true;
+    } catch {
+      console.error("[Mail] QIROX email delivery failed; refusing an untracked SMTP retry");
+      return false;
+    }
+  }
+
   const transport = await getTransporter();
   if (!transport) { console.warn("⚠️  No mail transport — skip."); return false; }
   try {
-    const toAddr = Array.isArray(opts.to) ? opts.to.join(",") : opts.to;
+    const toAddr = recipients.join(",");
     const { to: _ignoredTo, ...restOpts } = opts as any;
     const info = await transport.sendMail({ from: from(), to: toAddr, ...restOpts });
     console.log(`✅ Mail sent → ${toAddr} | ${info.messageId}`);

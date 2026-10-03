@@ -541,6 +541,7 @@ const apiLimiter = rateLimit({
 app.use("/api/employees/login", authLimiter);
 app.use("/api/customers/login", authLimiter);
 app.use("/api/customers/register", authLimiter);
+app.use("/api/auth/otp", authLimiter);
 app.use("/api", apiLimiter);
 
 // 3. Enable gzip compression

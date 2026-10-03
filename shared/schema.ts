@@ -662,6 +662,33 @@ PasswordSetupOTPSchema.index({ phone: 1 });
 
 export const PasswordSetupOTPModel = mongoose.model<IPasswordSetupOTP>("PasswordSetupOTP", PasswordSetupOTPSchema);
 
+export interface ILoginOTP extends Document {
+  phone: string;
+  userType: "employee" | "customer";
+  codeHash: string;
+  expiresAt: Date;
+  used: boolean;
+  attempts: number;
+  lastSentAt: Date;
+  createdAt: Date;
+}
+
+const LoginOTPSchema = new Schema<ILoginOTP>({
+  phone: { type: String, required: true },
+  userType: { type: String, enum: ["employee", "customer"], required: true },
+  codeHash: { type: String, required: true },
+  expiresAt: { type: Date, required: true },
+  used: { type: Boolean, default: false, required: true },
+  attempts: { type: Number, default: 0, required: true },
+  lastSentAt: { type: Date, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+
+LoginOTPSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+LoginOTPSchema.index({ phone: 1, userType: 1 }, { unique: true });
+
+export const LoginOTPModel = mongoose.model<ILoginOTP>("LoginOTP", LoginOTPSchema);
+
 // Multi-Tenant: Cafe Management
 export interface ICafe extends Document {
   id: string;
