@@ -14,7 +14,7 @@ import { customerStorage } from "@/lib/customer-storage";
 import { useCustomer } from "@/contexts/CustomerContext";
 import { useAuthModal } from "@/contexts/AuthModalContext";
 
-type Mode = "guest" | "login" | "register";
+type Mode = "guest" | "login" | "register" | "whatsapp";
 
 export default function CustomerAuthModal() {
   const { t, i18n } = useTranslation();
@@ -30,6 +30,9 @@ export default function CustomerAuthModal() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
 
   useEffect(() => {
     if (state.open) {
@@ -39,9 +42,18 @@ export default function CustomerAuthModal() {
       setEmail("");
       setPassword("");
       setShowPassword(false);
+      setOtpCode("");
+      setOtpSent(false);
+      setOtpCooldown(0);
       setLoading(false);
     }
   }, [state.open]);
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = window.setTimeout(() => setOtpCooldown(seconds => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [otpCooldown]);
 
   const validatePhone = (phone: string) => {
     const clean = phone.replace(/\s/g, "").trim();
@@ -118,6 +130,74 @@ export default function CustomerAuthModal() {
       toast({
         title: isAr ? "خطأ" : "Error",
         description: error.message || (isAr ? "بيانات الدخول غير صحيحة" : "Invalid credentials"),
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requestWhatsAppCode = async () => {
+    const phone = identifier.trim();
+    if (!phone) {
+      toast({
+        title: isAr ? "رقم الجوال مطلوب" : "Phone number required",
+        description: isAr ? "أدخل رقم الجوال المسجل في حسابك" : "Enter the phone number on your account",
+        variant: "destructive",
+      });
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ userType: "customer", phone, name }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || (isAr ? "تعذر إرسال الرمز" : "Could not send the code"));
+      setOtpSent(true);
+      setOtpCooldown(60);
+      toast({
+        title: isAr ? "تحقق من واتساب" : "Check WhatsApp",
+        description: data.message,
+      });
+    } catch (error: any) {
+      toast({
+        title: isAr ? "تعذر إرسال الرمز" : "Could not send the code",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleWhatsAppVerify = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoading(true);
+    try {
+      const response = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ userType: "customer", phone: identifier, code: otpCode, name }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || (isAr ? "رمز التحقق غير صحيح" : "Invalid verification code"));
+      setCustomer(data.user);
+      customerStorage.clearGuestInfo();
+      customerStorage.setGuestMode(false);
+      toast({
+        title: isAr ? "مرحباً بك!" : "Welcome!",
+        description: isAr ? `أهلاً ${data.user.name}` : `Hello ${data.user.name}`,
+      });
+      triggerSuccess();
+    } catch (error: any) {
+      toast({
+        title: isAr ? "تعذر تسجيل الدخول" : "Could not sign in",
+        description: error.message,
         variant: "destructive",
       });
     } finally {
@@ -261,6 +341,82 @@ export default function CustomerAuthModal() {
                 {loading
                   ? (isAr ? "جارٍ المتابعة..." : "Continuing...")
                   : (isAr ? "متابعة الطلب" : "Continue to Order")}
+              </Button>
+            </form>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => { setOtpSent(false); setOtpCode(""); setMode("whatsapp"); }}
+              data-testid="button-login-with-whatsapp-modal"
+            >
+              <MessageCircle className="w-4 h-4 ml-2" />
+              {isAr ? "الدخول برمز واتساب" : "Sign in with WhatsApp code"}
+            </Button>
+          </TabsContent>
+
+          <TabsContent value="whatsapp" className="space-y-4 mt-4">
+            <form onSubmit={handleWhatsAppVerify} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="otp-name-modal">{isAr ? "الاسم (للحساب الجديد)" : "Name (for new accounts)"}</Label>
+                <Input
+                  id="otp-name-modal"
+                  value={name}
+                  onChange={event => setName(event.target.value)}
+                  autoComplete="name"
+                  data-testid="input-otp-name-modal"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="otp-phone-modal" className="flex items-center gap-2">
+                  <Phone className="w-4 h-4" />
+                  {isAr ? "رقم الجوال" : "Phone number"}
+                </Label>
+                <Input
+                  id="otp-phone-modal"
+                  type="tel"
+                  value={identifier}
+                  onChange={event => setIdentifier(event.target.value)}
+                  placeholder="+966 5xxxxxxxx"
+                  dir="ltr"
+                  autoComplete="tel"
+                  disabled={otpSent || loading}
+                  data-testid="input-otp-phone-modal"
+                />
+              </div>
+              {otpSent && (
+                <div className="space-y-2">
+                  <Label htmlFor="otp-code-modal">{isAr ? "رمز واتساب" : "WhatsApp code"}</Label>
+                  <Input
+                    id="otp-code-modal"
+                    value={otpCode}
+                    onChange={event => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    dir="ltr"
+                    className="text-center text-lg tracking-[0.3em]"
+                    data-testid="input-otp-code-modal"
+                  />
+                </div>
+              )}
+              <Button type="button" variant="outline" className="w-full" disabled={loading || otpCooldown > 0}
+                onClick={requestWhatsAppCode} data-testid="button-send-otp-modal">
+                <MessageCircle className="w-4 h-4 ml-2" />
+                {otpSent
+                  ? otpCooldown > 0
+                    ? (isAr ? `إعادة الإرسال بعد ${otpCooldown} ثانية` : `Resend in ${otpCooldown}s`)
+                    : (isAr ? "إعادة إرسال الرمز" : "Resend code")
+                  : (isAr ? "إرسال الرمز عبر واتساب" : "Send WhatsApp code")}
+              </Button>
+              {otpSent && (
+                <Button type="submit" className="w-full" disabled={loading || otpCode.length !== 6}
+                  data-testid="button-verify-otp-modal">
+                  {isAr ? "تأكيد الرمز والمتابعة" : "Verify code and continue"}
+                </Button>
+              )}
+              <Button type="button" variant="ghost" className="w-full" onClick={() => setMode("login")}>
+                {isAr ? "العودة إلى كلمة المرور" : "Back to password login"}
               </Button>
             </form>
           </TabsContent>
