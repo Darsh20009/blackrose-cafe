@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PhoneInput } from "@/components/phone-input";
 import { SmartIdentifierInput } from "@/components/smart-identifier-input";
+import { InternationalPhoneInput } from "@/components/international-phone-input";
 import { Phone, User, Lock, Mail, Eye, EyeOff, ShoppingBag, LogIn, UserPlus, MessageCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -373,14 +374,11 @@ export default function CustomerAuthModal() {
                   <Phone className="w-4 h-4" />
                   {isAr ? "رقم الجوال" : "Phone number"}
                 </Label>
-                <Input
+                <InternationalPhoneInput
                   id="otp-phone-modal"
-                  type="tel"
                   value={identifier}
-                  onChange={event => setIdentifier(event.target.value)}
-                  placeholder="+966 5xxxxxxxx"
-                  dir="ltr"
-                  autoComplete="tel"
+                  onChange={setIdentifier}
+                  placeholder={isAr ? "رقم الجوال" : "Phone number"}
                   disabled={otpSent || loading}
                   data-testid="input-otp-phone-modal"
                 />

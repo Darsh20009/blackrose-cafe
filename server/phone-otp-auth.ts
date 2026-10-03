@@ -1,24 +1,30 @@
 import crypto from "crypto";
 import type { Express } from "express";
+import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { CustomerModel, EmployeeModel, LoginOTPModel } from "@shared/schema";
 import { sendQiroxWhatsAppCode } from "./qirox-project-integrations";
 
 type UserType = "employee" | "customer";
 
-function normalizeSaudiPhone(value: unknown): string | null {
-  let phone = String(value ?? "")
+function normalizePhone(value: unknown): string | null {
+  let input = String(value ?? "")
     .replace(/[٠-٩]/g, digit => String(digit.charCodeAt(0) - 0x0660))
     .replace(/[۰-۹]/g, digit => String(digit.charCodeAt(0) - 0x06f0))
-    .replace(/\D/g, "");
+    .trim();
 
-  if (phone.startsWith("00966")) phone = phone.slice(5);
-  else if (phone.startsWith("966")) phone = phone.slice(3);
-  if (phone.startsWith("0")) phone = phone.slice(1);
-  return /^5\d{8}$/.test(phone) ? phone : null;
+  if (input.startsWith("00")) input = `+${input.slice(2).replace(/\D/g, "")}`;
+  const parsed = parsePhoneNumberFromString(input, "SA");
+  return parsed?.isValid() ? parsed.number : null;
 }
 
-function phoneAliases(phone: string) {
-  return [phone, `0${phone}`, `966${phone}`, `+966${phone}`];
+function phoneAliases(e164Phone: string) {
+  const aliases = new Set([e164Phone, e164Phone.slice(1), `00${e164Phone.slice(1)}`]);
+  const parsed = parsePhoneNumberFromString(e164Phone);
+  if (parsed?.country === "SA") {
+    aliases.add(parsed.nationalNumber);
+    aliases.add(`0${parsed.nationalNumber}`);
+  }
+  return [...aliases];
 }
 
 function hashOtp(userType: UserType, phone: string, code: string) {
@@ -53,9 +59,9 @@ export function registerPhoneOtpAuthRoutes(app: Express) {
   app.post("/api/auth/otp/request", async (req, res) => {
     try {
       const userType = req.body?.userType as UserType;
-      const phone = normalizeSaudiPhone(req.body?.phone);
+      const phone = normalizePhone(req.body?.phone);
       if (!phone || !["employee", "customer"].includes(userType)) {
-        return res.status(400).json({ error: "أدخل رقم جوال سعودي صحيحاً واختر نوع الحساب" });
+        return res.status(400).json({ error: "أدخل رقم جوال صحيحاً مع اختيار مفتاح البلد" });
       }
 
       const employee = userType === "employee" ? await findEmployee(phone) : null;
@@ -110,7 +116,7 @@ export function registerPhoneOtpAuthRoutes(app: Express) {
       try {
         await sendQiroxWhatsAppCode(
           {
-            phone: `+966${phone}`,
+            phone,
             name: employee?.fullName || customer?.name || String(req.body?.name || "").trim() || "عميل",
           },
           code,
@@ -136,7 +142,7 @@ export function registerPhoneOtpAuthRoutes(app: Express) {
   app.post("/api/auth/otp/verify", async (req, res) => {
     try {
       const userType = req.body?.userType as UserType;
-      const phone = normalizeSaudiPhone(req.body?.phone);
+      const phone = normalizePhone(req.body?.phone);
       const code = String(req.body?.code || "").trim();
       if (!phone || !["employee", "customer"].includes(userType) || !/^\d{6}$/.test(code)) {
         return res.status(400).json({ error: "تحقق من رقم الجوال ورمز التحقق المكوّن من 6 أرقام" });

@@ -9,6 +9,7 @@ import blackroseLogo from "@assets/blackrose-logo.png";
 import { customerStorage } from "@/lib/customer-storage";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslate } from "@/lib/useTranslate";
+import { InternationalPhoneInput } from "@/components/international-phone-input";
 
 type Mode = 'choice' | 'quick' | 'whatsapp';
 
@@ -199,10 +200,15 @@ export default function CustomerLogin() {
                   placeholder={tc("اسمك", "Your name")} autoComplete="name" data-testid="input-customer-otp-name" />
               </div>
               <div>
-                <Label htmlFor="otp-phone" className="mb-1.5 block">{tc("رقم الجوال السعودي", "Saudi mobile number")}</Label>
-                <Input id="otp-phone" type="tel" value={phone} onChange={event => setPhone(event.target.value)}
-                  placeholder="05xxxxxxxx أو +9665xxxxxxxx" dir="ltr" autoComplete="tel" disabled={otpSent}
-                  data-testid="input-customer-otp-phone" />
+                <Label htmlFor="otp-phone" className="mb-1.5 block">{tc("رقم الجوال", "Phone number")}</Label>
+                <InternationalPhoneInput
+                  id="otp-phone"
+                  value={phone}
+                  onChange={setPhone}
+                  placeholder={tc("رقم الجوال", "Phone number")}
+                  disabled={otpSent}
+                  data-testid="input-customer-otp-phone"
+                />
               </div>
               {otpSent && (
                 <div>

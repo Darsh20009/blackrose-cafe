@@ -24458,17 +24458,10 @@ ${revenueLines}
   // GET /api/mapkit/token — signs a fresh MapKit JS JWT (valid 1 hour, no origin restriction)
   // Uses APNS_P8_KEY with kid=APNS_KEY_ID (key has Maps + APNs services in Apple Developer).
   // No "origin" claim → works on any domain (dev + production).
-  // Falls back to VITE_MAPKIT_TOKEN if the APNS secrets are not set.
+  // Falls back to a pre-signed token only when signing credentials are not configured.
   app.get("/api/mapkit/token", (_req, res) => {
     try {
-      // Priority 1: static pre-signed token — most reliable
-      const staticToken = process.env.MAPKIT_TOKEN_STATIC || process.env.VITE_MAPKIT_TOKEN;
-      if (staticToken) {
-        res.set("Cache-Control", "public, max-age=3600");
-        return res.json({ token: staticToken });
-      }
-
-      // Priority 2: dynamic signing using MapKit private key
+      // Prefer dynamic signing so the token is valid for the current preview/production origin.
       const keyId  = process.env.MAPKIT_KEY_ID  || process.env.APNS_KEY_ID;
       const teamId = process.env.MAPKIT_TEAM_ID || process.env.APNS_TEAM_ID;
       const rawKey = process.env.MAPKIT_PRIVATE_KEY || process.env.APNS_P8_KEY;
@@ -24500,6 +24493,13 @@ ${revenueLines}
         const sig = sign.sign({ key: privateKey, dsaEncoding: "ieee-p1363" }).toString("base64url");
         res.set("Cache-Control", "private, max-age=86400");
         return res.json({ token: `${sigInput}.${sig}` });
+      }
+
+      // A static token may be restricted to an older domain; use it only as a fallback.
+      const staticToken = process.env.MAPKIT_TOKEN_STATIC || process.env.VITE_MAPKIT_TOKEN;
+      if (staticToken) {
+        res.set("Cache-Control", "public, max-age=3600");
+        return res.json({ token: staticToken });
       }
 
       res.status(503).json({ error: "MapKit token not configured" });

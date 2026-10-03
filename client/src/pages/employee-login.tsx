@@ -13,6 +13,7 @@ import qiroxLogo from "@assets/qirox-logo.png";
 import qiroxLogoStaff from "@assets/qirox-logo-staff.png";
 import { useTranslate } from "@/lib/useTranslate";
 import { brand } from "@/lib/brand";
+import { InternationalPhoneInput } from "@/components/international-phone-input";
 
 function useAutoRedirectIfLoggedIn() {
   const [, setLocation] = useLocation();
@@ -391,20 +392,13 @@ export default function EmployeeLogin() {
 
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">{tc("رقم الجوال المسجل للموظف", "Employee phone number")}</label>
-                  <div className="relative">
-                    <Phone className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                    <Input
-                      type="tel"
-                      value={otpPhone}
-                      onChange={event => setOtpPhone(event.target.value)}
-                      placeholder="+966 5xxxxxxxx"
-                      dir="ltr"
-                      autoComplete="tel"
-                      disabled={otpSent || otpLoading}
-                      className="h-11 border-gray-200 bg-gray-50 pr-9 text-sm focus:bg-white"
-                      data-testid="input-employee-otp-phone"
-                    />
-                  </div>
+                  <InternationalPhoneInput
+                    value={otpPhone}
+                    onChange={setOtpPhone}
+                    placeholder={tc("رقم الجوال", "Phone number")}
+                    disabled={otpSent || otpLoading}
+                    data-testid="input-employee-otp-phone"
+                  />
                 </div>
 
                 {otpSent && (

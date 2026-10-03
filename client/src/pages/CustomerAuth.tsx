@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PhoneInput } from "@/components/phone-input";
 import { SmartIdentifierInput } from "@/components/smart-identifier-input";
+import { InternationalPhoneInput } from "@/components/international-phone-input";
 import { Phone, User, Lock, Mail, Eye, EyeOff, Zap, MessageCircle, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -105,7 +106,7 @@ export default function CustomerAuth() {
     if (!identifier.trim()) {
       toast({
         title: i18n.language === "ar" ? "رقم الجوال مطلوب" : "Phone number required",
-        description: i18n.language === "ar" ? "أدخل رقم الجوال السعودي" : "Enter your Saudi phone number",
+        description: i18n.language === "ar" ? "اختر مفتاح الدولة وأدخل رقم الجوال" : "Choose a country code and enter your phone number",
         variant: "destructive",
       });
       return;
@@ -316,16 +317,13 @@ export default function CustomerAuth() {
                 <div className="space-y-2">
                   <Label htmlFor="otp-phone" className="flex items-center gap-2">
                     <Phone className="h-4 w-4" />
-                    {i18n.language === 'ar' ? "رقم الجوال السعودي" : "Saudi phone number"}
+                    {i18n.language === 'ar' ? "رقم الجوال" : "Phone number"}
                   </Label>
-                  <Input
+                  <InternationalPhoneInput
                     id="otp-phone"
-                    type="tel"
                     value={identifier}
-                    onChange={event => setIdentifier(event.target.value)}
-                    placeholder="05xxxxxxxx أو +9665xxxxxxxx"
-                    dir="ltr"
-                    autoComplete="tel"
+                    onChange={setIdentifier}
+                    placeholder={i18n.language === "ar" ? "رقم الجوال" : "Phone number"}
                     disabled={otpSent || loading}
                     data-testid="input-customer-otp-phone"
                   />

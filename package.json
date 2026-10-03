@@ -86,6 +86,7 @@
     "input-otp": "^1.4.2",
     "jsbarcode": "^3.12.1",
     "leaflet": "^1.9.4",
+    "libphonenumber-js": "^1.13.14",
     "lucide-react": "^0.453.0",
     "memorystore": "^1.6.7",
     "mongoose": "^8.19.3",
