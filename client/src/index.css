@@ -144,8 +144,9 @@ a, button, input, select, textarea, label, [role="button"] {
   --sidebar-accent-foreground: 0 0% 0%;
   --sidebar-ring: 0 0% 20%;
 
-  /* Primary - QIROX Purple (Foodics-style UI) */
-  --primary: 262 83% 58%;
+  /* Primary - deep crimson */
+  --primary: 343 80% 35%;
+  --primary-light: 347 77% 50%;
   --primary-foreground: 0 0% 100%;
 
   /* Secondary - Neutral Grey */
@@ -258,17 +259,17 @@ a, button, input, select, textarea, label, [role="button"] {
   --sidebar: 180 40% 12%; /* Deep teal sidebar */
   --sidebar-foreground: 0 0% 92%; /* Light text */
   --sidebar-border: 180 35% 16%; /* Dark border */
-  --sidebar-primary: 160 55% 50%; /* Bright green */
+  --sidebar-primary: 343 80% 35%; /* Deep crimson */
   --sidebar-primary-foreground: 0 0% 100%; /* White text */
   --sidebar-accent: 180 30% 20%; /* Elevated accent */
   --sidebar-accent-foreground: 0 0% 90%; /* Light text */
-  --sidebar-ring: 160 55% 50%; /* Green ring */
+  --sidebar-ring: 343 80% 35%; /* Crimson ring */
 
   --popover: 220 22% 14%; /* Card surface */
   --popover-foreground: 0 0% 92%; /* Light text */
   --popover-border: 220 18% 20%; /* Border */
 
-  --primary: 160 55% 48%; /* Bright teal green */
+  --primary: 343 80% 35%; /* Deep crimson */
   --primary-foreground: 0 0% 100%; /* White text */
 
   --secondary: 220 18% 20%; /* Dark secondary */

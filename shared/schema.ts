@@ -837,6 +837,7 @@ export interface IBusinessConfig extends Document {
   tenantId: string;
   tradeNameAr: string;
   tradeNameEn?: string;
+  brandPrimaryColor?: string;
   activityType: 'cafe' | 'restaurant' | 'both';
   isFoodEnabled: boolean;
   isDrinksEnabled: boolean;
@@ -926,6 +927,7 @@ const BusinessConfigSchema = new Schema<IBusinessConfig>({
   tenantId: { type: String, required: true, unique: true },
   tradeNameAr: { type: String, required: true },
   tradeNameEn: { type: String },
+  brandPrimaryColor: { type: String, default: '#9f1239' },
   activityType: { type: String, enum: ['cafe', 'restaurant', 'both'], default: 'cafe' },
   isFoodEnabled: { type: Boolean, default: false },
   isDrinksEnabled: { type: Boolean, default: true },

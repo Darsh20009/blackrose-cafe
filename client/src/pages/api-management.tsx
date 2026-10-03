@@ -77,7 +77,7 @@ const APPS: AppDefinition[] = [
     id: "analytics", name: "Advanced Analytics", nameAr: "التحليلات المتقدمة",
     description: "Deep business intelligence with revenue trends, customer behavior, and AI-powered insights.",
     descriptionAr: "ذكاء اصطناعي تجاري متقدم مع اتجاهات الإيرادات وسلوك العملاء.",
-    category: "analytics", icon: BarChart3, iconBg: "bg-purple-50", iconColor: "text-purple-600",
+    category: "analytics", icon: BarChart3, iconBg: "bg-red-50", iconColor: "text-red-700",
     rating: 4.9, installs: "2.9k", status: "installed", featured: true,
   },
   {
@@ -226,21 +226,21 @@ export default function ApiManagementPage() {
 
       {/* ── Store Hero Header ── */}
       <div className="relative overflow-hidden"
-        style={{ background: "linear-gradient(135deg, #0a0a14 0%, #130d2e 60%, #0d0d1a 100%)" }}>
+        style={{ background: "#0d0d0f" }}>
         <div className="absolute inset-0 opacity-[0.05]"
           style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "32px 32px" }} />
         <div className="absolute top-0 right-0 w-72 h-72 rounded-full opacity-20 blur-3xl"
-          style={{ background: "hsl(262 83% 58%)", transform: "translate(30%,-30%)" }} />
+          style={{ background: "hsl(var(--primary-light))", transform: "translate(30%,-30%)" }} />
 
         <div className="relative px-6 py-10 max-w-6xl mx-auto">
           <div className="flex items-start justify-between gap-6">
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-                  style={{ background: "hsl(262 83% 58%)" }}>
+                  style={{ background: "hsl(var(--primary))" }}>
                   <Store className="w-4 h-4 text-white" />
                 </div>
-                <span className="text-purple-300 text-sm font-medium">QIROX App Store</span>
+                <span className="text-rose-300 text-sm font-medium">QIROX App Store</span>
               </div>
               <h1 className="text-3xl font-black text-white mb-2">
                 {tc("متجر التطبيقات", "App Marketplace")}
@@ -275,8 +275,8 @@ export default function ApiManagementPage() {
                 <span className="text-white/30 text-xl">/{APPS.length}</span>
               </div>
               <div className="flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                <span className="text-purple-300 text-xs">{tc("نظام متكامل", "Fully integrated")}</span>
+                <Sparkles className="w-3.5 h-3.5 text-rose-400" />
+                <span className="text-rose-300 text-xs">{tc("نظام متكامل", "Fully integrated")}</span>
               </div>
             </div>
           </div>
@@ -292,13 +292,13 @@ export default function ApiManagementPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                    <Key className="w-4 h-4 text-purple-600" />
+                    <Key className="w-4 h-4 text-primary" />
                     {tc("مفاتيح API", "API Keys")}
                   </h3>
                   <p className="text-xs text-gray-500 mt-0.5">{tc("استخدمها للوصول لـ API النظام من تطبيقاتك الخارجية", "Use to access system API from external apps")}</p>
                 </div>
                 <Button onClick={() => setIsCreateOpen(true)} size="sm"
-                  className="text-xs" style={{ background: "hsl(262 83% 58%)" }}>
+                  className="text-xs" style={{ background: "hsl(var(--primary))" }}>
                   <Plus className="w-3.5 h-3.5 ml-1.5" />
                   {tc("مفتاح جديد", "New Key")}
                 </Button>
@@ -357,7 +357,7 @@ export default function ApiManagementPage() {
               className={cn(
                 "shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-all border",
                 category === cat.id
-                  ? "border-purple-600 text-purple-700 bg-purple-50"
+                  ? "border-primary text-primary bg-red-50"
                   : "border-gray-200 text-gray-600 hover:border-gray-300 bg-white"
               )}
             >
@@ -370,7 +370,7 @@ export default function ApiManagementPage() {
         {featured.length > 0 && (
           <div className="mb-8">
             <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="w-4 h-4 text-purple-600" />
+              <Sparkles className="w-4 h-4 text-primary" />
               <h2 className="font-bold text-gray-900">{tc("مميزة", "Featured")}</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -381,7 +381,7 @@ export default function ApiManagementPage() {
                   <div key={app.id}
                     className="relative rounded-2xl border border-gray-100 bg-white shadow-sm hover:shadow-md transition-all overflow-hidden cursor-pointer group">
                     <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl"
-                      style={{ background: "linear-gradient(90deg, hsl(262 83% 58%), hsl(262 83% 75%))" }} />
+                      style={{ background: "hsl(var(--primary))" }} />
                     <div className="p-5 flex gap-4">
                       <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center shrink-0", app.iconBg)}>
                         <Icon className={cn("w-7 h-7", app.iconColor)} />
@@ -392,7 +392,7 @@ export default function ApiManagementPage() {
                             <div className="flex items-center gap-2">
                               <h3 className="font-bold text-gray-900 text-sm">{app.nameAr}</h3>
                               {app.badge && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">{app.badge}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">{app.badge}</span>
                               )}
                             </div>
                             <p className="text-[11px] text-gray-400 mt-0.5">{app.name}</p>
@@ -420,7 +420,7 @@ export default function ApiManagementPage() {
                       )}
                       {app.status === "available" && (
                         <Button size="sm" className="flex-1 h-8 text-xs rounded-lg"
-                          style={{ background: "hsl(262 83% 58%)" }}>
+                          style={{ background: "hsl(var(--primary))" }}>
                           <Download className="w-3.5 h-3.5 ml-1.5" />
                           {tc("تثبيت", "Install")}
                         </Button>
@@ -470,7 +470,7 @@ export default function ApiManagementPage() {
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <h3 className="font-bold text-gray-900 text-sm">{app.nameAr}</h3>
                           {app.badge && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">{app.badge}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">{app.badge}</span>
                           )}
                         </div>
                         <p className="text-[10px] text-gray-400">{app.name}</p>
@@ -494,7 +494,7 @@ export default function ApiManagementPage() {
                         </button>
                       )}
                       {app.status === "available" && (
-                        <button className="text-[10px] text-purple-600 flex items-center gap-1 font-medium hover:underline">
+                        <button className="text-[10px] text-primary flex items-center gap-1 font-medium hover:underline">
                           {tc("تثبيت", "Install")} <ChevronRight className="w-3 h-3" />
                         </button>
                       )}
@@ -516,14 +516,14 @@ export default function ApiManagementPage() {
 
         {/* ── API Docs Banner ── */}
         <div className="mt-8 rounded-2xl overflow-hidden relative"
-          style={{ background: "linear-gradient(135deg, #0a0a14, #130d2e)" }}>
+          style={{ background: "#0d0d0f" }}>
           <div className="absolute inset-0 opacity-[0.05]"
             style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "24px 24px" }} />
           <div className="relative p-6 flex items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <Code2 className="w-4 h-4 text-purple-400" />
-                <span className="text-purple-300 text-sm font-medium">QIROX Developer API</span>
+                <Code2 className="w-4 h-4 text-rose-400" />
+                <span className="text-rose-300 text-sm font-medium">QIROX Developer API</span>
               </div>
               <h3 className="text-white font-bold text-lg">{tc("وثائق API للمطورين", "Developer API Documentation")}</h3>
               <p className="text-white/50 text-xs mt-1">{tc("أنشئ تطبيقات مخصصة باستخدام REST API الخاص بنظام QIROX", "Build custom apps with the QIROX REST API")}</p>
@@ -544,7 +544,7 @@ export default function ApiManagementPage() {
         <DialogContent dir="rtl" className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Key className="w-4 h-4 text-purple-600" />
+              <Key className="w-4 h-4 text-primary" />
               {tc("إنشاء مفتاح API جديد", "Create New API Key")}
             </DialogTitle>
           </DialogHeader>
@@ -562,7 +562,7 @@ export default function ApiManagementPage() {
             </Button>
             <Button onClick={() => createKeyMutation.mutate(newKeyName)}
               disabled={!newKeyName.trim() || createKeyMutation.isPending}
-              className="flex-1" style={{ background: "hsl(262 83% 58%)" }}>
+              className="flex-1" style={{ background: "hsl(var(--primary))" }}>
               {createKeyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : tc("إنشاء", "Create")}
             </Button>
           </DialogFooter>

@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
-import { applyBrandColors } from "./lib/brand";
+import { applyBrandColors, applyPrimaryColor } from "./lib/brand";
 import { installRiyalSymbol } from "./lib/riyal-symbol";
 
 // ── One-time global storage wipe ──────────────────────────────────────────
@@ -73,40 +73,14 @@ const CLIENT_RESET_VERSION = "2026-04-21-v2-logo";
   } catch {}
 })();
 
-// Apply brand colors — first from saved cafe branding, then from brand.ts defaults
-function applyInitialBranding() {
-  try {
-    const saved = localStorage.getItem("cafe-branding");
-    if (saved) {
-      const data = JSON.parse(saved);
-      if (data.primaryColor) {
-        // Convert hex to HSL for CSS variable
-        const hex = data.primaryColor;
-        const r = parseInt(hex.slice(1, 3), 16) / 255;
-        const g = parseInt(hex.slice(3, 5), 16) / 255;
-        const b = parseInt(hex.slice(5, 7), 16) / 255;
-        const max = Math.max(r, g, b), min = Math.min(r, g, b);
-        let h = 0, s = 0;
-        const l = (max + min) / 2;
-        if (max !== min) {
-          const d = max - min;
-          s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-          switch (max) {
-            case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
-            case g: h = ((b - r) / d + 2) / 6; break;
-            case b: h = ((r - g) / d + 4) / 6; break;
-          }
-        }
-        const hsl = `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
-        document.documentElement.style.setProperty("--primary", hsl);
-        document.documentElement.style.setProperty("--ring", hsl);
-        return;
-      }
-    }
-  } catch {}
-  applyBrandColors();
-}
-applyInitialBranding();
+// Use the shared server-side color so every browser gets the same theme.
+applyBrandColors();
+fetch("/api/public/settings", { credentials: "include" })
+  .then((response) => response.ok ? response.json() : null)
+  .then((settings) => {
+    if (settings?.brandPrimaryColor) applyPrimaryColor(settings.brandPrimaryColor);
+  })
+  .catch(() => {});
 
 // Start Error Logger — captures all JS errors, promise rejections, and API errors
 import("./lib/error-logger").then(({ errorLogger }) => {

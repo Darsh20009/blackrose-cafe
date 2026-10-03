@@ -261,13 +261,13 @@ export default function EmployeeLogin() {
           RIGHT PANEL — Brand / Animation (desktop/iPad)
       ══════════════════════════════════════════════ */}
       <div className="hidden lg:flex flex-col items-center justify-center relative w-[55%] overflow-hidden"
-        style={{ background: "linear-gradient(135deg, #0a0a14 0%, #130d2e 40%, #0d0d1a 100%)" }}>
+        style={{ background: "#0d0d0f" }}>
 
         {/* Glowing background orbs */}
-        <GlowOrb x="10%" y="15%" size={320} color="hsl(262 83% 58%)" delay={0} />
-        <GlowOrb x="60%" y="60%" size={280} color="hsl(262 83% 38%)" delay={1.5} />
-        <GlowOrb x="5%" y="65%" size={200} color="#3b1f6e" delay={0.8} />
-        <GlowOrb x="70%" y="5%" size={180} color="hsl(262 83% 50%)" delay={2} />
+        <GlowOrb x="10%" y="15%" size={320} color="hsl(var(--primary-light))" delay={0} />
+        <GlowOrb x="60%" y="60%" size={280} color="hsl(var(--primary))" delay={1.5} />
+        <GlowOrb x="5%" y="65%" size={200} color="#5a1024" delay={0.8} />
+        <GlowOrb x="70%" y="5%" size={180} color="hsl(var(--primary-light))" delay={2} />
 
         {/* Grid pattern overlay */}
         <div className="absolute inset-0 opacity-[0.04]"
@@ -292,32 +292,32 @@ export default function EmployeeLogin() {
           {/* QIROX Logo */}
           <div className="mb-8 relative">
             <div className="w-24 h-24 rounded-2xl flex items-center justify-center relative"
-              style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(109,40,217,0.2))", border: "1px solid rgba(139,92,246,0.4)" }}>
+              style={{ background: "hsl(var(--primary) / 0.25)", border: "1px solid hsl(var(--primary) / 0.4)" }}>
               <div className="absolute inset-0 rounded-2xl blur-xl opacity-40"
-                style={{ background: "hsl(262 83% 58%)" }} />
+                style={{ background: "hsl(var(--primary-light))" }} />
               <img src={qiroxLogoStaff} alt="QIROX" className="w-14 h-14 object-contain relative z-10" />
             </div>
             {/* Ring glow */}
             <div className="absolute -inset-3 rounded-3xl opacity-20 blur-lg"
-              style={{ background: "hsl(262 83% 58%)" }} />
+              style={{ background: "hsl(var(--primary-light))" }} />
           </div>
 
           {/* Animated brand text */}
           <div className="mb-3 h-12 flex items-center">
             <h1 className="text-3xl font-black tracking-widest text-white drop-shadow-lg">
               {animatedText}
-              <span className="inline-block w-[2px] h-8 bg-purple-400 mr-1 align-middle animate-pulse" />
+              <span className="inline-block w-[2px] h-8 bg-rose-400 mr-1 align-middle animate-pulse" />
             </h1>
           </div>
 
           {/* Static subtitle */}
-          <p className="text-purple-300/70 text-sm font-light tracking-wider mb-10 uppercase">
+          <p className="text-rose-300/70 text-sm font-light tracking-wider mb-10 uppercase">
             Staff Portal · بوابة الموظفين
           </p>
 
           {/* Café brand section */}
           <div className="flex flex-col items-center gap-3">
-            <div className="h-px w-32 bg-gradient-to-r from-transparent via-purple-500/50 to-transparent" />
+            <div className="h-px w-32 bg-gradient-to-r from-transparent via-rose-500/50 to-transparent" />
             <div className="flex items-center gap-3 px-6 py-3 rounded-xl"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
               <img src={blackroseLogoStaff} alt={brand.platformNameEn}
@@ -327,7 +327,7 @@ export default function EmployeeLogin() {
                 <p className="text-white/40 text-[10px] mt-0.5">{brand.platformNameEn}</p>
               </div>
             </div>
-            <div className="h-px w-32 bg-gradient-to-r from-transparent via-purple-500/50 to-transparent" />
+            <div className="h-px w-32 bg-gradient-to-r from-transparent via-rose-500/50 to-transparent" />
           </div>
 
           {/* Bottom tagline */}
@@ -345,7 +345,7 @@ export default function EmployeeLogin() {
         {/* Mobile-only brand header */}
         <div className="lg:hidden flex flex-col items-center mb-8">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-            style={{ background: "linear-gradient(135deg, hsl(262 83% 58%), hsl(262 83% 40%))" }}>
+            style={{ background: "hsl(var(--primary))" }}>
             <img src={qiroxLogoStaff} alt="QIROX" className="w-10 h-10 object-contain" />
           </div>
           <h1 className="text-lg font-black text-gray-900">QIROX STUDIO</h1>
@@ -482,7 +482,7 @@ export default function EmployeeLogin() {
                   <button
                     type="button"
                     onClick={() => setLocation("/employee/forgot-password")}
-                    className="text-xs text-purple-600 hover:underline"
+                    className="text-xs text-primary hover:underline"
                     data-testid="link-forgot-password"
                   >
                     {tc("نسيت كلمة المرور؟", "Forgot password?")}
@@ -517,7 +517,8 @@ export default function EmployeeLogin() {
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 accent-purple-600"
+                  className="w-4 h-4 rounded border-gray-300"
+                  style={{ accentColor: "hsl(var(--primary))" }}
                 />
                 <span className="text-sm text-gray-600">{tc("تذكرني", "Remember me")}</span>
               </label>
@@ -534,7 +535,7 @@ export default function EmployeeLogin() {
                 type="submit"
                 disabled={loginMutation.isPending}
                 className="w-full h-11 font-bold text-sm rounded-xl"
-                style={{ background: "linear-gradient(135deg, hsl(262 83% 58%), hsl(262 83% 45%))" }}
+                style={{ background: "hsl(var(--primary))" }}
                 data-testid="button-login"
               >
                 {loginMutation.isPending ? (
@@ -559,7 +560,7 @@ export default function EmployeeLogin() {
               <div className="space-y-2">
                 <Button type="button" variant="outline" onClick={() => { setError(""); setShowQRScanner(true); }}
                   className="w-full border-gray-200 text-gray-700 text-sm h-10 rounded-xl" data-testid="button-scan-qr">
-                  <QrCode className="w-4 h-4 ml-2 text-purple-600" />
+                  <QrCode className="w-4 h-4 ml-2 text-primary" />
                   {tc("مسح بطاقة الموظف", "Scan Employee Card")}
                 </Button>
                 <Button type="button" variant="outline"
@@ -575,7 +576,7 @@ export default function EmployeeLogin() {
                 <p className="text-xs text-gray-400 text-center mb-2">{tc("موظف جديد؟", "New employee?")}</p>
                 <Button type="button" variant="ghost"
                   onClick={() => setLocation("/employee/activate")}
-                  className="w-full text-purple-600 hover:bg-purple-50 text-sm h-9 rounded-xl" data-testid="button-activate">
+                  className="w-full text-primary hover:bg-rose-50 text-sm h-9 rounded-xl" data-testid="button-activate">
                   {tc("تفعيل حساب جديد", "Activate New Account")}
                 </Button>
                 <Button type="button" variant="ghost" onClick={async () => {
@@ -603,7 +604,7 @@ export default function EmployeeLogin() {
           {/* Back */}
           <div className="mt-6 text-center space-y-3">
             <button onClick={() => setLocation("/employee/gateway")}
-              className="flex items-center justify-center gap-2 text-sm text-gray-400 hover:text-purple-600 transition-colors mx-auto"
+              className="flex items-center justify-center gap-2 text-sm text-gray-400 hover:text-primary transition-colors mx-auto"
               data-testid="link-back">
               <ArrowLeft className="w-3.5 h-3.5" />
               {tc("رجوع للبوابة الرئيسية", "Back to Gateway")}

@@ -1831,12 +1831,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Public settings alias — returns a subset of business-config safe for unauthenticated use
   app.get("/api/public/settings", async (req, res) => {
     try {
-      const tenantId = getTenantIdFromRequest(req) || "demo-tenant";
+      const tenantId = (req as any).session?.employee?.tenantId || getTenantIdFromRequest(req) || "demo-tenant";
       const config = await BusinessConfigModel.findOne({ tenantId }).lean();
-      if (!config) return res.json({});
+      if (!config) return res.json({ brandPrimaryColor: "#9f1239" });
       res.json({
         tradeNameAr: (config as any).tradeNameAr,
         tradeNameEn: (config as any).tradeNameEn,
+        brandPrimaryColor: (config as any).brandPrimaryColor || "#9f1239",
         currency: (config as any).currency || 'SAR',
         vatPercentage: (config as any).vatPercentage || 15,
         isEmergencyClosed: (config as any).isEmergencyClosed || false,
@@ -1849,6 +1850,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching public settings:", error);
       res.status(500).json({ error: "Failed to fetch public settings" });
+    }
+  });
+
+  app.patch("/api/business-config/branding", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const primaryColor = req.body?.primaryColor;
+      if (typeof primaryColor !== "string" || !/^#[0-9a-f]{6}$/i.test(primaryColor)) {
+        return res.status(400).json({ error: "A valid six-digit hex color is required" });
+      }
+
+      const tenantId = req.employee?.tenantId;
+      if (!tenantId) {
+        return res.status(400).json({ error: "Tenant ID is required" });
+      }
+
+      const config = await BusinessConfigModel.findOneAndUpdate(
+        { tenantId },
+        { $set: { brandPrimaryColor: primaryColor.toLowerCase(), updatedAt: new Date() } },
+        { new: true, upsert: true, strict: false, runValidators: false }
+      );
+      cache.invalidateKey(cacheKey('biz-config', tenantId));
+      res.json({ brandPrimaryColor: config?.brandPrimaryColor || primaryColor.toLowerCase() });
+    } catch (error) {
+      console.error("[CONFIG] Error updating brand color:", error);
+      res.status(500).json({ error: "Failed to update brand color" });
     }
   });
 

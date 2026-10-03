@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,47 +7,31 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { brand } from "@/lib/brand";
+import { applyPrimaryColor, brand } from "@/lib/brand";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Upload, Image, Palette, Type, Globe, Phone, Mail,
   Save, RefreshCw, Eye, Building2, CheckCircle2, Paintbrush
 } from "lucide-react";
 import qiroxLogo from "@assets/QIROX_LOGO_1768660955394.png";
 
-// Load saved branding from localStorage (overrides brand.ts defaults at runtime)
+// Non-color branding fields remain local; the primary color is shared by the server.
 function loadBranding() {
   try {
     const saved = localStorage.getItem("cafe-branding");
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const data = JSON.parse(saved);
+      if (data && typeof data === "object") delete data.primaryColor;
+      return data;
+    }
   } catch {}
   return null;
 }
 
 function saveBranding(data: any) {
-  localStorage.setItem("cafe-branding", JSON.stringify(data));
-  // Apply colors immediately
-  if (data.primaryColor) {
-    document.documentElement.style.setProperty("--primary", hexToHsl(data.primaryColor));
-  }
-}
-
-function hexToHsl(hex: string): string {
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b);
-  let h = 0, s = 0;
-  const l = (max + min) / 2;
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch (max) {
-      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
-      case g: h = ((b - r) / d + 2) / 6; break;
-      case b: h = ((r - g) / d + 4) / 6; break;
-    }
-  }
-  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+  const localData = { ...data };
+  delete localData.primaryColor;
+  localStorage.setItem("cafe-branding", JSON.stringify(localData));
 }
 
 function hslToHex(hsl: string): string {
@@ -60,12 +45,16 @@ function hslToHex(hsl: string): string {
       return Math.round(255 * color).toString(16).padStart(2, '0');
     };
     return `#${f(0)}${f(8)}${f(4)}`;
-  } catch { return '#7c3aed'; }
+  } catch { return brand.colors.primary.hex; }
 }
 
 export default function AdminBrandingPage() {
   const { toast } = useToast();
   const saved = loadBranding();
+  const [primaryColorEdited, setPrimaryColorEdited] = useState(false);
+  const { data: publicSettings } = useQuery<{ brandPrimaryColor?: string }>({
+    queryKey: ["/api/public/settings"],
+  });
   const logoInputRef = useRef<HTMLInputElement>(null);
   const logoStaffInputRef = useRef<HTMLInputElement>(null);
 
@@ -88,6 +77,14 @@ export default function AdminBrandingPage() {
   const [saving, setSaving] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
 
+  useEffect(() => {
+    const color = publicSettings?.brandPrimaryColor;
+    if (!primaryColorEdited && color && /^#[0-9a-f]{6}$/i.test(color)) {
+      setForm((prev) => ({ ...prev, primaryColor: color }));
+      applyPrimaryColor(color);
+    }
+  }, [publicSettings?.brandPrimaryColor, primaryColorEdited]);
+
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'customer' | 'staff') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -109,25 +106,51 @@ export default function AdminBrandingPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      if (!/^#[0-9a-f]{6}$/i.test(form.primaryColor)) {
+        throw new Error("يرجى إدخال لون صالح");
+      }
+      await apiRequest("PATCH", "/api/business-config/branding", {
+        primaryColor: form.primaryColor,
+      });
       saveBranding(form);
-      // Apply color immediately
-      document.documentElement.style.setProperty("--primary", hexToHsl(form.primaryColor));
-      document.documentElement.style.setProperty("--ring", hexToHsl(form.primaryColor));
+      applyPrimaryColor(form.primaryColor);
+      queryClient.setQueryData(["/api/public/settings"], (current: any) => ({
+        ...current,
+        brandPrimaryColor: form.primaryColor,
+      }));
 
       toast({
-        title: "✅ تم الحفظ",
-        description: "تم تطبيق هوية الكافيه الجديدة على النظام بالكامل",
+        title: "تم الحفظ",
+        description: "تم حفظ اللون الأساسي للجميع",
       });
-    } catch {
-      toast({ title: "خطأ", description: "فشل في حفظ البيانات", variant: "destructive" });
+    } catch (error) {
+      toast({
+        title: "خطأ",
+        description: error instanceof Error ? error.message : "فشل في حفظ البيانات",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
   };
 
-  const handleReset = () => {
-    localStorage.removeItem("cafe-branding");
-    window.location.reload();
+  const handleReset = async () => {
+    setSaving(true);
+    try {
+      await apiRequest("PATCH", "/api/business-config/branding", {
+        primaryColor: brand.colors.primary.hex,
+      });
+      localStorage.removeItem("cafe-branding");
+      window.location.reload();
+    } catch (error) {
+      toast({
+        title: "خطأ",
+        description: error instanceof Error ? error.message : "تعذر إعادة اللون الافتراضي",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const field = (key: keyof typeof form, label: string, placeholder?: string, type = 'text') => (
@@ -243,7 +266,7 @@ export default function AdminBrandingPage() {
                 <Palette className="w-4 h-4 text-primary" />
                 الألوان
               </CardTitle>
-              <CardDescription>اللون الأساسي يُطبَّق على كل النظام فوراً</CardDescription>
+              <CardDescription>يُحفظ اللون على الخادم ويظهر لجميع المستخدمين</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -254,8 +277,9 @@ export default function AdminBrandingPage() {
                       type="color"
                       value={form.primaryColor}
                       onChange={e => {
+                        setPrimaryColorEdited(true);
                         setForm(prev => ({ ...prev, primaryColor: e.target.value }));
-                        document.documentElement.style.setProperty("--primary", hexToHsl(e.target.value));
+                        applyPrimaryColor(e.target.value);
                       }}
                       className="w-14 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5"
                     />
@@ -264,14 +288,15 @@ export default function AdminBrandingPage() {
                     value={form.primaryColor}
                     onChange={e => {
                       if (/^#[0-9a-fA-F]{0,6}$/.test(e.target.value)) {
+                        setPrimaryColorEdited(true);
                         setForm(prev => ({ ...prev, primaryColor: e.target.value }));
                         if (e.target.value.length === 7) {
-                          document.documentElement.style.setProperty("--primary", hexToHsl(e.target.value));
+                          applyPrimaryColor(e.target.value);
                         }
                       }
                     }}
                     className="font-mono uppercase text-sm"
-                    placeholder="#7c3aed"
+                    placeholder={brand.colors.primary.hex}
                   />
                 </div>
               </div>
@@ -281,7 +306,8 @@ export default function AdminBrandingPage() {
                 <Label className="text-xs text-gray-500">ألوان جاهزة</Label>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { name: 'البنفسجي', color: '#7c3aed' },
+                    { name: 'أحمر داكن', color: '#9f1239' },
+                    { name: 'أحمر فاتح', color: '#e11d48' },
                     { name: 'الأزرق', color: '#2563eb' },
                     { name: 'الأخضر', color: '#059669' },
                     { name: 'الأحمر الورد', color: '#be1845' },
@@ -293,8 +319,9 @@ export default function AdminBrandingPage() {
                     <button
                       key={color}
                       onClick={() => {
+                        setPrimaryColorEdited(true);
                         setForm(prev => ({ ...prev, primaryColor: color }));
-                        document.documentElement.style.setProperty("--primary", hexToHsl(color));
+                        applyPrimaryColor(color);
                       }}
                       className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs hover:shadow-sm transition-all"
                       style={{ borderColor: color + '40', backgroundColor: color + '15', color }}
@@ -361,7 +388,7 @@ export default function AdminBrandingPage() {
         <div className="flex items-center justify-between py-4 px-5 bg-white rounded-xl border border-gray-100 shadow-sm">
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <CheckCircle2 className="w-4 h-4 text-green-500" />
-            <span>التغييرات تُطبَّق فوراً على كل النظام — الإدارة، الموظفين، الإيصالات، والموقع</span>
+            <span>يُحفظ اللون الأساسي مركزياً ويُطبَّق لجميع المستخدمين</span>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={handleReset} className="gap-1.5">

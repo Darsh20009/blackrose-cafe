@@ -102,20 +102,20 @@ export const brand = {
   // ───────────────────────────────────────────────────────────────────────
 
   colors: {
-    /** Primary brand color — QIROX Purple (Foodics-style) */
+    /** Primary brand color — deep crimson */
     primary: {
-      h: 262,
-      s: 83,
-      l: 58,
-      hex: "#7c3aed",
+      h: 343,
+      s: 80,
+      l: 35,
+      hex: "#9f1239",
     },
 
     /** Lighter primary variant (hover states) */
     primaryLight: {
-      h: 262,
-      s: 78,
-      l: 68,
-      hex: "#9f6ef5",
+      h: 347,
+      s: 77,
+      l: 50,
+      hex: "#e11d48",
     },
 
     /** App background — pure white */
@@ -149,7 +149,7 @@ export const brand = {
   // ───────────────────────────────────────────────────────────────────────
 
   /** Theme color used by browser chrome */
-  themeColor: "#BE1845",
+  themeColor: "#9f1239",
 
   /** Background color shown while PWA is loading */
   pwaBackgroundColor: "#0a0a0a",
@@ -249,6 +249,46 @@ export function applyBrandColors(): void {
   if (themeColorMeta) {
     themeColorMeta.setAttribute("content", brand.themeColor);
   }
+}
+
+/** Applies a persisted six-digit hex brand color to the app theme. */
+export function applyPrimaryColor(hex: string): boolean {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return false;
+
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  const lightness = (max + min) / 2;
+  let hue = 0;
+  let saturation = 0;
+
+  if (delta > 0) {
+    saturation = lightness > 0.5
+      ? delta / (2 - max - min)
+      : delta / (max + min);
+    switch (max) {
+      case r: hue = ((g - b) / delta + (g < b ? 6 : 0)) / 6; break;
+      case g: hue = ((b - r) / delta + 2) / 6; break;
+      default: hue = ((r - g) / delta + 4) / 6; break;
+    }
+  }
+
+  const h = Math.round(hue * 360);
+  const s = Math.round(saturation * 100);
+  const l = Math.round(lightness * 100);
+  const primaryHsl = `${h} ${s}% ${l}%`;
+  const lighterHsl = `${h} ${s}% ${Math.min(90, l + 15)}%`;
+  const root = document.documentElement;
+  root.style.setProperty("--primary", primaryHsl);
+  root.style.setProperty("--primary-light", lighterHsl);
+  root.style.setProperty("--ring", primaryHsl);
+
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeColorMeta) themeColorMeta.setAttribute("content", hex);
+  return true;
 }
 
 /**
