@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PhoneInput } from "@/components/phone-input";
 import { SmartIdentifierInput } from "@/components/smart-identifier-input";
-import { Phone, User, Lock, Mail, Eye, EyeOff, Zap } from "lucide-react";
+import { Phone, User, Lock, Mail, Eye, EyeOff, Zap, MessageCircle, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
@@ -26,8 +26,13 @@ export default function CustomerAuth() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"whatsapp" | "login" | "register">(() =>
+    new URLSearchParams(window.location.search).get("mode") === "password" ? "login" : "whatsapp"
+  );
   const [guestInfo, setGuestInfo] = useState<{ name: string; phone: string } | null>(null);
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
 
   useEffect(() => {
     const info = customerStorage.getGuestInfo();
@@ -35,9 +40,14 @@ export default function CustomerAuth() {
       setGuestInfo(info);
       setName(info.name);
       setIdentifier(info.phone);
-      setMode("register");
     }
   }, []);
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = window.setTimeout(() => setOtpCooldown(seconds => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [otpCooldown]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +95,73 @@ export default function CustomerAuth() {
         title: i18n.language === 'ar' ? "خطأ" : "Error",
         description: error.message || (i18n.language === 'ar' ? "العميل غير مسجل لدينا" : "Customer not found"),
         variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requestWhatsAppCode = async () => {
+    if (!identifier.trim()) {
+      toast({
+        title: i18n.language === "ar" ? "رقم الجوال مطلوب" : "Phone number required",
+        description: i18n.language === "ar" ? "أدخل رقم الجوال السعودي" : "Enter your Saudi phone number",
+        variant: "destructive",
+      });
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ userType: "customer", phone: identifier, name }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || (i18n.language === "ar" ? "تعذر إرسال الرمز" : "Could not send the code"));
+      setOtpSent(true);
+      setOtpCooldown(60);
+      toast({
+        title: i18n.language === "ar" ? "تحقق من واتساب" : "Check WhatsApp",
+        description: data.message,
+      });
+    } catch (error: any) {
+      toast({
+        title: i18n.language === "ar" ? "تعذر إرسال الرمز" : "Could not send the code",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleWhatsAppVerify = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoading(true);
+    try {
+      const response = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ userType: "customer", phone: identifier, code: otp, name }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || (i18n.language === "ar" ? "رمز التحقق غير صحيح" : "Invalid verification code"));
+      setCustomer(data.user);
+      customerStorage.clearGuestInfo();
+      customerStorage.setGuestMode(false);
+      toast({
+        title: i18n.language === "ar" ? "مرحباً بك!" : "Welcome!",
+        description: i18n.language === "ar" ? `أهلاً ${data.user.name}` : `Hello ${data.user.name}`,
+      });
+      navigate("/");
+    } catch (error: any) {
+      toast({
+        title: i18n.language === "ar" ? "تعذر تسجيل الدخول" : "Could not sign in",
+        description: error.message,
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -207,11 +284,91 @@ export default function CustomerAuth() {
         </CardHeader>
 
         <CardContent>
-          <Tabs value={mode} onValueChange={(v) => setMode(v as "login" | "register")} className="w-full">
-            <TabsList className="h-10 items-center justify-center rounded-md p-1 grid w-full grid-cols-2 bg-muted text-muted-foreground">
+          <Tabs value={mode} onValueChange={(value) => {
+            if (value === "whatsapp" && identifier.includes("@")) setIdentifier("");
+            setMode(value as "whatsapp" | "login" | "register");
+          }} className="w-full">
+            <TabsList className="h-10 items-center justify-center rounded-md p-1 grid w-full grid-cols-3 bg-muted text-muted-foreground">
+              <TabsTrigger value="whatsapp" data-testid="tab-whatsapp">
+                <MessageCircle className="ml-1 h-4 w-4" />
+                {i18n.language === 'ar' ? "رمز الجوال" : "Phone code"}
+              </TabsTrigger>
               <TabsTrigger value="login" data-testid="tab-login">{i18n.language === 'ar' ? "تسجيل دخول" : "Login"}</TabsTrigger>
               <TabsTrigger value="register" data-testid="tab-register">{i18n.language === 'ar' ? "حساب جديد" : "New Account"}</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="whatsapp" className="space-y-5 mt-5">
+              <form onSubmit={event => {
+                event.preventDefault();
+                if (otpSent) handleWhatsAppVerify(event);
+                else requestWhatsAppCode();
+              }} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="otp-name">{i18n.language === 'ar' ? "الاسم (للحساب الجديد)" : "Name (for new accounts)"}</Label>
+                  <Input
+                    id="otp-name"
+                    value={name}
+                    onChange={event => setName(event.target.value)}
+                    autoComplete="name"
+                    data-testid="input-customer-otp-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="otp-phone" className="flex items-center gap-2">
+                    <Phone className="h-4 w-4" />
+                    {i18n.language === 'ar' ? "رقم الجوال السعودي" : "Saudi phone number"}
+                  </Label>
+                  <Input
+                    id="otp-phone"
+                    type="tel"
+                    value={identifier}
+                    onChange={event => setIdentifier(event.target.value)}
+                    placeholder="05xxxxxxxx أو +9665xxxxxxxx"
+                    dir="ltr"
+                    autoComplete="tel"
+                    disabled={otpSent || loading}
+                    data-testid="input-customer-otp-phone"
+                  />
+                </div>
+                {otpSent && (
+                  <div className="space-y-2">
+                    <Label htmlFor="otp-code">{i18n.language === 'ar' ? "رمز التحقق" : "Verification code"}</Label>
+                    <Input
+                      id="otp-code"
+                      value={otp}
+                      onChange={event => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="000000"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      dir="ltr"
+                      className="text-center text-lg tracking-[0.3em]"
+                      data-testid="input-customer-otp-code"
+                    />
+                  </div>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={loading || otpCooldown > 0}
+                  onClick={requestWhatsAppCode}
+                  data-testid="button-customer-send-otp"
+                >
+                  {loading ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <MessageCircle className="ml-2 h-4 w-4" />}
+                  {otpSent
+                    ? otpCooldown > 0
+                      ? (i18n.language === 'ar' ? `إعادة الإرسال بعد ${otpCooldown} ثانية` : `Resend in ${otpCooldown}s`)
+                      : (i18n.language === 'ar' ? "إعادة إرسال الرمز" : "Resend code")
+                    : (i18n.language === 'ar' ? "إرسال رمز الدخول عبر واتساب" : "Send sign-in code via WhatsApp")}
+                </Button>
+                {otpSent && (
+                  <Button type="submit" className="w-full" disabled={loading || otp.length !== 6}
+                    data-testid="button-customer-verify-otp">
+                    {i18n.language === 'ar' ? "تأكيد الرمز والمتابعة" : "Verify code and continue"}
+                  </Button>
+                )}
+              </form>
+            </TabsContent>
 
             <TabsContent value="login" className="space-y-5 mt-5">
               <form onSubmit={handleLogin} className="space-y-5">
@@ -285,16 +442,6 @@ export default function CustomerAuth() {
                   )}
                 </Button>
               </form>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => navigate("/customer-login")}
-                data-testid="button-whatsapp-login"
-              >
-                <Phone className="ml-2 h-4 w-4" />
-                {i18n.language === 'ar' ? "الدخول أو التسجيل برمز واتساب" : "Sign in or register with WhatsApp"}
-              </Button>
             </TabsContent>
 
             <TabsContent value="register" className="space-y-5 mt-5">
