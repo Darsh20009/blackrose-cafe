@@ -65,11 +65,21 @@ export function registerPhoneOtpAuthRoutes(app: Express) {
       }
 
       const employee = userType === "employee" ? await findEmployee(phone) : null;
-      const employeeIsActive = !!employee && ![0, false, "0"].includes(employee.isActivated as any);
-      if (userType === "employee" && !employeeIsActive) {
-        return res.json({
-          accepted: true,
-          message: "إذا كان الرقم مرتبطاً بحساب موظف مفعل، فسيصلك رمز التحقق عبر واتساب.",
+      if (userType === "employee" && !employee) {
+        const customer = await findCustomer(phone);
+        if (customer) {
+          return res.status(403).json({
+            error: "هذا الرقم مسجل كعميل وليس كموظف، ولا يملك صلاحية الدخول إلى بوابة الموظفين.",
+          });
+        }
+        return res.status(404).json({
+          error: "رقم الجوال غير مسجل ضمن حسابات الموظفين. تواصل مع الإدارة لإضافته.",
+        });
+      }
+
+      if (userType === "employee" && [0, false, "0"].includes(employee!.isActivated as any)) {
+        return res.status(403).json({
+          error: "حساب الموظف غير مفعل من الإدارة. تواصل مع مديرك.",
         });
       }
 
@@ -123,7 +133,10 @@ export function registerPhoneOtpAuthRoutes(app: Express) {
         );
       } catch (error) {
         await LoginOTPModel.updateOne({ _id: reservation._id }, { $set: { used: true } });
-        console.error("[AUTH-OTP] WhatsApp delivery failed");
+        console.error(
+          "[AUTH-OTP] WhatsApp delivery failed:",
+          error instanceof Error ? error.message : "Unknown delivery error",
+        );
         return res.status(503).json({
           error: "تعذر إرسال رمز واتساب الآن. تحقق من إعداد خدمة الرسائل ثم حاول مجدداً.",
         });
@@ -131,7 +144,9 @@ export function registerPhoneOtpAuthRoutes(app: Express) {
 
       return res.json({
         accepted: true,
-        message: "إذا كان الحساب موجوداً ومفعلاً، فقد أرسلنا رمزاً صالحاً لمدة خمس دقائق.",
+        message: userType === "employee"
+          ? "تم إرسال رمز واتساب إلى الرقم المسجل، وهو صالح لمدة خمس دقائق."
+          : "إذا كان الحساب موجوداً ومفعلاً، فقد أرسلنا رمزاً صالحاً لمدة خمس دقائق.",
       });
     } catch (error) {
       console.error("[AUTH-OTP] Failed to request login code");
