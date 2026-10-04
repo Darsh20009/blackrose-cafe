@@ -90,10 +90,6 @@ export function InternationalPhoneInput({
     onChange(localDigits ? `+${getCountryCallingCode(nextCountry)}${localDigits}` : "");
   };
 
-  const handleCountryChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    selectCountry(event.target.value as CountryCode);
-  };
-
   const handleNumberChange = (event: ChangeEvent<HTMLInputElement>) => {
     const raw = toAsciiDigits(event.target.value).trim();
     const internationalInput = raw.startsWith("00") ? `+${raw.slice(2)}` : raw;
