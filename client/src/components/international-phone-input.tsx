@@ -5,7 +5,17 @@ import {
   parsePhoneNumberFromString,
   type CountryCode,
 } from "libphonenumber-js";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTranslation } from "react-i18next";
 
 interface InternationalPhoneInputProps {
@@ -44,6 +54,7 @@ export function InternationalPhoneInput({
   const { i18n } = useTranslation();
   const language = i18n.language.startsWith("ar") ? "ar" : "en";
   const [country, setCountry] = useState<CountryCode>("SA");
+  const [countryPickerOpen, setCountryPickerOpen] = useState(false);
   const parsedValue = useMemo(
     () => (value ? parsePhoneNumberFromString(value) : undefined),
     [value],
@@ -65,6 +76,7 @@ export function InternationalPhoneInput({
 
   const activeCountry = parsedValue?.country || country;
   const activeCallingCode = getCountryCallingCode(activeCountry);
+  const activeCountryName = countryOptions.find(option => option.code === activeCountry)?.name || activeCountry;
   const digits = toAsciiDigits(value).replace(/\D/g, "");
   const nationalValue = parsedValue?.countryCallingCode === activeCallingCode
     ? parsedValue.nationalNumber
@@ -72,11 +84,14 @@ export function InternationalPhoneInput({
       ? digits.slice(activeCallingCode.length)
       : digits;
 
-  const handleCountryChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const nextCountry = event.target.value as CountryCode;
+  const selectCountry = (nextCountry: CountryCode) => {
     setCountry(nextCountry);
     const localDigits = nationalValue.replace(/\D/g, "");
     onChange(localDigits ? `+${getCountryCallingCode(nextCountry)}${localDigits}` : "");
+  };
+
+  const handleCountryChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    selectCountry(event.target.value as CountryCode);
   };
 
   const handleNumberChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -97,20 +112,58 @@ export function InternationalPhoneInput({
 
   return (
     <div className={`flex w-full gap-2 ${className}`} dir="ltr">
-      <select
-        aria-label={language === "ar" ? "البلد ومفتاح الاتصال" : "Country calling code"}
-        value={activeCountry}
-        onChange={handleCountryChange}
-        disabled={disabled}
-        className="h-11 w-[132px] shrink-0 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-        data-testid={testId ? `${testId}-country` : undefined}
-      >
-        {countryOptions.map(option => (
-          <option key={option.code} value={option.code}>
-            {countryFlag(option.code)} +{option.callingCode} {option.name}
-          </option>
-        ))}
-      </select>
+      <Popover open={countryPickerOpen} onOpenChange={setCountryPickerOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={countryPickerOpen}
+            aria-label={`${language === "ar" ? "البلد ومفتاح الاتصال" : "Country calling code"}: ${activeCountryName} +${activeCallingCode}`}
+            disabled={disabled}
+            className="h-11 min-h-11 w-[132px] shrink-0 justify-between px-2 font-normal"
+            data-testid={testId ? `${testId}-country` : undefined}
+          >
+            <span className="flex min-w-0 items-center gap-1.5" dir="ltr">
+              <span aria-hidden="true">{countryFlag(activeCountry)}</span>
+              <span>+{activeCallingCode}</span>
+            </span>
+            <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden="true" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          side="bottom"
+          sideOffset={4}
+          className="w-[min(22rem,calc(100vw-1rem))] max-h-[70vh] overflow-hidden p-0"
+        >
+          <Command dir={language} className="max-h-[70vh]">
+            <CommandInput
+              placeholder={language === "ar" ? "ابحث عن الدولة أو مفتاح الاتصال..." : "Search country or calling code..."}
+              aria-label={language === "ar" ? "ابحث عن الدولة أو مفتاح الاتصال" : "Search country or calling code"}
+            />
+            <CommandList className="max-h-[min(55vh,320px)] overscroll-contain">
+              <CommandEmpty>{language === "ar" ? "لا توجد دولة مطابقة" : "No country found."}</CommandEmpty>
+              {countryOptions.map(option => (
+                <CommandItem
+                  key={option.code}
+                  value={`${option.name} ${option.code} +${option.callingCode}`}
+                  onSelect={() => {
+                    selectCountry(option.code);
+                    setCountryPickerOpen(false);
+                  }}
+                  className="min-h-10"
+                >
+                  <span aria-hidden="true">{countryFlag(option.code)}</span>
+                  <span className="min-w-0 flex-1 truncate">{option.name}</span>
+                  <span dir="ltr" className="text-muted-foreground">+{option.callingCode}</span>
+                  {activeCountry === option.code && <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />}
+                </CommandItem>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
       <Input
         id={id}
         type="tel"
