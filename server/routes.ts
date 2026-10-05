@@ -57,6 +57,12 @@ import { InventoryEngine } from "./inventory-engine";
 import { AccountingEngine } from "./accounting-engine";
 import { ErpAccountingService } from "./erp-accounting-service";
 import { deliveryService } from "./delivery-service";
+import { applyDeliveryPolicyToOrderData, checkDeliveryLocation } from "./delivery-policy";
+import {
+  buildDeliveryMapUrl,
+  DELIVERY_FEE_SAR,
+  DELIVERY_RADIUS_KM,
+} from "@shared/delivery-policy";
 import { requireAuth, requireManager, requireAdmin, filterByBranch, requireKitchenAccess, requireCashierAccess, requireDeliveryAccess, requirePermission, requireCustomerAuth, type AuthRequest, type CustomerAuthRequest } from "./middleware/auth";
 import { logFromRequest, logAudit } from "./audit-logger";
 import { PermissionsEngine, PERMISSIONS } from "./permissions-engine";
@@ -1208,7 +1214,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!selectedBranch && /^[a-fA-F0-9]{24}$/.test(branchId)) {
           selectedBranch = await BranchModel.findOne({ _id: branchId, tenantId }).lean();
         }
-        if (!selectedBranch || selectedBranch.isActive === false || selectedBranch.isActive === 0 || selectedBranch.allowOnlineOrders === false) {
+        if (!selectedBranch || selectedBranch.isActive === false || selectedBranch.isActive === 0 || selectedBranch.allowOnlineOrders === false || selectedBranch.isOnline === false) {
           return res.status(400).json({ error: "الفرع المختار غير متاح لاستقبال الطلبات الإلكترونية" });
         }
         orderBranchName = selectedBranch.nameAr || selectedBranch.nameEn || "";
@@ -1322,6 +1328,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Remove redundant 'total' field if present
       delete orderData.total;
+
+      const deliveryPolicy = await applyDeliveryPolicyToOrderData(orderData as any, tenantId);
+      if (!deliveryPolicy.ok) {
+        return res.status(400).json({
+          error: deliveryPolicy.error,
+          code: deliveryPolicy.code,
+        });
+      }
 
       // Ensure subtotal and tax are always stored (VAT-inclusive pricing)
       const rawTotal = Number(orderData.totalAmount) || 0;
@@ -1474,7 +1488,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           // Notify admins of new order
-          await fireNotifyAdmins(`طلب جديد #${orderNum} ☕`, `قيمة ${total} ر.س — ${serializedOrder.channel === 'online' ? 'أونلاين 🌐' : 'كاشير'}`, {
+          const deliveryAddress = serializedOrder.deliveryAddress;
+          const addressText = typeof deliveryAddress === "string"
+            ? deliveryAddress
+            : deliveryAddress?.fullAddress || "";
+          const deliveryMapUrl = Number.isFinite(Number(deliveryAddress?.lat)) &&
+            Number.isFinite(Number(deliveryAddress?.lng))
+            ? buildDeliveryMapUrl(Number(deliveryAddress.lat), Number(deliveryAddress.lng))
+            : "";
+          const deliveryNotice = serializedOrder.deliveryType === "delivery" || serializedOrder.orderType === "delivery"
+            ? ` — التوصيل: ${addressText || "موقع محدد"}${deliveryMapUrl ? ` ${deliveryMapUrl}` : ""}`
+            : "";
+          await fireNotifyAdmins(`طلب جديد #${orderNum} ☕`, `قيمة ${total} ر.س — ${serializedOrder.channel === 'online' ? 'أونلاين 🌐' : 'كاشير'}${deliveryNotice}`, {
             type: "order", icon: "🛎️", link: "/employee/orders",
             orderId: serializedOrder.id, orderNumber: orderNum,
           });
@@ -1907,7 +1932,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maintenanceMode: (config as any).maintenanceMode || false,
         allowGuestCheckout: (config as any).allowGuestCheckout ?? true,
         minimumOrderAmount: (config as any).minimumOrderAmount || 0,
-        deliveryFee: (config as any).deliveryFee || 0,
+        deliveryFee: (config as any).orderMethodsConfig?.deliveryFeeAmount ?? (config as any).deliveryFee ?? 0,
         timezone: (config as any).timezone || 'Asia/Riyadh',
       });
     } catch (error) {
@@ -4485,9 +4510,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!customerPhone || !orderData) {
         return res.status(400).json({ error: "customerPhone and orderData are required" });
       }
+      const tenantId = orderData.tenantId || getTenantIdFromRequest(req) || await getDefaultTenantId();
+      const normalizedOrderData = { ...orderData, tenantId };
+      const deliveryPolicy = await applyDeliveryPolicyToOrderData(normalizedOrderData, tenantId);
+      if (!deliveryPolicy.ok) {
+        return res.status(400).json({
+          error: deliveryPolicy.error,
+          code: deliveryPolicy.code,
+        });
+      }
       const token = crypto.randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 25 * 60 * 1000); // 25 minutes
-      await PaymentSessionTokenModel.create({ token, customerPhone, customerId: customerId || null, customerName: customerName || "", orderData, expiresAt });
+      await PaymentSessionTokenModel.create({ token, customerPhone, customerId: customerId || null, customerName: customerName || "", orderData: normalizedOrderData, expiresAt });
       return res.json({ token });
     } catch (err: any) {
       console.error("[PaymentSessionToken] create error:", err);
@@ -11797,14 +11831,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenantId = (req as any).employee?.tenantId || 'demo-tenant';
       const userRole = (req as any).employee?.role;
       const userBranchId = (req as any).employee?.branchId;
+      const includeInactive = req.query.includeInactive === 'true'
+        && (userRole === 'admin' || userRole === 'owner');
 
-      const ck = cacheKey('branches', tenantId, userRole, userBranchId);
-      const cached = cache.get<any[]>(ck);
+      const ck = includeInactive ? null : cacheKey('branches', tenantId, userRole, userBranchId);
+      const cached = ck ? cache.get<any[]>(ck) : null;
       if (cached) return res.json(cached);
 
       let query: any = { tenantId };
       if (userRole === "manager" && userBranchId) {
         query = { tenantId, $or: [{ id: userBranchId }, { _id: userBranchId }] };
+      } else if (includeInactive) {
+        query = { tenantId };
       } else {
         query.isActive = { $in: [1, true] };
       }
@@ -11815,7 +11853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: b.id || b._id?.toString(),
         _id: b._id?.toString()
       }));
-      cache.set(ck, serialized, CACHE_TTL.BRANCHES);
+      if (ck) cache.set(ck, serialized, CACHE_TTL.BRANCHES);
       res.json(serialized);
     } catch (error) {
       console.error("Error fetching branches:", error);
@@ -11947,6 +11985,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true,
         isOnline: branch.isOnline,
         message: branch.isOnline ? `الفرع "${branch.nameAr}" الآن متاح أونلاين` : `الفرع "${branch.nameAr}" أصبح غير متاح أونلاين`,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/branches/:id/toggle-active", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { BranchModel } = await import("@shared/schema");
+      const { id } = req.params;
+      const tenantId = req.employee?.tenantId || 'demo-tenant';
+      const branch = await BranchModel.findOne({ tenantId, $or: [{ id }, { _id: id }] });
+      if (!branch) return res.status(404).json({ error: "الفرع غير موجود" });
+
+      const wasActive = Boolean(branch.isActive);
+      branch.isActive = !wasActive;
+      if (wasActive) {
+        branch.isOnline = false;
+        branch.allowOnlineOrders = false;
+      }
+      await branch.save();
+
+      cache.invalidateKey(cacheKey('branches', tenantId, 'owner', ''));
+      cache.invalidateKey(cacheKey('branches', tenantId, 'admin', ''));
+      cache.invalidateKey(cacheKey('branches', tenantId, undefined, undefined));
+
+      res.json({
+        success: true,
+        isActive: branch.isActive,
+        message: wasActive
+          ? `تم إيقاف فرع "${branch.nameAr}" مؤقتًا`
+          : `تمت إعادة تفعيل فرع "${branch.nameAr}"`,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -17897,40 +17967,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Check delivery availability (500m radius from branches)
+  // Check delivery availability from an enabled online branch.
   app.post("/api/delivery/check-availability", async (req, res) => {
     try {
-      const { latitude, longitude } = req.body;
-      
-      if (!latitude || !longitude) {
+      const { latitude, longitude, branchId } = req.body;
+      const lat = Number(latitude);
+      const lng = Number(longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
         return res.status(400).json({ error: "الموقع مطلوب" });
       }
-      
-      const customerLocation = { lat: Number(latitude), lng: Number(longitude) };
       const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
-      const branches = await storage.getBranches(tenantId);
-      
-      const { checkDeliveryAvailability } = await import('./utils/geo');
-      const result = checkDeliveryAvailability(customerLocation, branches);
-      
+      const result = await checkDeliveryLocation(tenantId, { lat, lng }, branchId ? String(branchId) : undefined);
+      const branch = result.branch;
       res.json({
         canDeliver: result.canDeliver,
-        nearestBranch: result.nearestBranch ? {
-          id: result.nearestBranch._id?.toString() || result.nearestBranch.id,
-          nameAr: result.nearestBranch.nameAr,
-          nameEn: result.nearestBranch.nameEn,
+        nearestBranch: branch ? {
+          id: String(branch.id || branch._id || ""),
+          nameAr: branch.nameAr,
+          nameEn: branch.nameEn,
         } : null,
         distanceMeters: result.distanceMeters,
-        message: result.message,
+        distanceKm: result.distanceKm,
         messageAr: result.messageAr,
-        deliveryRadiusMeters: 500,
-        allBranches: result.allBranchesWithDistance.map(b => ({
-          id: b.branch._id?.toString() || b.branch.id,
-          nameAr: b.branch.nameAr,
-          nameEn: b.branch.nameEn,
-          distanceMeters: Math.round(b.distanceMeters),
-          isInRange: b.isInRange,
-        })),
+        deliveryRadiusMeters: DELIVERY_RADIUS_KM * 1000,
+        deliveryRadiusKm: DELIVERY_RADIUS_KM,
+        deliveryFee: result.deliveryFee,
       });
     } catch (error) {
       res.status(500).json({ error: "فشل في التحقق من التوصيل" });
@@ -19948,10 +20009,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/delivery/calculate-fee", async (req, res) => {
     try {
       const { lat, lng, tenantId, branchId, orderAmount } = req.body;
-      const result = await deliveryService.calculateDeliveryFee(
-        lat, lng, tenantId || "demo-tenant", branchId, orderAmount || 0
+      const latitude = Number(lat);
+      const longitude = Number(lng);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        return res.status(400).json({ error: "الموقع مطلوب" });
+      }
+      const result = await checkDeliveryLocation(
+        tenantId || getTenantIdFromRequest(req) || "demo-tenant",
+        { lat: latitude, lng: longitude },
+        branchId ? String(branchId) : undefined,
       );
-      res.json({ success: true, ...result, zone: result.zone ? serializeDoc(result.zone) : null });
+      res.json({
+        success: true,
+        canDeliver: result.canDeliver,
+        distanceKm: result.distanceKm,
+        deliveryRadiusKm: DELIVERY_RADIUS_KM,
+        deliveryFee: result.canDeliver ? DELIVERY_FEE_SAR : 0,
+        branch: result.branch ? serializeDoc(result.branch) : null,
+        messageAr: result.messageAr,
+        orderAmount: Number(orderAmount) || 0,
+      });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to calculate delivery fee" });
     }
@@ -23734,29 +23811,53 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
         return res.status(400).json({ error: "items array required" });
       }
       const orderNumber = `EXT-${Date.now().toString().slice(-6)}`;
-      // branchId is required by schema — derive from body or fall back to tenant's "main" branch
+      const tenantId = req.tenantId || "demo-tenant";
+      // Default external orders to the available online branch, not a paused branch.
       let branchId = orderData.branchId;
       if (!branchId) {
         try {
           const { BranchModel } = await import("@shared/schema");
-          const branch: any = await BranchModel.findOne(tFilter(req.tenantId)).lean();
+          const branch: any = await BranchModel.findOne({
+            ...tFilter(req.tenantId),
+            isActive: { $in: [true, 1] },
+            allowOnlineOrders: { $ne: false },
+            isOnline: { $ne: false },
+          }).lean();
           branchId = branch?.id || 'main';
         } catch { branchId = 'main'; }
+      }
+      const isExternalDelivery = [orderData.deliveryType, orderData.orderType, orderData.deliveryMode]
+        .some((value) => String(value || "").toLowerCase() === "delivery");
+      const externalOrderData = {
+        ...orderData,
+        tenantId,
+        branchId,
+        orderType: isExternalDelivery ? "delivery" : (orderData.orderType || "pickup"),
+        deliveryType: isExternalDelivery ? "delivery" : orderData.deliveryType,
+        totalAmount: Number(orderData.totalAmount) || orderData.items.reduce((sum: number, item: any) =>
+          sum + (Number(item.price) || 0) * (Number(item.quantity) || 1), 0),
+      };
+      const deliveryPolicy = await applyDeliveryPolicyToOrderData(externalOrderData, tenantId);
+      if (!deliveryPolicy.ok) {
+        return res.status(400).json({ error: deliveryPolicy.error, code: deliveryPolicy.code });
       }
       const order = await OrderModel.create({
         id: nanoid(),
         orderNumber,
-        tenantId: req.tenantId || 'demo-tenant',
+        tenantId,
         branchId,
         items: orderData.items,
-        totalAmount: orderData.totalAmount || orderData.items.reduce((s: number, i: any) => s + (i.price || 0) * (i.quantity || 1), 0),
+        totalAmount: externalOrderData.totalAmount,
         customerName: orderData.customerName || 'External',
         customerPhone: orderData.customerPhone || '',
         status: 'pending',
-        orderType: orderData.orderType || 'pickup',
+        orderType: externalOrderData.orderType,
+        deliveryType: externalOrderData.deliveryType,
+        deliveryAddress: externalOrderData.deliveryAddress,
+        deliveryFee: externalOrderData.deliveryFee,
         source: orderData.source || `api:${req.apiKey?.name || 'external'}`,
         paymentMethod: orderData.paymentMethod || 'external',
-        deliveryMode: orderData.deliveryMode || 'delivery',
+        deliveryMode: orderData.deliveryMode || externalOrderData.deliveryType || 'pickup',
         createdAt: new Date(),
       });
       scheduleOrderWhatsAppNotifications(

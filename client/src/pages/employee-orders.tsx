@@ -21,6 +21,7 @@ import { PrepCountdown } from "@/components/PrepCountdown";
 import { playNotificationSound, initAudioUnlock, getSoundEnabled, setSoundEnabled } from "@/lib/notification-sounds";
 import { AudioUnlockBanner } from "@/components/audio-unlock-banner";
 import { getPaymentMethodLabel } from "@shared/order-states";
+import { buildDeliveryMapUrl, getDeliveryAddressLabel, getDeliveryCoordinates } from "@shared/delivery-policy";
 
 export default function EmployeeOrders() {
   const { toast } = useToast();
@@ -449,6 +450,11 @@ export default function EmployeeOrders() {
             ) : (
               filteredOrders.map((order) => {
                 const orderId = order.id;
+                const deliveryCoordinates = getDeliveryCoordinates(order.deliveryAddress);
+                const deliveryMapUrl = deliveryCoordinates
+                  ? buildDeliveryMapUrl(deliveryCoordinates.lat, deliveryCoordinates.lng)
+                  : null;
+                const deliveryAddressLabel = getDeliveryAddressLabel(order.deliveryAddress);
                 return (
                   <Card key={orderId} className="hover-elevate overflow-hidden" data-testid={`card-order-${orderId}`}>
                     <CardContent className="p-4 space-y-3">
@@ -513,6 +519,17 @@ export default function EmployeeOrders() {
                           <span className="flex items-center gap-1">
                             <Phone className="w-3 h-3" />
                             {order.customerInfo.phoneNumber}
+                          </span>
+                        )}
+                        {(order.deliveryType === 'delivery' || order.orderType === 'delivery') && (deliveryAddressLabel || deliveryMapUrl) && (
+                          <span className="flex flex-col gap-0.5">
+                            {deliveryAddressLabel && <span>{deliveryAddressLabel}</span>}
+                            {deliveryMapUrl && (
+                              <a href={deliveryMapUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                                <MapPin className="w-3 h-3" />
+                                موقع العميل على الخريطة
+                              </a>
+                            )}
                           </span>
                         )}
                       </div>

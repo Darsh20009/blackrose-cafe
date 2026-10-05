@@ -60,7 +60,7 @@ interface Branch {
   allowCarOrders?: boolean;
   allowTableOrders?: boolean;
   isOnline?: boolean;
-  isActive?: boolean;
+  isActive?: boolean | number;
 }
 
 interface Employee {
@@ -115,7 +115,7 @@ export default function AdminBranches() {
   }, []);
 
   const { data: branches = [], isLoading } = useQuery<Branch[]>({
-    queryKey: ['/api/branches'],
+    queryKey: ['/api/branches?includeInactive=true'],
   });
 
   const { data: branchStats = [] } = useQuery<BranchStats[]>({
@@ -130,6 +130,19 @@ export default function AdminBranches() {
   const managerEmployees = (employees as Employee[]).filter(
     (e) => ['manager', 'branch_manager', 'admin', 'owner', 'supervisor'].includes(e.role)
   );
+  const currentUserRole = (() => {
+    try {
+      const storedUser = localStorage.getItem('currentEmployee') || localStorage.getItem('currentManager');
+      return storedUser ? JSON.parse(storedUser).role : '';
+    } catch {
+      return '';
+    }
+  })();
+  const canManageBranchActivation = currentUserRole === 'owner' || currentUserRole === 'admin';
+  const invalidateBranchLists = () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/branches'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/branches?includeInactive=true'] });
+  };
 
   const getStats = (branchId: string) =>
     (branchStats as BranchStats[]).find((s) => s.branchId === branchId);
@@ -137,7 +150,7 @@ export default function AdminBranches() {
   const createMutation = useMutation({
     mutationFn: (data: any) => apiRequest('POST', '/api/branches', data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/branches'] });
+      invalidateBranchLists();
       queryClient.invalidateQueries({ queryKey: ['/api/branches/stats'] });
       toast({ title: tc("✅ تم إنشاء الفرع بنجاح", "✅ Branch created successfully") });
       setIsAddDialogOpen(false);
@@ -152,7 +165,7 @@ export default function AdminBranches() {
     mutationFn: (data: { id: string; updates: any }) =>
       apiRequest('PUT', `/api/branches/${data.id}`, data.updates),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/branches'] });
+      invalidateBranchLists();
       queryClient.invalidateQueries({ queryKey: ['/api/branches/stats'] });
       toast({ title: tc("✅ تم تحديث الفرع بنجاح", "✅ Branch updated successfully") });
       setIsEditDialogOpen(false);
@@ -167,7 +180,8 @@ export default function AdminBranches() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiRequest('DELETE', `/api/branches/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/branches'] });
+      invalidateBranchLists();
+      queryClient.invalidateQueries({ queryKey: ['/api/branches/stats'] });
       toast({ title: tc("تم حذف الفرع بنجاح", "Branch deleted successfully") });
       setDeleteDialogOpen(false);
       setSelectedBranch(null);
@@ -180,7 +194,7 @@ export default function AdminBranches() {
   const toggleOnlineMutation = useMutation({
     mutationFn: (id: string) => apiRequest('PATCH', `/api/branches/${id}/toggle-online`),
     onSuccess: (res: Response) => res.json().then((data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/branches'] });
+      invalidateBranchLists();
       queryClient.invalidateQueries({ queryKey: ['/api/branches/stats'] });
       toast({ title: data.message });
     }),
@@ -188,6 +202,24 @@ export default function AdminBranches() {
       toast({ title: tc("خطأ في تغيير حالة الفرع", "Error toggling branch status"), description: error?.message, variant: "destructive" });
     }
   });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('PATCH', `/api/branches/${id}/toggle-active`),
+    onSuccess: (res: Response) => res.json().then((data: any) => {
+      invalidateBranchLists();
+      queryClient.invalidateQueries({ queryKey: ['/api/branches/stats'] });
+      toast({ title: data.message });
+    }),
+    onError: (error: any) => {
+      toast({ title: tc("خطأ في تغيير حالة الفرع", "Error changing branch status"), description: error?.message, variant: "destructive" });
+    }
+  });
+
+  const toggleBranchActive = (branch: Branch) => {
+    const isActive = branch.isActive !== false && branch.isActive !== 0;
+    if (isActive && !window.confirm("سيتم إيقاف الفرع مؤقتًا وإخفاؤه من اختيار الفروع ونقاط البيع. لن تُحذف الطلبات السابقة. هل تريد المتابعة؟")) return;
+    toggleActiveMutation.mutate(branch.id);
+  };
 
   const handleEdit = (branch: Branch) => {
     setSelectedBranch(branch);
@@ -495,6 +527,7 @@ export default function AdminBranches() {
           }).map((branch) => {
             const branchId = branch.id;
             const stats = getStats(branchId);
+            const isActive = branch.isActive !== false && branch.isActive !== 0;
             const isOnline = branch.isOnline !== false;
             const isExpanded = expandedBranch === branchId;
 
@@ -517,6 +550,7 @@ export default function AdminBranches() {
                           <Badge variant="outline" className={`text-[10px] ${isOnline ? 'border-green-400 text-green-600 bg-green-50 dark:bg-green-900/20' : 'border-gray-300 text-gray-500'}`}>
                             {isOnline ? <><Wifi className="w-2.5 h-2.5 ml-1" /> {tc("متاح", "Online")}</> : <><WifiOff className="w-2.5 h-2.5 ml-1" /> {tc("غير متاح", "Offline")}</>}
                           </Badge>
+                          {!isActive && <Badge variant="secondary" className="text-[10px]">{tc("موقوف مؤقتًا", "Paused")}</Badge>}
                         </div>
                         {branch.address && <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1"><MapPin className="w-3 h-3 flex-shrink-0" />{branch.address}</p>}
                       </div>
@@ -530,10 +564,21 @@ export default function AdminBranches() {
                         <Switch
                           checked={isOnline}
                           onCheckedChange={() => toggleOnlineMutation.mutate(branchId)}
-                          disabled={toggleOnlineMutation.isPending}
+                          disabled={toggleOnlineMutation.isPending || !isActive}
                           data-testid={`switch-online-${branchId}`}
                         />
                       </div>
+                      {canManageBranchActivation && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleBranchActive(branch)}
+                          disabled={toggleActiveMutation.isPending}
+                          data-testid={`button-toggle-active-${branchId}`}
+                        >
+                          {isActive ? tc("إيقاف مؤقت", "Pause branch") : tc("إعادة تفعيل", "Reactivate")}
+                        </Button>
+                      )}
                       <Button variant="ghost" size="sm" onClick={() => setExpandedBranch(isExpanded ? null : branchId)} data-testid={`button-expand-${branchId}`}>
                         <Eye className="w-4 h-4 ml-1" />
                         {isExpanded ? tc("إخفاء", "Hide") : tc("تفاصيل", "Details")}

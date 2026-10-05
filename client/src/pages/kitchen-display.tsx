@@ -20,6 +20,7 @@ import {
 import { AudioUnlockBanner } from "@/components/audio-unlock-banner";
 import { useRealtimeEvent, useRealtimeStatus } from "@/hooks/useRealtimeEngine";
 import { getRealtimeEngine } from "@/lib/realtime-engine";
+import { buildDeliveryMapUrl, getDeliveryAddressLabel, getDeliveryCoordinates } from "@shared/delivery-policy";
 import {
   Dialog,
   DialogContent,
@@ -70,6 +71,11 @@ interface Order {
   tableNumber?: string;
   orderType?: string;
   deliveryType?: string;
+  deliveryAddress?: {
+    fullAddress?: string;
+    lat?: number;
+    lng?: number;
+  } | string;
   carInfo?: { carType: string; carColor: string; plateNumber: string };
   carType?: string; carColor?: string; carPlate?: string; plateNumber?: string;
   arrivalTime?: string;
@@ -861,6 +867,11 @@ function KdsCard({
   const allReady    = readyCount === totalItems && totalItems > 0;
 
   const delivType = order.deliveryType || order.orderType;
+  const deliveryAddressLabel = getDeliveryAddressLabel(order.deliveryAddress);
+  const deliveryCoordinates = getDeliveryCoordinates(order.deliveryAddress);
+  const deliveryMapUrl = deliveryCoordinates
+    ? buildDeliveryMapUrl(deliveryCoordinates.lat, deliveryCoordinates.lng)
+    : null;
 
   // Timer color
   const timerColor =
@@ -939,6 +950,17 @@ function KdsCard({
         {order.customerName && (
           <div className="mt-0.5 text-[10px] text-gray-400 flex items-center gap-1">
             <User className="w-3 h-3" />{order.customerName}
+          </div>
+        )}
+        {String(delivType || '').toLowerCase() === 'delivery' && (deliveryAddressLabel || deliveryMapUrl) && (
+          <div className="mt-1 text-[10px] text-gray-300 space-y-0.5">
+            {deliveryAddressLabel && <div className="break-words">{deliveryAddressLabel}</div>}
+            {deliveryMapUrl && (
+              <a href={deliveryMapUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-300 underline">
+                <MapPin className="w-3 h-3" />
+                موقع العميل على الخريطة
+              </a>
+            )}
           </div>
         )}
 

@@ -12,6 +12,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useCartStore } from '@/lib/cart-store';
 import { useToast } from '@/hooks/use-toast';
+import { AppleMap } from '@/components/apple-map';
+import { DELIVERY_FEE_SAR, DELIVERY_RADIUS_KM } from '@shared/delivery-policy';
 import { Store, MapPin, ArrowRight, Phone, Map, Coffee, AlertCircle, Loader2, Navigation, Clock, Check, Car, Bookmark, ShoppingBag, ChevronLeft, Utensils, Truck, Star } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTranslation } from 'react-i18next';
@@ -232,7 +234,7 @@ const DELIVERY_COUNTRIES: { value: string; label: string; governorates: string[]
 export default function DeliverySelectionPage() {
   const { t, i18n } = useTranslation();
   const [, setLocation] = useLocation();
-  const { setDeliveryInfo, cartItems } = useCartStore();
+  const { setDeliveryInfo, cartItems, deliveryInfo: savedDeliveryInfo } = useCartStore();
   const { toast } = useToast();
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
 
@@ -290,10 +292,21 @@ export default function DeliverySelectionPage() {
   const [arrivalTime, setArrivalTime] = useState<string>('');
   const [loadingTables, setLoadingTables] = useState(false);
   const [bookedTable, setBookedTable] = useState<{ tableNumber: string; bookingId: string } | null>(null);
-  const [deliveryAddressText, setDeliveryAddressText] = useState<string>('');
   const [selectedCountry, setSelectedCountry] = useState<string>('');
   const [selectedGovernorate, setSelectedGovernorate] = useState<string>('');
-  const [detailedAddress, setDetailedAddress] = useState<string>('');
+  const [detailedAddress, setDetailedAddress] = useState<string>(savedDeliveryInfo?.deliveryAddress || '');
+  const [deliveryLocation, setDeliveryLocation] = useState<{ lat: number; lng: number } | null>(() =>
+    savedDeliveryInfo?.address
+      ? { lat: savedDeliveryInfo.address.lat, lng: savedDeliveryInfo.address.lng }
+      : null
+  );
+  const [isCheckingDelivery, setIsCheckingDelivery] = useState(false);
+  const [deliveryAvailability, setDeliveryAvailability] = useState<{
+    canDeliver: boolean;
+    distanceKm: number | null;
+    messageAr: string;
+    deliveryFee: number;
+  } | null>(null);
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -330,6 +343,50 @@ export default function DeliverySelectionPage() {
       setSelectedBranchId(branches[0].id);
     }
   }, [branches]);
+
+  useEffect(() => {
+    if (selectedMethod !== 'delivery' || !selectedBranchId || !deliveryLocation) {
+      setDeliveryAvailability(null);
+      setIsCheckingDelivery(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsCheckingDelivery(true);
+    setDeliveryAvailability(null);
+    fetch('/api/delivery/check-availability', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        latitude: deliveryLocation.lat,
+        longitude: deliveryLocation.lng,
+        branchId: selectedBranchId,
+      }),
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'تعذر التحقق من نطاق التوصيل');
+        return data;
+      })
+      .then((data) => {
+        if (!cancelled) setDeliveryAvailability(data);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setDeliveryAvailability({
+            canDeliver: false,
+            distanceKm: null,
+            messageAr: error.message || 'تعذر التحقق من نطاق التوصيل، حاول مرة أخرى.',
+            deliveryFee: 0,
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsCheckingDelivery(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [selectedMethod, selectedBranchId, deliveryLocation]);
 
   useEffect(() => {
     if (selectedBranchId && userLocation) {
@@ -438,13 +495,35 @@ export default function DeliverySelectionPage() {
     }
   };
 
+  const useCurrentLocationForDelivery = () => {
+    if (!navigator.geolocation) {
+      setLocationError(t("delivery.browser_error"));
+      return;
+    }
+    setIsGettingLocation(true);
+    setLocationError('');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const point = { lat: position.coords.latitude, lng: position.coords.longitude };
+        setUserLocation({ latitude: point.lat, longitude: point.lng });
+        setDeliveryLocation(point);
+        setIsGettingLocation(false);
+      },
+      (error) => {
+        setLocationError(t("delivery.location_error"));
+        setIsGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
 
   const orderMethods = businessConfig?.orderMethodsConfig || {};
   const enableDineIn = orderMethods.enableDineIn !== false;
   const enableCarPickup = orderMethods.enableCarPickup !== false;
   const enableTakeaway = orderMethods.enableTakeaway !== false;
   const enableDelivery = orderMethods.enableDelivery !== false;
-  const deliveryFeeAmount: number = orderMethods.deliveryFeeAmount ?? 15;
+  const deliveryFeeAmount = DELIVERY_FEE_SAR;
 
   const handleContinue = () => {
     if (!cartItems || cartItems.length === 0) {
@@ -514,8 +593,27 @@ export default function DeliverySelectionPage() {
         toast({ title: t("product.error"), description: "يرجى إدخال تفاصيل العنوان (الحي، الشارع، المبنى)", variant: 'destructive' });
         return;
       }
+      if (!deliveryLocation) {
+        toast({ title: t("product.error"), description: "حدد موقع التوصيل على الخريطة أولًا", variant: 'destructive' });
+        return;
+      }
+      if (isCheckingDelivery) {
+        toast({ title: t("product.error"), description: "جارٍ التحقق من نطاق التوصيل، انتظر قليلًا", variant: 'destructive' });
+        return;
+      }
+      if (!deliveryAvailability?.canDeliver) {
+        toast({
+          title: t("product.error"),
+          description: deliveryAvailability?.messageAr || "لا نوصل لهذه المنطقة؛ نطاق التوصيل يصل إلى ٣٠ كم من فرع المروج.",
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
+    const fullDeliveryAddress = selectedMethod === 'delivery'
+      ? [DELIVERY_COUNTRIES.find(c => c.value === selectedCountry)?.label, selectedGovernorate, detailedAddress.trim()].filter(Boolean).join(' - ')
+      : '';
     setDeliveryInfo({
       type: selectedMethod === 'car-pickup' ? 'car-pickup'
           : selectedMethod === 'dine-in' ? 'dine-in'
@@ -535,8 +633,14 @@ export default function DeliverySelectionPage() {
       tableId: selectedTableId || undefined,
       tableNumber: bookedTable?.tableNumber || undefined,
       arrivalTime: arrivalTime || undefined,
-      deliveryAddress: selectedMethod === 'delivery'
-        ? [DELIVERY_COUNTRIES.find(c => c.value === selectedCountry)?.label, selectedGovernorate, detailedAddress.trim()].filter(Boolean).join(' - ')
+      deliveryAddress: selectedMethod === 'delivery' ? fullDeliveryAddress : undefined,
+      address: selectedMethod === 'delivery' && deliveryLocation
+        ? {
+            fullAddress: fullDeliveryAddress,
+            lat: deliveryLocation.lat,
+            lng: deliveryLocation.lng,
+            zone: 'murooj-30km',
+          }
         : undefined,
       deliveryFee: selectedMethod === 'delivery' ? deliveryFeeAmount : 0,
       productReservationDate: isReservationCart ? reservationDate : undefined,
@@ -1167,7 +1271,7 @@ export default function DeliverySelectionPage() {
               <Card className="border-green-200 dark:border-green-800">
                 <div className="bg-gradient-to-r from-green-500 to-green-600 p-4">
                   <p className="text-white font-bold text-sm mb-1">توصيل للمنزل</p>
-                  <p className="text-green-100 text-xs">أدخل عنوانك وسنوصل طلبك إليك</p>
+                  <p className="text-green-100 text-xs">حدد موقعك داخل نطاق ٣٠ كم من فرع المروج</p>
                 </div>
                 <CardContent className="p-4 space-y-3">
                   {/* Country */}
@@ -1225,6 +1329,57 @@ export default function DeliverySelectionPage() {
                       />
                     </div>
                   )}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-sm font-medium">موقع التوصيل على الخريطة</Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                        onClick={useCurrentLocationForDelivery}
+                        disabled={isGettingLocation}
+                      >
+                        {isGettingLocation ? <Loader2 className="w-3.5 h-3.5 ml-1 animate-spin" /> : <Navigation className="w-3.5 h-3.5 ml-1" />}
+                        استخدم موقعي
+                      </Button>
+                    </div>
+                    <AppleMap
+                      mode="pick"
+                      center={selectedBranch && getBranchCoords(selectedBranch)
+                        ? { ...getBranchCoords(selectedBranch)!, label: selectedBranch.nameAr }
+                        : { lat: 24.098191, lng: 38.014813, label: 'فرع المروج' }}
+                      height="260px"
+                      onLocationPick={(lat, lng) => setDeliveryLocation({ lat, lng })}
+                    />
+                    {deliveryLocation && (
+                      <p className="text-xs text-muted-foreground" dir="ltr">
+                        {deliveryLocation.lat.toFixed(6)}, {deliveryLocation.lng.toFixed(6)}
+                      </p>
+                    )}
+                    {isCheckingDelivery && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        جارٍ التحقق من موقع التوصيل
+                      </div>
+                    )}
+                    {!isCheckingDelivery && deliveryAvailability && (
+                      <Alert className={deliveryAvailability.canDeliver
+                        ? "border-green-200 bg-green-50 dark:bg-green-950/20"
+                        : "border-red-200 bg-red-50 dark:bg-red-950/20"}>
+                        <MapPin className={`w-4 h-4 ${deliveryAvailability.canDeliver ? "text-green-600" : "text-red-600"}`} />
+                        <AlertDescription className={deliveryAvailability.canDeliver
+                          ? "text-green-800 dark:text-green-200"
+                          : "text-red-800 dark:text-red-200"}>
+                          {deliveryAvailability.messageAr}
+                          {deliveryAvailability.distanceKm !== null && (
+                            <span className="block mt-1">المسافة: {deliveryAvailability.distanceKm.toFixed(2)} كم</span>
+                          )}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    {locationError && <p className="text-xs text-destructive">{locationError}</p>}
+                  </div>
                   <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
                     <div className="flex items-center gap-2">
                       <Truck className="w-4 h-4 text-green-600 flex-shrink-0" />
@@ -1237,7 +1392,7 @@ export default function DeliverySelectionPage() {
                   <div className="flex items-start gap-2 p-3 bg-muted/30 rounded-lg">
                     <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                     <p className="text-xs text-muted-foreground">
-                      سيتواصل معك موظفونا لتأكيد العنوان وتفاصيل التوصيل
+                      رسوم التوصيل ٢٥ ريالًا للمواقع التي تبعد حتى {DELIVERY_RADIUS_KM} كم عن المروج. خارج النطاق لا تتوفر الخدمة.
                     </p>
                   </div>
                 </CardContent>

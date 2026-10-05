@@ -22,6 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { DELIVERY_FEE_SAR, DELIVERY_RADIUS_KM } from '@shared/delivery-policy';
 import {
   Select,
   SelectContent,
@@ -1576,7 +1577,7 @@ export default function AdminSettings() {
                     </div>
                     <div>
                       <p className="text-sm font-semibold">{tc('رسوم التوصيل الثابتة','Fixed Delivery Fee')}</p>
-                      <p className="text-xs text-muted-foreground">{tc('يضاف تلقائياً على طلبات توصيل المنزل','Added to home delivery orders')}</p>
+                      <p className="text-xs text-muted-foreground">{tc(`ثابتة عند ${DELIVERY_FEE_SAR} ريال ضمن ${DELIVERY_RADIUS_KM} كم من المروج`,`Fixed at SAR ${DELIVERY_FEE_SAR} within ${DELIVERY_RADIUS_KM} km of Al-Muruj`)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1585,13 +1586,8 @@ export default function AdminSettings() {
                       min="0"
                       step="0.5"
                       className="w-24 text-center h-9"
-                      defaultValue={config?.orderMethodsConfig?.deliveryFeeAmount ?? 15}
-                      onBlur={(e) => mutation.mutate({
-                        orderMethodsConfig: {
-                          ...(config?.orderMethodsConfig || {}),
-                          deliveryFeeAmount: Number(e.target.value) || 0,
-                        }
-                      })}
+                      value={DELIVERY_FEE_SAR}
+                      disabled
                       data-testid="input-delivery-fee"
                     />
                     <span className="text-sm text-muted-foreground"><SarIcon size={13} /></span>

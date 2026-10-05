@@ -1,4 +1,5 @@
 import { sendQiroxWhatsAppMessage } from "./qirox-project-integrations";
+import { buildDeliveryMapUrl, getDeliveryCoordinates } from "@shared/delivery-policy";
 
 type OrderLike = Record<string, any>;
 
@@ -71,7 +72,15 @@ function orderLocation(order: OrderLike, branchName: string): string {
   const deliveryAddress = typeof order.deliveryAddress === "string"
     ? order.deliveryAddress
     : order.deliveryAddress?.fullAddress || customerAddress;
-  if (deliveryAddress) return `العنوان: ${deliveryAddress} — الفرع: ${branchName}`;
+  const coordinates = getDeliveryCoordinates(order.deliveryAddress);
+  if (deliveryAddress || coordinates) {
+    const lines = [
+      deliveryAddress ? `عنوان التوصيل: ${deliveryAddress}` : "",
+      coordinates ? `موقع العميل على الخريطة: ${buildDeliveryMapUrl(coordinates.lat, coordinates.lng)}` : "",
+      `الفرع: ${branchName}`,
+    ].filter(Boolean);
+    return lines.join("\n");
+  }
   if (order.tableNumber) return `الطاولة: ${order.tableNumber} — الفرع: ${branchName}`;
   if (order.carInfo?.plateNumber || order.plateNumber) {
     return `السيارة: ${order.carInfo?.plateNumber || order.plateNumber} — الفرع: ${branchName}`;
