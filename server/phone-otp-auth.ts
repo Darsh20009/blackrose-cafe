@@ -57,6 +57,7 @@ async function findCustomer(phone: string) {
 
 export function registerPhoneOtpAuthRoutes(app: Express) {
   app.post("/api/auth/otp/request", async (req, res) => {
+    let stage = "input validation";
     try {
       const userType = req.body?.userType as UserType;
       const phone = normalizePhone(req.body?.phone);
@@ -64,6 +65,7 @@ export function registerPhoneOtpAuthRoutes(app: Express) {
         return res.status(400).json({ error: "أدخل رقم جوال صحيحاً مع اختيار مفتاح البلد" });
       }
 
+      stage = "employee lookup";
       const employee = userType === "employee" ? await findEmployee(phone) : null;
       if (userType === "employee" && !employee) {
         const customer = await findCustomer(phone);
@@ -83,12 +85,14 @@ export function registerPhoneOtpAuthRoutes(app: Express) {
         });
       }
 
+      stage = "OTP generation and secret validation";
       const code = String(crypto.randomInt(100000, 1_000_000));
       const now = new Date();
       const cooldownBefore = new Date(now.getTime() - 60_000);
       const codeHash = hashOtp(userType, phone, code);
       let reservation: any;
 
+      stage = "OTP reservation";
       try {
         reservation = await LoginOTPModel.findOneAndUpdate(
           {
@@ -122,7 +126,9 @@ export function registerPhoneOtpAuthRoutes(app: Express) {
         return res.status(429).json({ error: "انتظر دقيقة قبل طلب رمز جديد" });
       }
 
+      stage = "customer lookup";
       const customer = userType === "customer" ? await findCustomer(phone) : null;
+      stage = "WhatsApp delivery";
       try {
         await sendQiroxWhatsAppCode(
           {
@@ -149,7 +155,12 @@ export function registerPhoneOtpAuthRoutes(app: Express) {
           : "إذا كان الحساب موجوداً ومفعلاً، فقد أرسلنا رمزاً صالحاً لمدة خمس دقائق.",
       });
     } catch (error) {
-      console.error("[AUTH-OTP] Failed to request login code");
+      if (error instanceof Error && error.message === "A strong SESSION_SECRET is required for OTP login") {
+        console.error("[AUTH-OTP] Request failed: SESSION_SECRET is missing or set to the development default");
+      } else {
+        const errorType = error instanceof Error ? error.name : "Unknown error";
+        console.error(`[AUTH-OTP] Request failed during ${stage} (${errorType})`);
+      }
       return res.status(500).json({ error: "تعذر طلب رمز الدخول. حاول مجدداً." });
     }
   });
