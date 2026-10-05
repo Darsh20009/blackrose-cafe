@@ -1,6 +1,7 @@
 - [Foodics UI Overhaul](foodics-ui-overhaul.md) — الثيم الأساسي أحمر داكن وفاتح مع حفظ مركزي لكل مستأجر؛ admin/manager sidebar أبيض Foodics-style; الألوان الوظيفية مستقلة.
 - [Employee OTP eligibility](employee-otp-eligibility.md) — بوابة الموظفين ترسل OTP للموظف النشط فقط؛ رقم العميل وحده يُرفض برسالة صريحة ولا يُرسل له رمز.
 - [Customer auth entry](customer-auth-entry.md) — واتساب هو دخول العملاء الافتراضي؛ الحساب الجديد يطلب الاسم والبريد الاختياري بعد التحقق.
+- [External Render npm installs](render-package-lock.md) — Before deploying outside Replit, scan lockfiles for all Replit package-firewall hosts, not just one hostname variant.
 - [Flutter App Full Plan](flutter-app-plan.md) — خطة شاملة دائمة بدون اختصارات (14 قسم): هيكل المجلدات الكامل، كل المكتبات مشروحة، BLoC مثال كامل، Dio+Interceptors، Theme light+dark، GoRouter، Codemagic YAML، FCM، نشر App Store+Play، وخطوات تحويل أي ويب لـ Flutter. تحديث: يوليو 2026.
 - [Branch publishedBranches wildcard](branch-wildcard.md) — client-side branch filter must check `pb.includes('*') || pb.length === 0` before checking specific branchId; server migration sets all products to `['*']`; admin/owner new products default to `['*']`.
 - [Face-api model serving](face-api-setup.md) — copy @vladmandic/face-api models to public/face-models; CDN fails in Replit; local static serving is the only reliable approach.
