@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PWAInstallButton } from "@/components/pwa-install";
 import { useCustomer } from "@/contexts/CustomerContext";
+import { useAuthModal } from "@/contexts/AuthModalContext";
 import { useLocation } from "wouter";
 import { 
   Coffee, 
@@ -62,6 +63,7 @@ export default function MenuPage() {
   const tc = useTranslate();
   const { cartItems, addToCart } = useCartStore();
   const { isAuthenticated, customer } = useCustomer();
+  const { openAuthModal } = useAuthModal();
   const queryClient = useQueryClient();
   const { selectedBranchId, selectedBranch, setShowBranchSelector } = useBranch();
 
@@ -678,10 +680,12 @@ export default function MenuPage() {
               if (isAuthenticated || customer || storedCustomer) {
                 setLocation("/profile");
               } else {
-                setLocation("/auth");
+                 openAuthModal({ initialMode: "login", purpose: "account" });
               }
             }} 
             className="h-9 w-9 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10"
+             title={isAuthenticated ? tc("الحساب", "Account") : tc("تسجيل الدخول أو إنشاء حساب", "Sign in or create an account")}
+             aria-label={isAuthenticated ? tc("الحساب", "Account") : tc("تسجيل الدخول أو إنشاء حساب", "Sign in or create an account")}
           >
             <User className="w-4 h-4" />
           </Button>

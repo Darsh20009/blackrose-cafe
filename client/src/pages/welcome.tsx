@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { Coffee, Star, MapPin, ChevronLeft, ChevronRight, LogOut, User, KeyRound, X as XIcon, Award, Clock } from "lucide-react";
 import { useCustomer } from "@/contexts/CustomerContext";
+import { useAuthModal } from "@/contexts/AuthModalContext";
 import { useTranslation } from "react-i18next";
 import CurrentOrderBanner from "@/components/current-order-banner";
 import { useRealtimeEvent } from "@/hooks/useRealtimeEngine";
@@ -14,6 +15,7 @@ import bannerImage2 from "@assets/blackrose-banner-2.png";
 export default function WelcomePage() {
   const [, setLocation] = useLocation();
   const { customer, isAuthenticated, logout } = useCustomer();
+  const { openAuthModal } = useAuthModal();
   const { t, i18n } = useTranslation();
   const [verificationCode, setVerificationCode] = useState<any>(null);
 
@@ -129,7 +131,7 @@ export default function WelcomePage() {
                 if (isAuthenticated || customer || stored) {
                   setLocation("/profile");
                 } else {
-                  setLocation("/auth");
+                  openAuthModal({ initialMode: "login", purpose: "account" });
                 }
               }}
               className="w-10 h-10 rounded-xl flex items-center justify-center border border-white/20 text-white transition-all"
@@ -231,7 +233,7 @@ export default function WelcomePage() {
 
               {!isAuthenticated ? (
                 <button
-                  onClick={() => setLocation("/auth")}
+                  onClick={() => openAuthModal({ initialMode: "login", purpose: "account" })}
                   className="w-full h-14 rounded-2xl font-semibold text-base text-white/85 flex items-center justify-center transition-all duration-200 active:scale-[0.97] border border-white/20"
                   style={{ background: "rgba(255,255,255,0.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
                   data-testid="button-login"

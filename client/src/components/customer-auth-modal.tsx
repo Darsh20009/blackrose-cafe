@@ -37,7 +37,7 @@ export default function CustomerAuthModal() {
 
   useEffect(() => {
     if (state.open) {
-      setMode("guest");
+      setMode(state.initialMode ?? "guest");
       setIdentifier("");
       setName("");
       setEmail("");
@@ -48,7 +48,7 @@ export default function CustomerAuthModal() {
       setOtpCooldown(0);
       setLoading(false);
     }
-  }, [state.open]);
+  }, [state.open, state.initialMode]);
 
   useEffect(() => {
     if (otpCooldown <= 0) return;
@@ -265,19 +265,23 @@ export default function CustomerAuthModal() {
   return (
     <Dialog open={state.open} onOpenChange={(o) => !o && closeAuthModal()}>
       <DialogContent
-        className="max-w-md max-h-[90vh] overflow-y-auto bg-card border-2 border-primary/30"
+        className="max-w-md max-h-[90dvh] overflow-y-auto bg-card border border-border"
         dir={isAr ? "rtl" : "ltr"}
         data-testid="modal-customer-auth"
       >
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold flex items-center gap-2 text-foreground">
-            <ShoppingBag className="w-6 h-6 text-primary" />
-            {isAr ? "إكمال الطلب" : "Complete Your Order"}
+            {state.purpose === "account"
+              ? <User className="w-6 h-6 text-primary" />
+              : <ShoppingBag className="w-6 h-6 text-primary" />}
+            {state.purpose === "account"
+              ? (isAr ? "تسجيل الدخول أو إنشاء حساب" : "Sign in or create an account")
+              : (isAr ? "إكمال الطلب" : "Complete Your Order")}
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            {isAr
-              ? "اختر طريقة المتابعة لإتمام طلبك"
-              : "Choose how to proceed with your order"}
+            {state.purpose === "account"
+              ? (isAr ? "اختر طريقة الدخول أو أنشئ حساباً جديداً" : "Choose a sign-in method or create a new account")
+              : (isAr ? "اختر طريقة المتابعة لإتمام طلبك" : "Choose how to proceed with your order")}
           </DialogDescription>
         </DialogHeader>
 
@@ -285,11 +289,13 @@ export default function CustomerAuthModal() {
           if (v === "whatsapp" && identifier.includes("@")) setIdentifier("");
           setMode(v as Mode);
         }} className="w-full mt-2">
-          <TabsList className="grid w-full grid-cols-4 bg-primary/10">
-            <TabsTrigger value="guest" data-testid="tab-guest" className="gap-1">
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span className="text-xs">{isAr ? "بدون تسجيل" : "Guest"}</span>
-            </TabsTrigger>
+          <TabsList className={`grid w-full ${state.purpose === "account" ? "grid-cols-3" : "grid-cols-4"} bg-primary/10`}>
+            {state.purpose !== "account" && (
+              <TabsTrigger value="guest" data-testid="tab-guest" className="gap-1">
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span className="text-xs">{isAr ? "بدون تسجيل" : "Guest"}</span>
+              </TabsTrigger>
+            )}
             <TabsTrigger value="login" data-testid="tab-login-modal" className="gap-1">
               <LogIn className="w-3.5 h-3.5" />
               <span className="text-xs">{isAr ? "دخول" : "Login"}</span>

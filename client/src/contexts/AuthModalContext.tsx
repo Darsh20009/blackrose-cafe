@@ -1,13 +1,22 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 
+export type AuthModalMode = "guest" | "login" | "register" | "whatsapp";
+export type AuthModalPurpose = "order" | "account";
+
 interface AuthModalState {
   open: boolean;
   onSuccess?: () => void;
+  initialMode?: AuthModalMode;
+  purpose?: AuthModalPurpose;
 }
 
 interface AuthModalContextType {
   state: AuthModalState;
-  openAuthModal: (opts?: { onSuccess?: () => void }) => void;
+  openAuthModal: (opts?: {
+    onSuccess?: () => void;
+    initialMode?: AuthModalMode;
+    purpose?: AuthModalPurpose;
+  }) => void;
   closeAuthModal: () => void;
   triggerSuccess: () => void;
 }
@@ -17,8 +26,17 @@ const AuthModalContext = createContext<AuthModalContextType | undefined>(undefin
 export function AuthModalProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthModalState>({ open: false });
 
-  const openAuthModal = useCallback((opts?: { onSuccess?: () => void }) => {
-    setState({ open: true, onSuccess: opts?.onSuccess });
+  const openAuthModal = useCallback((opts?: {
+    onSuccess?: () => void;
+    initialMode?: AuthModalMode;
+    purpose?: AuthModalPurpose;
+  }) => {
+    setState({
+      open: true,
+      onSuccess: opts?.onSuccess,
+      initialMode: opts?.initialMode ?? "guest",
+      purpose: opts?.purpose ?? "order",
+    });
   }, []);
 
   const closeAuthModal = useCallback(() => {
