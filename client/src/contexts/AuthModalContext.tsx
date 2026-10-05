@@ -34,7 +34,7 @@ export function AuthModalProvider({ children }: { children: ReactNode }) {
     setState({
       open: true,
       onSuccess: opts?.onSuccess,
-      initialMode: opts?.initialMode ?? "guest",
+      initialMode: opts?.initialMode ?? (opts?.purpose === "account" ? "whatsapp" : "guest"),
       purpose: opts?.purpose ?? "order",
     });
   }, []);

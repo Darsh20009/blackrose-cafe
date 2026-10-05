@@ -33,6 +33,7 @@ export default function CustomerAuthModal() {
   const [loading, setLoading] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  const [otpNeedsRegistration, setOtpNeedsRegistration] = useState(false);
   const [otpCooldown, setOtpCooldown] = useState(0);
 
   useEffect(() => {
@@ -45,6 +46,7 @@ export default function CustomerAuthModal() {
       setShowPassword(false);
       setOtpCode("");
       setOtpSent(false);
+      setOtpNeedsRegistration(false);
       setOtpCooldown(0);
       setLoading(false);
     }
@@ -154,11 +156,13 @@ export default function CustomerAuthModal() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ userType: "customer", phone, name }),
+        body: JSON.stringify({ userType: "customer", phone }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || (isAr ? "تعذر إرسال الرمز" : "Could not send the code"));
+      setOtpCode("");
       setOtpSent(true);
+      setOtpNeedsRegistration(false);
       setOtpCooldown(60);
       toast({
         title: isAr ? "تحقق من واتساب" : "Check WhatsApp",
@@ -179,14 +183,32 @@ export default function CustomerAuthModal() {
     event.preventDefault();
     setLoading(true);
     try {
+      const requestBody: Record<string, unknown> = {
+        userType: "customer",
+        phone: identifier,
+        code: otpCode,
+        deferRegistration: true,
+      };
+      if (otpNeedsRegistration) {
+        requestBody.name = name.trim();
+        if (email.trim()) requestBody.email = email.trim();
+      }
       const response = await fetch("/api/auth/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ userType: "customer", phone: identifier, code: otpCode, name }),
+        body: JSON.stringify(requestBody),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || (isAr ? "رمز التحقق غير صحيح" : "Invalid verification code"));
+      if (data.requiresRegistration) {
+        setOtpNeedsRegistration(true);
+        toast({
+          title: isAr ? "تم التحقق من الرقم" : "Phone verified",
+          description: isAr ? "أدخل اسمك لإكمال إنشاء الحساب. البريد الإلكتروني اختياري." : "Enter your name to finish creating your account. Email is optional.",
+        });
+        return;
+      }
       setCustomer(data.user);
       customerStorage.clearGuestInfo();
       customerStorage.setGuestMode(false);
@@ -280,7 +302,11 @@ export default function CustomerAuthModal() {
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
             {state.purpose === "account"
-              ? (isAr ? "اختر طريقة الدخول أو أنشئ حساباً جديداً" : "Choose a sign-in method or create a new account")
+              ? mode === "login"
+                ? (isAr ? "أدخل رقم جوالك وكلمة المرور" : "Enter your phone number and password")
+                : otpNeedsRegistration
+                  ? (isAr ? "تم التحقق من رقمك. أكمل بيانات الحساب للمتابعة." : "Your number is verified. Complete your account details to continue.")
+                  : (isAr ? "أدخل رقم جوالك وسنرسل رمز الدخول عبر واتساب" : "Enter your phone number and we’ll send a sign-in code on WhatsApp")
               : (isAr ? "اختر طريقة المتابعة لإتمام طلبك" : "Choose how to proceed with your order")}
           </DialogDescription>
         </DialogHeader>
@@ -289,7 +315,7 @@ export default function CustomerAuthModal() {
           if (v === "whatsapp" && identifier.includes("@")) setIdentifier("");
           setMode(v as Mode);
         }} className="w-full mt-2">
-          <TabsList className={`grid w-full ${state.purpose === "account" ? "grid-cols-3" : "grid-cols-4"} bg-primary/10`}>
+          <TabsList className={state.purpose === "account" ? "hidden" : "grid w-full grid-cols-4 bg-primary/10"}>
             {state.purpose !== "account" && (
               <TabsTrigger value="guest" data-testid="tab-guest" className="gap-1">
                 <ShoppingBag className="w-3.5 h-3.5" />
@@ -366,16 +392,6 @@ export default function CustomerAuthModal() {
               else requestWhatsAppCode();
             }} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="otp-name-modal">{isAr ? "الاسم (للحساب الجديد)" : "Name (for new accounts)"}</Label>
-                <Input
-                  id="otp-name-modal"
-                  value={name}
-                  onChange={event => setName(event.target.value)}
-                  autoComplete="name"
-                  data-testid="input-otp-name-modal"
-                />
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="otp-phone-modal" className="flex items-center gap-2">
                   <Phone className="w-4 h-4" />
                   {isAr ? "رقم الجوال" : "Phone number"}
@@ -405,7 +421,42 @@ export default function CustomerAuthModal() {
                   />
                 </div>
               )}
-              <Button type="button" variant="outline" className="w-full" disabled={loading || otpCooldown > 0}
+              {otpNeedsRegistration && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="otp-name-modal" className="flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      {isAr ? "الاسم" : "Name"}
+                    </Label>
+                    <Input
+                      id="otp-name-modal"
+                      value={name}
+                      onChange={event => setName(event.target.value)}
+                      autoComplete="name"
+                      required
+                      minLength={2}
+                      maxLength={100}
+                      data-testid="input-otp-name-modal"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="otp-email-modal" className="flex items-center gap-2">
+                      <Mail className="w-4 h-4" />
+                      {isAr ? "البريد الإلكتروني (اختياري)" : "Email (optional)"}
+                    </Label>
+                    <Input
+                      id="otp-email-modal"
+                      type="email"
+                      value={email}
+                      onChange={event => setEmail(event.target.value)}
+                      autoComplete="email"
+                      dir="ltr"
+                      data-testid="input-otp-email-modal"
+                    />
+                  </div>
+                </>
+              )}
+              <Button type="button" className="w-full h-11 font-bold" disabled={loading || otpCooldown > 0}
                 onClick={requestWhatsAppCode} data-testid="button-send-otp-modal">
                 <MessageCircle className="w-4 h-4 ml-2" />
                 {otpSent
@@ -417,11 +468,15 @@ export default function CustomerAuthModal() {
               {otpSent && (
                 <Button type="submit" className="w-full" disabled={loading || otpCode.length !== 6}
                   data-testid="button-verify-otp-modal">
-                  {isAr ? "تأكيد الرمز والمتابعة" : "Verify code and continue"}
+                  {otpNeedsRegistration
+                    ? (isAr ? "تأكيد وإنشاء الحساب" : "Verify and create account")
+                    : (isAr ? "تأكيد الرمز والمتابعة" : "Verify code and continue")}
                 </Button>
               )}
               <Button type="button" variant="ghost" className="w-full" onClick={() => setMode("login")}>
-                {isAr ? "العودة إلى كلمة المرور" : "Back to password login"}
+                {state.purpose === "account"
+                  ? (isAr ? "أو الدخول برقم الجوال وكلمة المرور" : "Or sign in with phone and password")
+                  : (isAr ? "العودة إلى كلمة المرور" : "Back to password login")}
               </Button>
             </form>
           </TabsContent>
@@ -431,17 +486,30 @@ export default function CustomerAuthModal() {
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="login-id" className="flex items-center gap-2">
-                  <Mail className="w-4 h-4" />
-                  {isAr ? "الجوال أو البريد" : "Phone or Email"}
+                  {state.purpose === "account" ? <Phone className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
+                  {state.purpose === "account"
+                    ? (isAr ? "رقم الجوال" : "Phone number")
+                    : (isAr ? "الجوال أو البريد" : "Phone or Email")}
                 </Label>
-                <SmartIdentifierInput
-                  id="login-id"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e)}
-                  placeholder={isAr ? "5xxxxxxxx أو email@example.com" : "5xxxxxxxx or email@example.com"}
-                  data-testid="input-login-identifier-modal"
-                  required
-                />
+                {state.purpose === "account" ? (
+                  <InternationalPhoneInput
+                    id="login-id"
+                    value={identifier}
+                    onChange={setIdentifier}
+                    placeholder={isAr ? "رقم الجوال" : "Phone number"}
+                    data-testid="input-login-identifier-modal"
+                    required
+                  />
+                ) : (
+                  <SmartIdentifierInput
+                    id="login-id"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e)}
+                    placeholder={isAr ? "5xxxxxxxx أو email@example.com" : "5xxxxxxxx or email@example.com"}
+                    data-testid="input-login-identifier-modal"
+                    required
+                  />
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="login-pw" className="flex items-center gap-2">
@@ -480,6 +548,11 @@ export default function CustomerAuthModal() {
                   : (isAr ? "تسجيل دخول ومتابعة" : "Login & Continue")}
               </Button>
             </form>
+            {state.purpose === "account" && (
+              <Button type="button" variant="ghost" className="w-full" onClick={() => setMode("whatsapp")}>
+                {isAr ? "العودة إلى الدخول عبر واتساب" : "Back to WhatsApp sign-in"}
+              </Button>
+            )}
           </TabsContent>
 
           {/* Register */}

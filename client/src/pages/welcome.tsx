@@ -131,7 +131,7 @@ export default function WelcomePage() {
                 if (isAuthenticated || customer || stored) {
                   setLocation("/profile");
                 } else {
-                  openAuthModal({ initialMode: "login", purpose: "account" });
+                  openAuthModal({ initialMode: "whatsapp", purpose: "account" });
                 }
               }}
               className="w-10 h-10 rounded-xl flex items-center justify-center border border-white/20 text-white transition-all"
@@ -233,7 +233,7 @@ export default function WelcomePage() {
 
               {!isAuthenticated ? (
                 <button
-                  onClick={() => openAuthModal({ initialMode: "login", purpose: "account" })}
+                  onClick={() => openAuthModal({ initialMode: "whatsapp", purpose: "account" })}
                   className="w-full h-14 rounded-2xl font-semibold text-base text-white/85 flex items-center justify-center transition-all duration-200 active:scale-[0.97] border border-white/20"
                   style={{ background: "rgba(255,255,255,0.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
                   data-testid="button-login"

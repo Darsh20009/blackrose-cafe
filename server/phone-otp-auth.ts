@@ -192,8 +192,22 @@ export function registerPhoneOtpAuthRoutes(app: Express) {
 
       const existingCustomer = userType === "customer" ? await findCustomer(phone) : null;
       const newCustomerName = String(req.body?.name || "").trim();
+      const newCustomerEmail = String(req.body?.email || "").trim();
+      const deferRegistration = req.body?.deferRegistration === true;
+      if (userType === "customer" && !existingCustomer && !newCustomerName && deferRegistration) {
+        return res.json({ userType, requiresRegistration: true });
+      }
       if (userType === "customer" && !existingCustomer && (newCustomerName.length < 2 || newCustomerName.length > 100)) {
         return res.status(400).json({ error: "لإنشاء حساب جديد، أدخل اسماً من حرفين إلى 100 حرف" });
+      }
+      if (userType === "customer" && !existingCustomer && newCustomerEmail) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCustomerEmail)) {
+          return res.status(400).json({ error: "صيغة البريد الإلكتروني غير صحيحة" });
+        }
+        const emailOwner = await CustomerModel.findOne({ email: newCustomerEmail });
+        if (emailOwner) {
+          return res.status(409).json({ error: "هذا البريد الإلكتروني مرتبط بحساب آخر. استخدم بريداً مختلفاً." });
+        }
       }
 
       const consumed = await LoginOTPModel.findOneAndUpdate(
@@ -243,12 +257,19 @@ export function registerPhoneOtpAuthRoutes(app: Express) {
           customer = await CustomerModel.create({
             phone,
             name: newCustomerName,
+            ...(newCustomerEmail ? { email: newCustomerEmail } : {}),
             registeredBy: "self",
             isPasswordSet: 0,
           });
         } catch (error: any) {
           if (error?.code !== 11000) throw error;
           customer = await findCustomer(phone);
+          if (!customer && newCustomerEmail) {
+            const emailOwner = await CustomerModel.findOne({ email: newCustomerEmail });
+            if (emailOwner) {
+              return res.status(409).json({ error: "هذا البريد الإلكتروني مرتبط بحساب آخر. استخدم بريداً مختلفاً." });
+            }
+          }
         }
       }
       if (!customer) {
