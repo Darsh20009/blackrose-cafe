@@ -36,6 +36,21 @@ async function sendProjectMessage(
   }
 }
 
+export function sendQiroxWhatsAppMessage(
+  recipient: Recipient,
+  message: string,
+) {
+  if (!recipient.phone) throw new Error("A phone number is required");
+  if (message.length > 100_000) throw new Error("WhatsApp message exceeds the supported limit");
+  const name = recipient.name || "عميل";
+  return sendProjectMessage("whatsapp", {
+    recipient: { phone: recipient.phone, name },
+    platformName: "QIROX",
+    clientName: name,
+    message,
+  });
+}
+
 export function sendQiroxWhatsAppCode(recipient: Recipient, code: string) {
   if (!recipient.phone) throw new Error("A phone number is required");
   return sendProjectMessage("whatsapp", {

@@ -3,7 +3,6 @@
 - [Customer auth entry](customer-auth-entry.md) — واتساب هو دخول العملاء الافتراضي؛ الحساب الجديد يطلب الاسم والبريد الاختياري بعد التحقق.
 - [External Render npm installs](render-package-lock.md) — Before deploying outside Replit, scan lockfiles for all Replit package-firewall hosts, not just one hostname variant.
 - [Flutter App Full Plan](flutter-app-plan.md) — خطة شاملة دائمة بدون اختصارات (14 قسم): هيكل المجلدات الكامل، كل المكتبات مشروحة، BLoC مثال كامل، Dio+Interceptors، Theme light+dark، GoRouter، Codemagic YAML، FCM، نشر App Store+Play، وخطوات تحويل أي ويب لـ Flutter. تحديث: يوليو 2026.
-- [Branch publishedBranches wildcard](branch-wildcard.md) — client-side branch filter must check `pb.includes('*') || pb.length === 0` before checking specific branchId; server migration sets all products to `['*']`; admin/owner new products default to `['*']`.
 - [Face-api model serving](face-api-setup.md) — copy @vladmandic/face-api models to public/face-models; CDN fails in Replit; local static serving is the only reliable approach.
 - [PWA Icon Generation](pwa-icons.md) — icons generated via scripts/generate-pwa-icons.mjs using sharp from attached_assets/qirox-logo-customer.png; rerun after logo changes.
 - [APNs native push architecture](apns-native-push.md) — @capacitor/push-notifications v8 for token registration; server sends via HTTP/2 JWT (APNS_KEY_ID, APNS_TEAM_ID, APNS_P8_KEY env vars); tokens in APNsDeviceTokenModel; hooked into order status changes.

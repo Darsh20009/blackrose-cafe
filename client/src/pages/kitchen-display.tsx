@@ -32,13 +32,14 @@ import {
   Clock, History, Zap, Star, RotateCcw, Car, Bell, BellOff,
   Flame, Snowflake, Coffee, Utensils, Cookie, FlameKindling,
   Timer, Check, X, ChevronDown, ChevronUp, User, PhoneCall,
-  AlertOctagon, PlayCircle, PauseCircle, Eye, EyeOff,
+  AlertOctagon, PlayCircle, PauseCircle, Eye, EyeOff, MapPin, Printer,
   Volume2, VolumeX, Home,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { cn } from "@/lib/utils";
 import { QuickSidebar } from "@/components/quick-sidebar";
+import { ReceiptInvoice } from "@/components/receipt-invoice";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface OrderItem {
@@ -77,6 +78,9 @@ interface Order {
   estimatedPrepTimeInMinutes?: number;
   customerNotes?: string; notes?: string;
   branchId?: string; channel?: string;
+  branchNameAr?: string;
+  totalAmount?: number; subtotal?: number; tax?: number;
+  paymentMethod?: string; paymentStatus?: string;
   customerName?: string; customerPhone?: string;
   priority?: 'normal' | 'rush' | 'vip';
   driverName?: string;
@@ -150,6 +154,15 @@ export default function KitchenDisplay() {
   const [activeTab, setActiveTab]           = useState<'all'|'pending'|'preparing'|'ready'|'completed'|'delayed'>('all');
   const [autoRefresh, setAutoRefresh]       = useState(true);
   const [soundEnabled, setSoundEnabled]     = useState(() => getSoundEnabled("kitchen"));
+  const [selectedBranchId, setSelectedBranchId] = useState("all");
+  const [employeeContext] = useState<any>(() => {
+    const stored = localStorage.getItem('currentEmployee') || localStorage.getItem('employee');
+    if (!stored) return null;
+    try { return JSON.parse(stored); } catch { return null; }
+  });
+  const canSelectAllBranches = ['owner', 'admin', 'cook', 'barista'].includes(
+    String(employeeContext?.role || '').toLowerCase(),
+  );
 
   // ── Rush mode ────────────────────────────────────────────────────────────────
   const [rushMode, setRushMode]             = useState(false);
@@ -219,8 +232,29 @@ export default function KitchenDisplay() {
   }, [priorityOrders]);
 
   // ─── Data fetching ───────────────────────────────────────────────────────────
+  const { data: branchOptions = [] } = useQuery<any[]>({
+    queryKey: ["/api/branches"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const branchNameById = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const branch of branchOptions) {
+      const name = branch.nameAr || branch.nameEn || branch.name || "";
+      if (branch.id) names.set(String(branch.id), name);
+      if (branch._id) names.set(String(branch._id), name);
+    }
+    return names;
+  }, [branchOptions]);
+
   const { data: orders = [], isLoading, refetch } = useQuery<Order[]>({
-    queryKey: ["/api/orders/kitchen"],
+    queryKey: ["/api/orders/kitchen", selectedBranchId],
+    queryFn: async () => {
+      const response = await fetch(`/api/orders/kitchen?branchId=${encodeURIComponent(selectedBranchId)}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch kitchen orders");
+      return response.json();
+    },
     refetchInterval: autoRefresh ? 6000 : false,
   });
 
@@ -494,6 +528,23 @@ export default function KitchenDisplay() {
 
             {/* Right: controls */}
             <div className="flex items-center gap-1.5 flex-wrap">
+              {canSelectAllBranches && (
+                <select
+                  aria-label={tc('تصفية حسب الفرع', 'Filter by branch')}
+                  value={selectedBranchId}
+                  onChange={(event) => setSelectedBranchId(event.target.value)}
+                  className="h-8 max-w-44 rounded-md border border-white/15 bg-[#242424] px-2 text-xs text-white"
+                  data-testid="select-kitchen-branch"
+                >
+                  <option value="all">{tc('كل الفروع', 'All branches')}</option>
+                  {branchOptions.map((branch: any) => (
+                    <option key={branch.id || branch._id} value={branch.id || branch._id}>
+                      {branch.nameAr || branch.nameEn || branch.name || branch.id}
+                    </option>
+                  ))}
+                </select>
+              )}
+
               {/* Rush mode */}
               <Button
                 size="sm"
@@ -661,6 +712,7 @@ export default function KitchenDisplay() {
               <KdsCard
                 key={order.id}
                 order={order}
+                branchName={branchNameById.get(String(order.branchId || "")) || order.branchNameAr}
                 tick={tick}
                 isRushMode={rushMode}
                 isPriority={priorityOrders.has(order.id)}
@@ -771,6 +823,7 @@ export default function KitchenDisplay() {
 // ─── KDS Card Component ───────────────────────────────────────────────────────
 interface KdsCardProps {
   order: Order;
+  branchName?: string;
   tick: number;
   isRushMode: boolean;
   isPriority: boolean;
@@ -790,11 +843,12 @@ interface KdsCardProps {
 }
 
 function KdsCard({
-  order, tick, isRushMode, isPriority, isExpanded, itemReadyArr = [],
+  order, branchName, tick, isRushMode, isPriority, isExpanded, itemReadyArr = [],
   isMutating, tc, onTogglePriority, onToggleExpand, onToggleItem,
   onStartPreparing, onMarkReady, onMarkCompleted, onRecall, onDelayFire, onAddTime,
 }: KdsCardProps) {
   void tick;
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
   const elapsedSec  = getElapsedSeconds(order.createdAt);
   const elapsedMin  = Math.floor(elapsedSec / 60);
   const threshold   = getDelayThreshold(order);
@@ -868,6 +922,11 @@ function KdsCard({
         {order.tableNumber && (
           <div className="mt-1 text-[10px] font-bold text-muted-foreground flex items-center gap-1">
             <Store className="w-3 h-3" />{tc('طاولة', 'Table')} {order.tableNumber}
+          </div>
+        )}
+        {(branchName || order.branchId) && (
+          <div className="mt-1 text-[10px] font-bold text-gray-300 flex items-center gap-1">
+            <MapPin className="w-3 h-3" />{tc('الفرع:', 'Branch:')} {branchName || order.branchId}
           </div>
         )}
         {(order.carType || order.carInfo?.carType) && (
@@ -1044,6 +1103,16 @@ function KdsCard({
           </Button>
         ) : null}
 
+        <Button
+          variant="outline"
+          className="w-full h-8 text-xs"
+          onClick={() => setInvoiceOpen(true)}
+          data-testid={`button-invoice-${order.id}`}
+        >
+          <Printer className="w-3.5 h-3.5 ml-1" />
+          {tc('عرض وطباعة الفاتورة', 'View and print invoice')}
+        </Button>
+
         {/* Secondary controls row */}
         <div className="flex items-center justify-between gap-1">
           {/* Priority toggle */}
@@ -1085,6 +1154,14 @@ function KdsCard({
           )}
         </div>
       </div>
+      <Dialog open={invoiceOpen} onOpenChange={setInvoiceOpen}>
+        <DialogContent className="max-h-[90vh] max-w-sm overflow-y-auto bg-white text-black">
+          <DialogHeader>
+            <DialogTitle>{tc('فاتورة الطلب', 'Order invoice')} #{order.orderNumber}</DialogTitle>
+          </DialogHeader>
+          <ReceiptInvoice order={order as any} variant="button" />
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

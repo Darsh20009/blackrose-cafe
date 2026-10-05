@@ -843,6 +843,10 @@ export default function CheckoutPage() {
   const isOnlinePaymentMethod = (_method: string | null) => false;
 
   const buildOrderData = async (): Promise<{ orderData: any; activeCustomerId: string | undefined }> => {
+    if (!deliveryInfo?.branchId) {
+      throw new Error("يرجى اختيار الفرع قبل إتمام الطلب");
+    }
+
     let activeCustomerId = customer?.id;
     if (!activeCustomerId && wantToRegister) {
       setIsRegistering(true);
@@ -880,7 +884,7 @@ export default function CheckoutPage() {
       totalAmount: finalTotal,
       paymentMethod: selectedPaymentMethod as PaymentMethod,
       status: "pending",
-      branchId: deliveryInfo?.branchId || "default",
+      branchId: deliveryInfo?.branchId || "",
       orderType: deliveryInfo?.type === 'car-pickup' ? 'car_pickup'
               : deliveryInfo?.type === 'scheduled-pickup' ? 'pickup'
               : deliveryInfo?.type === 'delivery' ? 'delivery'
@@ -990,6 +994,15 @@ export default function CheckoutPage() {
   };
 
   const confirmAndCreateOrder = async () => {
+    if (!deliveryInfo?.branchId) {
+      toast({
+        variant: "destructive",
+        title: "يرجى اختيار الفرع",
+        description: "اختر الفرع الذي سيستلم طلبك قبل المتابعة",
+      });
+      return;
+    }
+
     let finalTotal = getFinalAmount();
 
     if (selectedPaymentMethod === ('wallet' as any) && (customer?.walletBalance || 0) < finalTotal) {
@@ -1033,7 +1046,7 @@ export default function CheckoutPage() {
       totalAmount: finalTotal,
       paymentMethod: selectedPaymentMethod as PaymentMethod,
       status: "pending",
-      branchId: deliveryInfo?.branchId || "default",
+      branchId: deliveryInfo?.branchId || "",
       orderType: deliveryInfo?.type === 'car-pickup' ? 'car_pickup'
               : deliveryInfo?.type === 'scheduled-pickup' ? 'pickup'
               : deliveryInfo?.type === 'delivery' ? 'delivery'

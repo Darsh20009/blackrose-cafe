@@ -877,6 +877,48 @@ async function logPayment(data: {
   }
 }
 
+function scheduleOrderWhatsAppNotifications(
+  order: any,
+  tenantId: string,
+  req: any,
+  knownBranchName = "",
+) {
+  setImmediate(async () => {
+    try {
+      const { sendOrderWhatsAppNotifications } = await import("./order-whatsapp-notifications");
+      let branchName = knownBranchName;
+      if (!branchName && order.branchId) {
+        let branch: any = await BranchModel.findOne({
+          id: String(order.branchId),
+          tenantId,
+        }).select("nameAr nameEn").lean();
+        if (!branch && /^[a-fA-F0-9]{24}$/.test(String(order.branchId))) {
+          branch = await BranchModel.findOne({
+            _id: String(order.branchId),
+            tenantId,
+          }).select("nameAr nameEn").lean();
+        }
+        branchName = branch?.nameAr || branch?.nameEn || "";
+      }
+
+      const configuredBaseUrl = process.env.PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
+      const forwardedProtocol = String(req.headers?.["x-forwarded-proto"] || req.protocol || "https")
+        .split(",")[0].trim().toLowerCase();
+      const protocol = forwardedProtocol === "http" ? "http" : "https";
+      const host = typeof req.get === "function" ? req.get("host") : req.headers?.host;
+      const publicBaseUrl = configuredBaseUrl || (host ? `${protocol}://${host}` : "");
+      if (!publicBaseUrl) {
+        console.error(`[ORDER-WHATSAPP] Could not resolve public URL for order ${order.orderNumber}`);
+        return;
+      }
+
+      await sendOrderWhatsAppNotifications(order, publicBaseUrl, branchName);
+    } catch (whatsappErr) {
+      console.error("[ORDER-WHATSAPP] Order notification failed:", whatsappErr);
+    }
+  });
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   registerPhoneOtpAuthRoutes(app);
   registerObjectStorageRoutes(app);
@@ -1154,6 +1196,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const tenantId = body.tenantId || getTenantIdFromRequest(req) || await getDefaultTenantId();
+      const orderChannel = String(body.channel || "online").toLowerCase();
+      let orderBranchName = "";
+      if (["online", "web", "app", "whatsapp"].includes(orderChannel)) {
+        const branchId = String(body.branchId || "").trim();
+        if (!branchId || ["all", "default"].includes(branchId.toLowerCase())) {
+          return res.status(400).json({ error: "يرجى اختيار فرع صالح للطلب الإلكتروني" });
+        }
+        const { BranchModel } = await import("@shared/schema");
+        let selectedBranch: any = await BranchModel.findOne({ id: branchId, tenantId }).lean();
+        if (!selectedBranch && /^[a-fA-F0-9]{24}$/.test(branchId)) {
+          selectedBranch = await BranchModel.findOne({ _id: branchId, tenantId }).lean();
+        }
+        if (!selectedBranch || selectedBranch.isActive === false || selectedBranch.isActive === 0 || selectedBranch.allowOnlineOrders === false) {
+          return res.status(400).json({ error: "الفرع المختار غير متاح لاستقبال الطلبات الإلكترونية" });
+        }
+        orderBranchName = selectedBranch.nameAr || selectedBranch.nameEn || "";
+      }
 
       const mappedPaymentMethod = paymentMethodMap[body.paymentMethod] || body.paymentMethod || 'other';
 
@@ -1423,6 +1482,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error("[NOTIFY] Order creation notification failed:", notifErr);
         }
       });
+
+      // Send an order summary to the business and an invoice/tracking link to the customer.
+      // Messaging runs after the response and never blocks order creation.
+      scheduleOrderWhatsAppNotifications(serializedOrder, tenantId, req, orderBranchName);
 
       // === Auto-Create Delivery Order for home delivery orders ===
       setImmediate(async () => {
@@ -4641,6 +4704,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const serializedOrder = serializeDoc(order);
+
+      scheduleOrderWhatsAppNotifications(serializedOrder, tenantId, req);
 
       // ── Store orderNumber for idempotency (refresh won't create duplicate) ──
       record.confirmedOrderNumber = serializedOrder.orderNumber;
@@ -9815,30 +9880,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access denied - insufficient permissions" });
       }
 
-      const { OrderModel } = await import("@shared/schema");
+      const { OrderModel, BranchModel } = await import("@shared/schema");
+      const kdsTenantId = req.employee?.tenantId || 'demo-tenant';
+      const role = req.employee.role;
+      const canViewAllBranches = ['admin', 'owner', 'cook', 'barista'].includes(role);
+      const requestedBranchId = typeof req.query.branchId === 'string' ? req.query.branchId : undefined;
       
       const query: any = {
+        tenantId: kdsTenantId,
         status: { $in: ['pending', 'confirmed', 'payment_confirmed', 'in_progress', 'ready', 'delivered', 'received', 'suspended'] }
       };
 
-      // Apply branch filtering for all non-admin/owner roles
-      if (req.employee.role !== 'admin' && req.employee.role !== 'owner') {
+      if (canViewAllBranches) {
+        if (requestedBranchId && requestedBranchId !== 'all') {
+          let selectedBranch: any = await BranchModel.findOne({
+            id: requestedBranchId,
+            tenantId: kdsTenantId,
+            isActive: { $in: [1, true] },
+          }).select('id').lean();
+          if (!selectedBranch && /^[a-fA-F0-9]{24}$/.test(requestedBranchId)) {
+            selectedBranch = await BranchModel.findOne({
+              _id: requestedBranchId,
+              tenantId: kdsTenantId,
+              isActive: { $in: [1, true] },
+            }).select('id').lean();
+          }
+          if (!selectedBranch) return res.status(400).json({ error: "Invalid branch filter" });
+          query.branchId = requestedBranchId;
+        } else if (!requestedBranchId && role !== 'admin' && role !== 'owner') {
+          // Preserve the branch-scoped default for older kitchen clients that do not send a filter.
+          if (req.employee.branchId) query.branchId = req.employee.branchId;
+        }
+      } else {
         if (req.employee.branchId) {
           query.branchId = req.employee.branchId;
         } else {
-          // Employee has no branchId — find the first active branch for this tenant
-          // Use branch.id (custom UUID string) not branch._id (ObjectId) to match order.branchId
-          const { BranchModel } = await import("@shared/schema");
-          const branch = await BranchModel.findOne({ tenantId: req.employee.tenantId, isActive: true });
+          // Employee has no branchId — find the first active branch for this tenant.
+          const branch = await BranchModel.findOne({ tenantId: kdsTenantId, isActive: { $in: [1, true] } });
           if (branch) {
-            query.branchId = (branch as any).id; // Custom ID string, matches order.branchId
+            query.branchId = (branch as any).id;
           }
-          // If no branch found, tenantId filter alone will scope results correctly
         }
       }
 
-      const kdsTenantId = req.employee?.tenantId || 'demo-tenant';
-      if (!query.tenantId) query.tenantId = kdsTenantId; // security: scope to tenant
       const orders = await OrderModel.find(query).sort({ createdAt: 1 }); // Oldest first for FIFO processing
 
       const kdsCoffeeMap = await getCachedCoffeeItemMap(kdsTenantId);
@@ -11718,11 +11802,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const cached = cache.get<any[]>(ck);
       if (cached) return res.json(cached);
 
-      let query: any = {};
+      let query: any = { tenantId };
       if (userRole === "manager" && userBranchId) {
-        query = { $or: [{ id: userBranchId }, { _id: userBranchId }] };
+        query = { tenantId, $or: [{ id: userBranchId }, { _id: userBranchId }] };
       } else {
-        query = { isActive: { $in: [1, true] } };
+        query.isActive = { $in: [1, true] };
       }
 
       const branches = await BranchModel.find(query).lean();
@@ -23675,6 +23759,11 @@ ${existingIngredients ? `المكونات الحالية: ${existingIngredients}
         deliveryMode: orderData.deliveryMode || 'delivery',
         createdAt: new Date(),
       });
+      scheduleOrderWhatsAppNotifications(
+        serializeDoc(order),
+        req.tenantId || 'demo-tenant',
+        req,
+      );
       publishEvent("order.created", { orderId: order.id, orderNumber, source: (order as any).source }, req.tenantId);
       res.status(201).json({ data: order });
     } catch (e: any) { res.status(500).json({ error: "Internal server error" }); }
