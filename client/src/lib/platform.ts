@@ -5,6 +5,44 @@
 
 export type DeviceType = "iphone" | "ipad" | "android" | "desktop";
 
+/** True when the web app is running inside the Flutter WebView wrapper. */
+export function isFlutterWebView(): boolean {
+  return typeof navigator !== "undefined" && navigator.userAgent.includes("Flutter/WebView");
+}
+
+/** True only for the iOS Flutter app, whose registered return scheme is qirox://. */
+export function isFlutterIOSWebView(): boolean {
+  return isFlutterWebView() && /\(iOS\)/i.test(navigator.userAgent);
+}
+
+/** Opens a secure payment URL through the Flutter bridge, which launches Safari. */
+export function openFlutterPaymentInSafari(url: string): boolean {
+  if (!isFlutterWebView() || typeof window === "undefined") return false;
+
+  try {
+    const paymentUrl = new URL(url, window.location.origin);
+    const bridge = (window as any).BlackRosePayment;
+    if (paymentUrl.protocol !== "https:" || typeof bridge?.postMessage !== "function") return false;
+    bridge.postMessage(paymentUrl.toString());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Adds the Flutter iOS return marker without changing browser or Android checkouts. */
+export function withFlutterAppReturn(url: string): string {
+  if (!isFlutterIOSWebView() || typeof window === "undefined") return url;
+
+  try {
+    const returnUrl = new URL(url, window.location.origin);
+    returnUrl.searchParams.set("appReturn", "qirox");
+    return returnUrl.toString();
+  } catch {
+    return url;
+  }
+}
+
 /** True when running inside a Capacitor native wrapper (iOS/Android app) */
 export function isCapacitorNative(): boolean {
   try {

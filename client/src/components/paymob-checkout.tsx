@@ -3,7 +3,11 @@ import { Loader2, ShieldCheck, X, CheckCircle2, XCircle, CreditCard, AlertCircle
 import { Button } from "@/components/ui/button";
 import SarIcon from "@/components/sar-icon";
 import { useTranslate } from "@/lib/useTranslate";
-import { isCapacitorNative } from "@/lib/server-url";
+import {
+  isCapacitorNative,
+  isFlutterWebView,
+  openFlutterPaymentInSafari,
+} from "@/lib/platform";
 
 /**
  * Detects iOS Safari running as a web browser (NOT Capacitor native).
@@ -24,9 +28,10 @@ interface PaymobCheckoutProps {
   orderNumber: string;
   amount: number;
   checkoutUrl: string;
+  paymentToken?: string;
   publicKey?: string;
   clientSecret?: string;
-  onSuccess: () => void;
+  onSuccess: (orderNumber?: string) => void;
   onError: (message: string) => void;
   onCancel: () => void;
 }
@@ -37,6 +42,7 @@ export default function PaymobCheckout({
   orderNumber,
   amount,
   checkoutUrl,
+  paymentToken,
   onSuccess,
   onError,
   onCancel,
@@ -49,6 +55,7 @@ export default function PaymobCheckout({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const successTriggered = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const flutterVerifyInFlight = useRef(false);
 
   useEffect(() => {
     if (checkoutUrl) {
@@ -73,7 +80,7 @@ export default function PaymobCheckout({
     }
   };
 
-  const triggerSuccess = () => {
+  const triggerSuccess = (confirmedOrderNumber?: string) => {
     if (successTriggered.current) return;
     successTriggered.current = true;
     stopPolling();
@@ -81,7 +88,7 @@ export default function PaymobCheckout({
     setState("success");
     setTimeout(() => {
       setVisible(false);
-      setTimeout(onSuccess, 400);
+      setTimeout(() => onSuccess(confirmedOrderNumber), 400);
     }, 1800);
   };
 
@@ -103,6 +110,76 @@ export default function PaymobCheckout({
     }
     return false;
   };
+
+  const verifyFlutterPaymentStatus = async (): Promise<boolean> => {
+    if (flutterVerifyInFlight.current) return false;
+    flutterVerifyInFlight.current = true;
+    try {
+      const response = paymentToken
+        ? await fetch("/api/payments/session-token-status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ token: paymentToken }),
+          })
+        : await fetch(`/api/payments/order-status/${encodeURIComponent(orderNumber)}`);
+
+      if (!response.ok) return false;
+      const data = await response.json();
+      if (data.confirmed === true || data.paid === true) {
+        triggerSuccess(data.orderNumber || orderNumber);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      flutterVerifyInFlight.current = false;
+    }
+  };
+
+  const openFlutterSafari = () => {
+    stopPolling();
+    successTriggered.current = false;
+    if (!openFlutterPaymentInSafari(checkoutUrl)) {
+      triggerError(tc("تعذّر فتح Safari للدفع. حاول مرة أخرى.", "Could not open Safari for payment. Please try again."));
+      return;
+    }
+
+    setConfirmCancel(false);
+    setState("processing");
+    pollRef.current = setInterval(() => {
+      void verifyFlutterPaymentStatus();
+    }, 2500);
+  };
+
+  useEffect(() => {
+    if (!isFlutterWebView()) return;
+
+    const handleAppResume = async () => {
+      if (state !== "processing" && state !== "verifying") return;
+      setState("verifying");
+      for (let attempt = 0; attempt < 4; attempt++) {
+        if (await verifyFlutterPaymentStatus()) return;
+        if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      stopPolling();
+      setState("ready");
+      setConfirmCancel(true);
+    };
+
+    const handleBrowserOpenFailure = () => {
+      stopPolling();
+      triggerError(tc("تعذّر فتح صفحة الدفع في Safari. حاول مرة أخرى.", "Safari could not open the payment page. Please try again."));
+    };
+
+    window.addEventListener("blackrose-app-resumed", handleAppResume);
+    window.addEventListener("blackrose-payment-open-failed", handleBrowserOpenFailure);
+    return () => {
+      window.removeEventListener("blackrose-app-resumed", handleAppResume);
+      window.removeEventListener("blackrose-payment-open-failed", handleBrowserOpenFailure);
+    };
+  }, [state, paymentToken, orderNumber]);
 
   const handleCloseAttempt = async () => {
     if (state === "success" || state === "processing" || state === "verifying") return;
@@ -267,6 +344,87 @@ export default function PaymobCheckout({
 
   // Cleanup polling on unmount
   useEffect(() => () => stopPolling(), []);
+
+  // ── Flutter WebView: open the provider in Safari and verify on app return ──
+  if (isFlutterWebView()) {
+    return (
+      <div className="fixed inset-0 z-[999] flex flex-col justify-end" dir="rtl">
+        <div className="absolute inset-0 bg-black/70" />
+        <div className="relative bg-background rounded-t-[28px] border-t p-5 space-y-5">
+          <div className="flex items-center justify-between border-b pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <CreditCard className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-bold">{tc("الدفع الآمن", "Secure payment")}</p>
+                <p className="text-sm text-muted-foreground">Paymob</p>
+              </div>
+            </div>
+            <div className="text-left font-bold">
+              {amount.toFixed(2)} <SarIcon size={13} />
+            </div>
+          </div>
+
+          {state === "ready" && (
+            <>
+              <p className="text-sm text-muted-foreground text-center">
+                {tc("ستفتح صفحة الدفع في Safari، ثم يعود التطبيق تلقائياً بعد إتمام العملية.", "Payment opens in Safari. The app returns automatically when the payment finishes.")}
+              </p>
+              <Button className="w-full h-12 gap-2 font-bold" onClick={openFlutterSafari} data-testid="button-paymob-open-safari">
+                <ExternalLink className="w-5 h-5" />
+                {tc("المتابعة إلى Safari", "Continue to Safari")}
+              </Button>
+            </>
+          )}
+
+          {(state === "processing" || state === "verifying") && (
+            <div className="flex flex-col items-center gap-3 py-3 text-center">
+              <Loader2 className="w-9 h-9 animate-spin text-primary" />
+              <p className="font-semibold">
+                {state === "processing"
+                  ? tc("أكمل الدفع في Safari، وسيعود التطبيق تلقائياً.", "Complete payment in Safari. The app will return automatically.")
+                  : tc("جارٍ التحقق من حالة الدفع...", "Checking payment status...")}
+              </p>
+            </div>
+          )}
+
+          {state === "success" && (
+            <div className="flex flex-col items-center gap-3 py-3 text-center">
+              <CheckCircle2 className="w-12 h-12 text-green-600" />
+              <p className="font-bold text-green-700">{tc("تم الدفع بنجاح", "Payment successful")}</p>
+            </div>
+          )}
+
+          {state === "error" && (
+            <div className="flex flex-col items-center gap-3 py-3 text-center">
+              <XCircle className="w-10 h-10 text-red-500" />
+              <p className="font-semibold">{errorMessage}</p>
+              <Button className="w-full" variant="outline" onClick={() => setState("ready")}>
+                {tc("حاول مرة أخرى", "Try again")}
+              </Button>
+            </div>
+          )}
+
+          {confirmCancel && (
+            <div className="space-y-3 border-t pt-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                {tc("لم يتم تأكيد الدفع. إذا كنت قد دفعت، انتظر قليلاً أو تحقق من طلباتك.", "Payment is not confirmed. If you paid, wait briefly or check your orders.")}
+              </p>
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1" onClick={() => { setConfirmCancel(false); openFlutterSafari(); }}>
+                  {tc("العودة للدفع", "Return to payment")}
+                </Button>
+                <Button variant="destructive" className="flex-1" onClick={handleForceClose}>
+                  {tc("إلغاء", "Cancel")}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const handleIframeLoad = () => {
     if (state === "loading") setState("ready");

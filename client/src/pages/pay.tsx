@@ -7,6 +7,7 @@ import SarIcon from "@/components/sar-icon";
 import PaymobCheckout from "@/components/paymob-checkout";
 import { brand } from "@/lib/brand";
 import { useTranslate } from "@/lib/useTranslate";
+import { isFlutterWebView, openFlutterPaymentInSafari, withFlutterAppReturn } from "@/lib/platform";
 
 interface PublicOrderItem {
   name: string;
@@ -115,7 +116,9 @@ export default function PayPage() {
     setPayError(null);
     setSelectedOrder(order);
     try {
-      const returnUrl = `${window.location.origin}/payment-return?provider=paymob&orderNumber=${encodeURIComponent(order.orderNumber)}`;
+      const returnUrl = withFlutterAppReturn(
+        `${window.location.origin}/payment-return?provider=paymob&orderNumber=${encodeURIComponent(order.orderNumber)}`
+      );
       const res = await fetch("/api/payments/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -133,7 +136,13 @@ export default function PayPage() {
         throw new Error(data?.error || data?.details || tc("تعذّر بدء عملية الدفع.", "Failed to initiate payment."));
       }
       sessionStorage.setItem('postPaymentRedirect', `/pay/order/${encodeURIComponent(order.id)}`);
-      window.location.href = data.paymentUrl;
+      if (isFlutterWebView()) {
+        if (!openFlutterPaymentInSafari(data.paymentUrl)) {
+          throw new Error(tc("تعذّر فتح Safari لبدء الدفع. حاول تحديث التطبيق.", "Could not open Safari to start payment. Update the app and try again."));
+        }
+      } else {
+        window.location.href = data.paymentUrl;
+      }
     } catch (e: any) {
       setPayError(e?.message || "خطأ غير متوقع.");
     } finally {

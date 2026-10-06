@@ -16,7 +16,7 @@ import PaymentMethods from "@/components/payment-methods";
 import GeideaCheckoutWidget from "@/components/geidea-checkout";
 import SimulatedCardPayment from "@/components/simulated-card-payment";
 import PaymobCheckoutWidget from "@/components/paymob-checkout";
-import { isCapacitorNative } from "@/lib/platform";
+import { isCapacitorNative, withFlutterAppReturn } from "@/lib/platform";
 import { customerStorage } from "@/lib/customer-storage";
 import { useCustomer } from "@/contexts/CustomerContext";
 import { useLoyaltyCard } from "@/hooks/useLoyaltyCard";
@@ -528,6 +528,7 @@ export default function CheckoutPage() {
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
   const pendingGeideaOrderData = useRef<any>(null);
   const geideaOrderNum = useRef<string>("");
+  const paymobPaymentToken = useRef<string>("");
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -960,7 +961,10 @@ export default function CheckoutPage() {
       if (!tokenData.token) throw new Error("فشل إنشاء رمز الدفع الآمن");
 
       const paymentToken = tokenData.token;
-      const returnUrl = `${window.location.origin}/payment-return?pt=${paymentToken}&provider=paymob`;
+      paymobPaymentToken.current = paymentToken;
+      const returnUrl = withFlutterAppReturn(
+        `${window.location.origin}/payment-return?pt=${paymentToken}&provider=paymob`
+      );
 
       // ── Step 2: Also save to sessionStorage as a fallback ──────────────────
       // Covers the case where the iframe stays in the same browser context.
@@ -993,6 +997,7 @@ export default function CheckoutPage() {
         throw new Error(payData.error || payData.details || 'فشل تهيئة بوابة الدفع');
       }
     } catch (err: any) {
+      paymobPaymentToken.current = "";
       sessionStorage.removeItem('pendingOrderData');
       sessionStorage.removeItem('paymentProvider');
       sessionStorage.removeItem('paymentSessionToken');
@@ -2026,9 +2031,71 @@ export default function CheckoutPage() {
                     orderNumber={paymobSessionId}
                     amount={pendingGeideaOrderData.current?.totalAmount || getFinalTotalWithPoints()}
                     checkoutUrl={paymobCheckoutUrl}
-                    onSuccess={() => {
+                    paymentToken={paymobPaymentToken.current}
+                    onSuccess={async (confirmedOrderNumber) => {
                       setShowPaymobCheckout(false);
                       const od = pendingGeideaOrderData.current;
+                      if (paymobPaymentToken.current) {
+                        let orderNumber = confirmedOrderNumber;
+                        if (!orderNumber) {
+                          try {
+                            const confirmRes = await fetch("/api/payments/confirm-payment-order", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              credentials: "include",
+                              body: JSON.stringify({ token: paymobPaymentToken.current }),
+                            });
+                            const confirmData = await confirmRes.json();
+                            if (confirmRes.ok && confirmData.success) {
+                              orderNumber = confirmData.orderNumber;
+                            } else {
+                              throw new Error(confirmData.error || "تعذّر التحقق من الدفع");
+                            }
+                          } catch (error: any) {
+                            toast({
+                              variant: "destructive",
+                              title: "تعذّر تأكيد الطلب",
+                              description: error.message || "تحقق من حالة الدفع قبل المحاولة مرة أخرى.",
+                            });
+                            return;
+                          }
+                        }
+
+                        if (!orderNumber) {
+                          toast({
+                            variant: "destructive",
+                            title: "تعذّر تأكيد الطلب",
+                            description: "لم يصل رقم الطلب المؤكد. يرجى التحقق من طلباتي قبل إعادة الدفع.",
+                          });
+                          return;
+                        }
+
+                        setWasReservationOrder(cartItems.some(ci => (ci.coffeeItem as any)?.isReservation));
+                        setOrderDetails({
+                          ...(od || {}),
+                          orderNumber,
+                          paymentStatus: "paid",
+                          status: "pending",
+                        });
+                        clearCart();
+                        customerStorage.clearActiveOffer();
+                        setPointsToRedeem(0);
+                        setAppliedGiftCard(null);
+                        setGiftCardCode("");
+                        localStorage.setItem("br-active-order", String(orderNumber));
+                        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+                        queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+                        queryClient.invalidateQueries({ queryKey: ["/api/loyalty/cards/phone"] });
+                        paymobPaymentToken.current = "";
+                        isPaymobFlow.current = false;
+                        toast({
+                          title: "تم الدفع بنجاح",
+                          description: `رقم طلبك: #${orderNumber}`,
+                        });
+                        setTimeout(() => setLocation("/my-orders"), 400);
+                        return;
+                      }
+
                       if (od) {
                         createOrderMutation.mutate({
                           ...od,

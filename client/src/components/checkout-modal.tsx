@@ -1,4 +1,4 @@
-import { useState, memo } from "react";
+import { useEffect, useRef, useState, memo } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import GeideaCheckoutWidget from "./geidea-checkout";
 import PaymobCheckoutWidget from "./paymob-checkout";
 import SarIcon from "@/components/sar-icon";
+import { isFlutterWebView, openFlutterPaymentInSafari, withFlutterAppReturn } from "@/lib/platform";
 
 const GEIDEA_METHODS = ['geidea', 'apple_pay', 'neoleap', 'neoleap-apple-pay'];
 const PAYMOB_METHODS = ['paymob-card', 'paymob-wallet'];
@@ -42,6 +43,7 @@ const CheckoutModal = memo(() => {
  const { customer } = useCustomer();
 
  const { toast } = useToast();
+  const isCheckingFlutterPayment = useRef(false);
  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null);
  const [currentStep, setCurrentStep] = useState<CheckoutStep>('review');
  const [orderDetails, setOrderDetails] = useState<any>(null);
@@ -92,7 +94,9 @@ const CheckoutModal = memo(() => {
    setShowGeideaWidget(true);
  } else if (selectedPaymentMethod && PAYMOB_METHODS.includes(selectedPaymentMethod as string)) {
    try {
-     const returnUrl = `${window.location.origin}/payment-return?provider=paymob&orderNumber=${encodeURIComponent(order.orderNumber)}`;
+      const returnUrl = withFlutterAppReturn(
+        `${window.location.origin}/payment-return?provider=paymob&orderNumber=${encodeURIComponent(order.orderNumber)}`
+      );
      const res = await apiRequest("POST", "/api/payments/init", {
        orderId: order.orderNumber,
        amount: getTotalPrice(),
@@ -107,13 +111,19 @@ const CheckoutModal = memo(() => {
      if (data.success && data.redirectUrl) {
        sessionStorage.setItem('postPaymentRedirect', customer ? '/my-orders' : `/tracking?order=${order.orderNumber}`);
        sessionStorage.setItem('pendingOrderNumber', order.orderNumber);
-       window.location.href = data.redirectUrl;
+        if (isFlutterWebView()) {
+          if (!openFlutterPaymentInSafari(data.redirectUrl)) {
+            throw new Error("تعذّر فتح Safari لبدء الدفع. حاول تحديث التطبيق.");
+          }
+        } else {
+          window.location.href = data.redirectUrl;
+        }
      } else {
        toast({ variant: "destructive", title: "خطأ في الدفع", description: data.error || "فشل تهيئة بوابة الدفع" });
        setCurrentStep('confirmation');
      }
-   } catch {
-     toast({ variant: "destructive", title: "خطأ في الاتصال", description: "تعذر الاتصال ببوابة الدفع" });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "خطأ في الدفع", description: error?.message || "تعذر الاتصال ببوابة الدفع" });
      setCurrentStep('confirmation');
    }
  } else {
@@ -240,6 +250,40 @@ const CheckoutModal = memo(() => {
      navigate(customer ? "/my-orders" : `/tracking?order=${order.orderNumber}`);
    }, 2000);
   };
+
+  useEffect(() => {
+    if (!isFlutterWebView()) return;
+
+    const checkPaymentAfterReturn = async () => {
+      const orderNumber = sessionStorage.getItem("pendingOrderNumber");
+      if (!orderNumber || isCheckingFlutterPayment.current) return;
+
+      isCheckingFlutterPayment.current = true;
+      try {
+        const response = await fetch(`/api/payments/order-status/${encodeURIComponent(orderNumber)}`);
+        const data = await response.json();
+        if (!response.ok || data.paid !== true) return;
+
+        const storedRedirect = sessionStorage.getItem("postPaymentRedirect");
+        const redirect = storedRedirect?.startsWith("/") && !storedRedirect.startsWith("//")
+          ? storedRedirect
+          : customer ? "/my-orders" : `/tracking?order=${encodeURIComponent(orderNumber)}`;
+        sessionStorage.removeItem("pendingOrderNumber");
+        sessionStorage.removeItem("postPaymentRedirect");
+        clearCart();
+        hideCheckout();
+        toast({ title: t("checkout.order_success"), description: `رقم طلبك: #${orderNumber}` });
+        navigate(redirect);
+      } catch {
+        // Leave checkout open; the customer can check the order again later.
+      } finally {
+        isCheckingFlutterPayment.current = false;
+      }
+    };
+
+    window.addEventListener("blackrose-app-resumed", checkPaymentAfterReturn);
+    return () => window.removeEventListener("blackrose-app-resumed", checkPaymentAfterReturn);
+  }, [clearCart, customer, hideCheckout, navigate, t, toast]);
 
  const handleClose = () => {
  hideCheckout();

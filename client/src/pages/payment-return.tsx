@@ -12,6 +12,13 @@ function isInIframe() {
   try { return window.self !== window.top; } catch { return true; }
 }
 
+function openFlutterAppReturn(result: "success" | "failed" | "pending", orderNumber?: string | null) {
+  const returnUrl = new URL("qirox://payment-return");
+  returnUrl.searchParams.set("result", result);
+  if (orderNumber) returnUrl.searchParams.set("orderNumber", orderNumber);
+  window.location.href = returnUrl.toString();
+}
+
 export default function PaymentReturnPage() {
   const tc = useTranslate();
   const [, navigate] = useLocation();
@@ -22,6 +29,10 @@ export default function PaymentReturnPage() {
   const retryCount = useRef(0);
   const maxRetries = 8;
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appReturnAttempted = useRef(false);
+  const shouldReturnToFlutterApp =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("appReturn") === "qirox";
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -32,6 +43,7 @@ export default function PaymentReturnPage() {
     const paymobTxId    = params.get("id");
     const provider      = params.get("provider") || "paymob";
     const session       = params.get("session");
+    const orderNumber   = params.get("orderNumber");
 
     const geideaResponseCode  = params.get("geideaResponseCode")  || params.get("responseCode");
     const geideaStatus        = params.get("geideaStatus")        || params.get("status");
@@ -80,7 +92,7 @@ export default function PaymentReturnPage() {
             setStatus("success");
             setMessage(tc("تمت عملية الدفع بنجاح! شكراً لك.", "Payment successful! Thank you."));
             try { window.parent.postMessage({ type: "PAYMOB_SUCCESS", status: "success", session }, "*"); } catch {}
-            if (!isInIframe()) setTimeout(() => navigate("/my-orders"), 2500);
+            if (!isInIframe() && !shouldReturnToFlutterApp) setTimeout(() => navigate("/my-orders"), 2500);
           } else {
             setStatus("failed");
             setMessage(tc("لم تتم عملية الدفع. يرجى المحاولة مرة أخرى.", "Payment was not completed. Please try again."));
@@ -101,6 +113,41 @@ export default function PaymentReturnPage() {
       setStatus("failed");
       setMessage(tc("لم تتم عملية الدفع. يرجى المحاولة مرة أخرى.", "Payment was not completed. Please try again."));
       try { window.parent.postMessage({ type: "PAYMOB_ERROR", status: "failed", session }, "*"); } catch {}
+      return;
+    }
+
+    // Existing orders (checkout modal / public pay page) are confirmed from the
+    // server status endpoint because Safari does not share the app's sessionStorage.
+    if (orderNumber && !paymentToken) {
+      setMessage(tc("جارٍ التحقق من حالة طلبك...", "Checking your order payment status..."));
+      const checkExistingOrder = async () => {
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            const response = await fetch(`/api/payments/order-status/${encodeURIComponent(orderNumber)}`);
+            const data = await response.json();
+            if (response.ok && data.paid === true) {
+              localStorage.setItem("br-active-order", orderNumber);
+              setDisplayOrderNumber(orderNumber);
+              setStatus("success");
+              setMessage(tc("تم تأكيد الدفع بنجاح.", "Payment confirmed successfully."));
+              try { window.parent.postMessage({ type: "PAYMOB_SUCCESS", status: "success", orderNumber }, "*"); } catch {}
+              if (!isInIframe() && !shouldReturnToFlutterApp) setTimeout(() => navigate("/my-orders"), 2500);
+              return;
+            }
+          } catch {
+            // Retry while the payment provider/webhook completes confirmation.
+          }
+          if (attempt < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+        setStatus("pending");
+        setMessage(tc(
+          "لم يصل تأكيد الدفع بعد. اترك الصفحة مفتوحة قليلاً أو ارجع للتطبيق وتحقق من طلباتك.",
+          "Payment confirmation has not arrived yet. Keep this page open briefly or return to the app and check your orders."
+        ));
+      };
+      void checkExistingOrder();
       return;
     }
 
@@ -148,7 +195,7 @@ export default function PaymentReturnPage() {
                 : tc("تمت عملية الدفع بنجاح! شكراً لك.", "Payment successful! Thank you.")
             );
             try { window.parent.postMessage({ type: "PAYMOB_SUCCESS", status: "success", orderNumber: orderNum }, "*"); } catch {}
-            if (!isInIframe()) setTimeout(() => navigate("/my-orders"), 3000);
+            if (!isInIframe() && !shouldReturnToFlutterApp) setTimeout(() => navigate("/my-orders"), 3000);
             return;
           }
 
@@ -156,7 +203,7 @@ export default function PaymentReturnPage() {
           if (confirmData.alreadyUsed) {
             setStatus("success");
             setMessage(tc("تمت عملية الدفع بنجاح! طلبك تم تأكيده.", "Payment successful! Your order is confirmed."));
-            if (!isInIframe()) setTimeout(() => navigate("/my-orders"), 3000);
+            if (!isInIframe() && !shouldReturnToFlutterApp) setTimeout(() => navigate("/my-orders"), 3000);
             return;
           }
 
@@ -213,7 +260,7 @@ export default function PaymentReturnPage() {
             setStatus("success");
             setMessage(tc("تمت عملية الدفع بنجاح! شكراً لك.", "Payment successful! Thank you."));
             try { window.parent.postMessage({ type: "PAYMOB_SUCCESS", status: "success", orderNumber: orderNum, session }, "*"); } catch {}
-            if (!isInIframe()) setTimeout(() => navigate("/my-orders"), 3000);
+            if (!isInIframe() && !shouldReturnToFlutterApp) setTimeout(() => navigate("/my-orders"), 3000);
             return;
           }
         }
@@ -236,6 +283,25 @@ export default function PaymentReturnPage() {
       if (retryTimer.current) clearTimeout(retryTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (
+      !shouldReturnToFlutterApp ||
+      isInIframe() ||
+      appReturnAttempted.current ||
+      (status !== "success" && status !== "failed")
+    ) {
+      return;
+    }
+
+    appReturnAttempted.current = true;
+    const result: "success" | "failed" = status;
+    const timer = window.setTimeout(
+      () => openFlutterAppReturn(result, displayOrderNumber),
+      800
+    );
+    return () => window.clearTimeout(timer);
+  }, [status, displayOrderNumber, shouldReturnToFlutterApp]);
 
   // ── Iframe mode (minimal) ────────────────────────────────────────────────────
   if (isInIframe()) {
@@ -281,7 +347,17 @@ export default function PaymentReturnPage() {
               <p className="text-sm text-muted-foreground animate-pulse">
                 {tc("سيتم تحويلك لمتابعة طلبك...", "Redirecting to track your order...")}
               </p>
-              {isCapacitorNative() ? (
+              {shouldReturnToFlutterApp ? (
+                <Button
+                  size="lg"
+                  className="w-full"
+                  onClick={() => openFlutterAppReturn("success", displayOrderNumber)}
+                  data-testid="button-return-flutter-app"
+                >
+                  <Smartphone className="w-5 h-5 ml-2" />
+                  {tc("العودة للتطبيق", "Return to app")}
+                </Button>
+              ) : isCapacitorNative() ? (
                 <Button size="lg" className="w-full" onClick={() => navigate("/my-orders")} data-testid="button-return-app">
                   <Smartphone className="w-5 h-5 ml-2" />
                   {tc("العودة للتطبيق", "Return To App")}
@@ -300,6 +376,18 @@ export default function PaymentReturnPage() {
               <XCircle className="w-24 h-24 text-red-500 mx-auto animate-in zoom-in duration-500" />
               <h1 className="text-3xl font-bold text-red-600">{tc("لم يتم الدفع", "Payment Not Completed")}</h1>
               <p className="text-muted-foreground text-lg">{message}</p>
+              {shouldReturnToFlutterApp && (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => openFlutterAppReturn("failed", displayOrderNumber)}
+                  data-testid="button-return-flutter-app"
+                >
+                  <Smartphone className="w-5 h-5 ml-2" />
+                  {tc("العودة للتطبيق", "Return to app")}
+                </Button>
+              )}
               <div className="flex flex-col gap-3">
                 <Button size="lg" className="w-full gap-2" onClick={() => navigate("/checkout")} data-testid="button-retry-payment">
                   <RefreshCw className="w-4 h-4" />
@@ -320,6 +408,18 @@ export default function PaymentReturnPage() {
               <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/my-orders")} data-testid="button-check-order">
                 {tc("التحقق من حالة الطلب", "Check Order Status")}
               </Button>
+              {shouldReturnToFlutterApp && (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => openFlutterAppReturn("pending", displayOrderNumber)}
+                  data-testid="button-return-flutter-app"
+                >
+                  <Smartphone className="w-5 h-5 ml-2" />
+                  {tc("العودة للتطبيق", "Return to app")}
+                </Button>
+              )}
             </>
           )}
         </div>

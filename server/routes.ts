@@ -4529,6 +4529,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Read-only status check for native apps returning from an external payment browser.
+  // The opaque token is sent in the POST body and no order/customer data is exposed.
+  app.post("/api/payments/session-token-status", async (req, res) => {
+    try {
+      const { token } = req.body;
+      if (!token || typeof token !== "string") {
+        return res.status(400).json({ error: "رمز الدفع مطلوب" });
+      }
+
+      const record = await PaymentSessionTokenModel.findOne({ token })
+        .select("confirmedOrderNumber expiresAt")
+        .lean() as any;
+      if (!record) return res.status(404).json({ error: "رمز الدفع غير موجود" });
+
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({
+        confirmed: !!record.confirmedOrderNumber,
+        orderNumber: record.confirmedOrderNumber || null,
+        expired: record.expiresAt <= new Date(),
+      });
+    } catch (err: any) {
+      console.error("[PaymentSessionToken] status error:", err);
+      return res.status(500).json({ error: "تعذّر التحقق من حالة الدفع" });
+    }
+  });
+
   // ── Resolve a Payment Session Token ──────────────────────────────────────────
   // Called by /payment-return after PayMob redirect.
   // Validates token (one-time), auto-logs in the customer, returns order data.
