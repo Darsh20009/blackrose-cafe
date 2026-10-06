@@ -1,4 +1,4 @@
-const SYMBOL_URL = "/riyal-symbol.svg";
+export const RIYAL_SYMBOL_URL = "/riyal-symbol.png";
 
 const PATTERN = /(ر\.\u200f?س|ريال\s*سعودي|\bSAR\b|\bSR\b)/g;
 
@@ -17,7 +17,7 @@ const PROCESSED_NODES = new WeakSet<Node>();
 
 function makeSymbolElement(): HTMLImageElement {
   const img = document.createElement("img");
-  img.src = SYMBOL_URL;
+  img.src = RIYAL_SYMBOL_URL;
   img.alt = "ريال";
   img.setAttribute("data-riyal-symbol", "true");
   img.style.cssText =

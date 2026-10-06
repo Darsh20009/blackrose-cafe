@@ -40,7 +40,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import banner1 from "@assets/blackrose-banner-1.png";
 import banner2 from "@assets/blackrose-banner-2.png";
-import blackroseLogo from "@assets/blackrose-logo.png";
 import type { CoffeeItem, IProductAddon, IPromoOffer } from "@shared/schema";
 import { AddToCartModal } from "@/components/add-to-cart-modal";
 import { motion, AnimatePresence } from "framer-motion";
@@ -48,6 +47,8 @@ import { useTranslation } from "react-i18next";
 import { ClassicMenuLayout, CardsMenuLayout, ListMenuLayout } from "@/components/menu-layouts";
 import type { AddonPreview } from "@/components/menu-layouts";
 import SarIcon from "@/components/sar-icon";
+
+const blackroseLogo = "/black-rose-logo.png";
 
 interface MenuCategory {
   id: string;
@@ -598,7 +599,7 @@ export default function MenuPage() {
       <header className="fixed top-0 inset-x-0 z-[60] bg-black/60 backdrop-blur-md border-b border-white/10 flex items-end justify-between px-4 pb-3 min-h-[64px]" style={{paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)'}}>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-white/10 p-1.5 flex items-center justify-center">
-            <img src={blackroseLogo} alt="Logo" className="w-full h-full object-contain" />
+            <img src="/black-rose-logo.png" alt="Black Rose Cafe" className="w-full h-full object-contain" />
           </div>
           <div className="flex flex-col">
             {(() => {
