@@ -53,6 +53,16 @@ function normalizePhone(phone: string): string {
   return `+966${digits}`;
 }
 
+function getSavedDeliveryDetails(address?: string): string {
+  const savedAddress = address?.trim() || '';
+  const parts = savedAddress.split(/\s+-\s+/);
+  const legacyCountryLabels = ['المملكة العربية السعودية', 'جمهورية مصر العربية'];
+  if (parts.length >= 3 && legacyCountryLabels.includes(parts[0])) {
+    return parts.slice(2).join(' - ');
+  }
+  return savedAddress;
+}
+
 function openDirections(lat: number, lng: number) {
   const ua = navigator.userAgent.toLowerCase();
   const isIOS = /iphone|ipad|ipod/.test(ua);
@@ -176,61 +186,6 @@ function CarSVG({ color, className = '' }: { color: string; className?: string }
 
 type OrderMethod = 'takeaway' | 'car-pickup' | 'dine-in' | 'delivery';
 
-const DELIVERY_COUNTRIES: { value: string; label: string; governorates: string[] }[] = [
-  {
-    value: 'SA',
-    label: 'المملكة العربية السعودية',
-    governorates: [
-      'منطقة الرياض',
-      'منطقة مكة المكرمة',
-      'منطقة المدينة المنورة',
-      'منطقة القصيم',
-      'المنطقة الشرقية',
-      'منطقة عسير',
-      'منطقة تبوك',
-      'منطقة حائل',
-      'منطقة الحدود الشمالية',
-      'منطقة جازان',
-      'منطقة نجران',
-      'منطقة الباحة',
-      'منطقة الجوف',
-    ],
-  },
-  {
-    value: 'EG',
-    label: 'جمهورية مصر العربية',
-    governorates: [
-      'القاهرة',
-      'الجيزة',
-      'الإسكندرية',
-      'الدقهلية',
-      'البحيرة',
-      'الشرقية',
-      'الغربية',
-      'المنوفية',
-      'القليوبية',
-      'كفر الشيخ',
-      'دمياط',
-      'بورسعيد',
-      'الإسماعيلية',
-      'السويس',
-      'الفيوم',
-      'بني سويف',
-      'المنيا',
-      'أسيوط',
-      'سوهاج',
-      'قنا',
-      'الأقصر',
-      'أسوان',
-      'البحر الأحمر',
-      'مطروح',
-      'شمال سيناء',
-      'جنوب سيناء',
-      'الوادي الجديد',
-    ],
-  },
-];
-
 export default function DeliverySelectionPage() {
   const { t, i18n } = useTranslation();
   const [, setLocation] = useLocation();
@@ -292,9 +247,9 @@ export default function DeliverySelectionPage() {
   const [arrivalTime, setArrivalTime] = useState<string>('');
   const [loadingTables, setLoadingTables] = useState(false);
   const [bookedTable, setBookedTable] = useState<{ tableNumber: string; bookingId: string } | null>(null);
-  const [selectedCountry, setSelectedCountry] = useState<string>('');
-  const [selectedGovernorate, setSelectedGovernorate] = useState<string>('');
-  const [detailedAddress, setDetailedAddress] = useState<string>(savedDeliveryInfo?.deliveryAddress || '');
+  const [detailedAddress, setDetailedAddress] = useState<string>(() =>
+    getSavedDeliveryDetails(savedDeliveryInfo?.deliveryAddress)
+  );
   const [deliveryLocation, setDeliveryLocation] = useState<{ lat: number; lng: number } | null>(() =>
     savedDeliveryInfo?.address
       ? { lat: savedDeliveryInfo.address.lat, lng: savedDeliveryInfo.address.lng }
@@ -581,14 +536,6 @@ export default function DeliverySelectionPage() {
     }
 
     if (selectedMethod === 'delivery') {
-      if (!selectedCountry) {
-        toast({ title: t("product.error"), description: "يرجى اختيار الدولة", variant: 'destructive' });
-        return;
-      }
-      if (!selectedGovernorate) {
-        toast({ title: t("product.error"), description: "يرجى اختيار المحافظة / المنطقة", variant: 'destructive' });
-        return;
-      }
       if (!detailedAddress.trim()) {
         toast({ title: t("product.error"), description: "يرجى إدخال تفاصيل العنوان (الحي، الشارع، المبنى)", variant: 'destructive' });
         return;
@@ -612,7 +559,7 @@ export default function DeliverySelectionPage() {
     }
 
     const fullDeliveryAddress = selectedMethod === 'delivery'
-      ? [DELIVERY_COUNTRIES.find(c => c.value === selectedCountry)?.label, selectedGovernorate, detailedAddress.trim()].filter(Boolean).join(' - ')
+      ? ['ينبع، السعودية', detailedAddress.trim()].join(' - ')
       : '';
     setDeliveryInfo({
       type: selectedMethod === 'car-pickup' ? 'car-pickup'
@@ -1271,64 +1218,19 @@ export default function DeliverySelectionPage() {
               <Card className="border-green-200 dark:border-green-800">
                 <div className="bg-gradient-to-r from-green-500 to-green-600 p-4">
                   <p className="text-white font-bold text-sm mb-1">توصيل للمنزل</p>
-                  <p className="text-green-100 text-xs">حدد موقعك داخل نطاق ٣٠ كم من فرع المروج</p>
+                  <p className="text-green-100 text-xs">التوصيل داخل ينبع فقط، ضمن نطاق ٣٠ كم من فرع المروج</p>
                 </div>
                 <CardContent className="p-4 space-y-3">
-                  {/* Country */}
                   <div>
-                    <Label className="text-sm font-medium mb-2 block">الدولة</Label>
-                    <Select
-                      value={selectedCountry}
-                      onValueChange={(v) => { setSelectedCountry(v); setSelectedGovernorate(''); }}
-                      data-testid="select-country"
-                    >
-                      <SelectTrigger className="text-sm" data-testid="trigger-country">
-                        <SelectValue placeholder="اختر الدولة" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DELIVERY_COUNTRIES.map((c) => (
-                          <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-sm font-medium mb-2 block">تفاصيل العنوان في ينبع</Label>
+                    <Input
+                      placeholder="الحي، الشارع، رقم المبنى / الشقة..."
+                      value={detailedAddress}
+                      onChange={(e) => setDetailedAddress(e.target.value)}
+                      className="text-sm"
+                      data-testid="input-delivery-address"
+                    />
                   </div>
-
-                  {/* Governorate / Region */}
-                  {selectedCountry && (
-                    <div>
-                      <Label className="text-sm font-medium mb-2 block">
-                        {selectedCountry === 'SA' ? 'المنطقة الإدارية' : 'المحافظة'}
-                      </Label>
-                      <Select
-                        value={selectedGovernorate}
-                        onValueChange={setSelectedGovernorate}
-                        data-testid="select-governorate"
-                      >
-                        <SelectTrigger className="text-sm" data-testid="trigger-governorate">
-                          <SelectValue placeholder={selectedCountry === 'SA' ? 'اختر المنطقة' : 'اختر المحافظة'} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {DELIVERY_COUNTRIES.find(c => c.value === selectedCountry)?.governorates.map((g) => (
-                            <SelectItem key={g} value={g}>{g}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  {/* Detailed address */}
-                  {selectedGovernorate && (
-                    <div>
-                      <Label className="text-sm font-medium mb-2 block">تفاصيل العنوان</Label>
-                      <Input
-                        placeholder="الحي، الشارع، رقم المبنى / الشقة..."
-                        value={detailedAddress}
-                        onChange={(e) => setDetailedAddress(e.target.value)}
-                        className="text-sm"
-                        data-testid="input-delivery-address"
-                      />
-                    </div>
-                  )}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <Label className="text-sm font-medium">موقع التوصيل على الخريطة</Label>
