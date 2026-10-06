@@ -3,11 +3,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { PhoneInput } from "@/components/phone-input";
 import { SmartIdentifierInput } from "@/components/smart-identifier-input";
 import { InternationalPhoneInput } from "@/components/international-phone-input";
-import { Phone, User, Lock, Mail, Eye, EyeOff, ShoppingBag, LogIn, UserPlus, MessageCircle } from "lucide-react";
+import { Phone, User, Lock, Mail, Eye, EyeOff, ShoppingBag, MessageCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
@@ -23,8 +23,9 @@ export default function CustomerAuthModal() {
   const { state, closeAuthModal, triggerSuccess } = useAuthModal();
   const { setCustomer } = useCustomer();
   const { toast } = useToast();
+  const isOrderFlow = state.purpose !== "account";
 
-  const [mode, setMode] = useState<Mode>("guest");
+  const [mode, setMode] = useState<Mode>("whatsapp");
   const [identifier, setIdentifier] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -38,7 +39,7 @@ export default function CustomerAuthModal() {
 
   useEffect(() => {
     if (state.open) {
-      setMode(state.initialMode ?? "guest");
+      setMode(isOrderFlow ? "whatsapp" : state.initialMode ?? "whatsapp");
       setIdentifier("");
       setName("");
       setEmail("");
@@ -50,7 +51,7 @@ export default function CustomerAuthModal() {
       setOtpCooldown(0);
       setLoading(false);
     }
-  }, [state.open, state.initialMode]);
+  }, [state.open, state.initialMode, isOrderFlow]);
 
   useEffect(() => {
     if (otpCooldown <= 0) return;
@@ -307,7 +308,11 @@ export default function CustomerAuthModal() {
                 : otpNeedsRegistration
                   ? (isAr ? "تم التحقق من رقمك. أكمل بيانات الحساب للمتابعة." : "Your number is verified. Complete your account details to continue.")
                   : (isAr ? "أدخل رقم جوالك وسنرسل رمز الدخول عبر واتساب" : "Enter your phone number and we’ll send a sign-in code on WhatsApp")
-              : (isAr ? "اختر طريقة المتابعة لإتمام طلبك" : "Choose how to proceed with your order")}
+              : otpNeedsRegistration
+                ? (isAr ? "تم التحقق من رقمك. أدخل اسمك لإكمال الطلب وإنشاء حسابك." : "Your phone is verified. Enter your name to finish the order and create your account.")
+                : otpSent
+                  ? (isAr ? "أدخل رمز التحقق المرسل عبر واتساب لإكمال طلبك." : "Enter the WhatsApp verification code to continue your order.")
+                  : (isAr ? "تابع الطلب بدون تسجيل دخول، فقط برقم جوالك. سنرسل رمزاً عبر واتساب، وإذا لم يكن لديك حساب سنطلب اسمك بعد التحقق." : "Continue without signing in using your phone number. We’ll send a WhatsApp code and ask for your name after verification if you’re new.")}
           </DialogDescription>
         </DialogHeader>
 
@@ -315,27 +320,6 @@ export default function CustomerAuthModal() {
           if (v === "whatsapp" && identifier.includes("@")) setIdentifier("");
           setMode(v as Mode);
         }} className="w-full mt-2">
-          <TabsList className={state.purpose === "account" ? "hidden" : "grid w-full grid-cols-4 bg-primary/10"}>
-            {state.purpose !== "account" && (
-              <TabsTrigger value="guest" data-testid="tab-guest" className="gap-1">
-                <ShoppingBag className="w-3.5 h-3.5" />
-                <span className="text-xs">{isAr ? "بدون تسجيل" : "Guest"}</span>
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="login" data-testid="tab-login-modal" className="gap-1">
-              <LogIn className="w-3.5 h-3.5" />
-              <span className="text-xs">{isAr ? "دخول" : "Login"}</span>
-            </TabsTrigger>
-            <TabsTrigger value="whatsapp" data-testid="tab-whatsapp-modal" className="gap-1">
-              <MessageCircle className="w-3.5 h-3.5" />
-              <span className="text-xs">{isAr ? "واتساب" : "WhatsApp"}</span>
-            </TabsTrigger>
-            <TabsTrigger value="register" data-testid="tab-register-modal" className="gap-1">
-              <UserPlus className="w-3.5 h-3.5" />
-              <span className="text-xs">{isAr ? "حساب جديد" : "Sign Up"}</span>
-            </TabsTrigger>
-          </TabsList>
-
           {/* Guest */}
           <TabsContent value="guest" className="space-y-4 mt-4">
             <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm text-muted-foreground">
@@ -473,11 +457,11 @@ export default function CustomerAuthModal() {
                     : (isAr ? "تأكيد الرمز والمتابعة" : "Verify code and continue")}
                 </Button>
               )}
-              <Button type="button" variant="ghost" className="w-full" onClick={() => setMode("login")}>
-                {state.purpose === "account"
-                  ? (isAr ? "أو الدخول برقم الجوال وكلمة المرور" : "Or sign in with phone and password")
-                  : (isAr ? "العودة إلى كلمة المرور" : "Back to password login")}
-              </Button>
+              {state.purpose === "account" && (
+                <Button type="button" variant="ghost" className="w-full" onClick={() => setMode("login")}>
+                  {isAr ? "أو الدخول برقم الجوال وكلمة المرور" : "Or sign in with phone and password"}
+                </Button>
+              )}
             </form>
           </TabsContent>
 
