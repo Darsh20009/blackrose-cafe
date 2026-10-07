@@ -1752,7 +1752,7 @@ export default function ManagerDashboard() {
  </div>
  </CardHeader>
  <CardContent>
- <CouponManagement employeeId={manager?.id || ''} />
+  <CouponManagement />
  </CardContent>
  </Card>
  </TabsContent>

@@ -1324,6 +1324,7 @@ const DiscountCodeSchema = new Schema<IDiscountCode>({
   employeeId: { type: String, required: true },
   isActive: { type: Number, default: 1, required: true },
   usageCount: { type: Number, default: 0, required: true },
+  usageLimit: { type: Number, min: 1 },
   visibleToCustomers: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
 });
@@ -2711,6 +2712,7 @@ export interface IEmployee extends Document {
   username: string;
   email?: string;
   password?: string;
+  portalPasswordSeededAt?: Date;
   fullName: string;
   role: string;
   title?: string;
@@ -2760,6 +2762,7 @@ const EmployeeSchema = new Schema<IEmployee>({
   username: { type: String, required: true, unique: true },
   email: { type: String, sparse: true },
   password: { type: String },
+  portalPasswordSeededAt: { type: Date },
   fullName: { type: String, required: true },
   role: { type: String, required: true },
   title: { type: String },
@@ -3050,12 +3053,13 @@ export const insertPasswordResetTokenSchema = z.object({
 });
 
 export const insertDiscountCodeSchema = z.object({
-  code: z.string(),
-  discountPercentage: z.number(),
-  reason: z.string(),
+  code: z.string().trim().min(1).max(40),
+  discountPercentage: z.number().min(1).max(100),
+  reason: z.string().trim().min(1).max(300),
   employeeId: z.string(),
   isActive: z.number().optional(),
   visibleToCustomers: z.boolean().optional(),
+  usageLimit: z.number().int().positive().nullable().optional(),
 });
 
 export const insertLoyaltyCardSchema = z.object({

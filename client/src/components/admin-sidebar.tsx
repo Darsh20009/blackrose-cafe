@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +7,7 @@ import {
   GitBranch, Mail, Coffee, Star, ClipboardList, CreditCard,
   ChevronDown, X, Package, BarChart3, ShoppingCart,
   Palette, Printer, Code2, Gift, HelpCircle, Store, Megaphone,
-  BookOpen, Warehouse, UserCheck, Shield
+  BookOpen, Warehouse, UserCheck, Shield, Ticket
 } from 'lucide-react';
 import { brand } from "@/lib/brand";
 import blackroseLogoStaff from "@assets/blackrose-staff-logo.png";
@@ -15,13 +15,15 @@ import blackroseLogoStaff from "@assets/blackrose-staff-logo.png";
 interface AdminSidebarProps {
   mobileOpen?: boolean;
   onMobileClose?: () => void;
+  role?: string;
 }
 
 // ── Direct (top-level) nav items — like Foodics: الملخص, الطلبات, العملاء ──
 const TOP_ITEMS = (isAr: boolean) => [
   { label: isAr ? 'الملخص' : 'Overview', icon: LayoutDashboard, path: '/admin/dashboard' },
   { label: isAr ? 'الطلبات' : 'Orders', icon: ShoppingCart, path: '/manager/orders' },
-  { label: isAr ? 'العملاء' : 'Customers', icon: Users, path: '/admin/customers' },
+  { label: isAr ? 'الموظفون' : 'Employees', icon: Users, path: '/admin/employees' },
+  { label: isAr ? 'الإعدادات' : 'Settings', icon: Settings, path: '/admin/settings', roles: ['admin', 'owner'] },
 ];
 
 // ── Collapsible groups — like Foodics: التقارير, المخزون, قائمة المنتجات, إدارة, التسويق ──
@@ -60,13 +62,12 @@ const NAV_GROUPS = (isAr: boolean, unreadCount: number) => [
     label: isAr ? 'إدارة' : 'Management',
     icon: Settings,
     items: [
-      { label: isAr ? 'الموظفون' : 'Employees', icon: UserCheck, path: '/admin/employees' },
+      { label: isAr ? 'أكواد الخصم' : 'Discount codes', icon: Ticket, path: '/admin/coupons' },
       { label: isAr ? 'الفروع' : 'Branches', icon: GitBranch, path: '/admin/branches' },
       { label: isAr ? 'الإشعارات' : 'Notifications', icon: Bell, path: '/admin/notifications', badge: unreadCount > 0 ? unreadCount : undefined },
-      { label: isAr ? 'الإعدادات' : 'Settings', icon: Settings, path: '/admin/settings' },
-      { label: isAr ? 'البراندة' : 'Branding', icon: Palette, path: '/admin/branding' },
+      { label: isAr ? 'الهوية' : 'Branding', icon: Palette, path: '/admin/branding', roles: ['admin', 'owner'] },
       { label: isAr ? 'الطباعة' : 'Printing', icon: Printer, path: '/admin/printing' },
-      { label: isAr ? 'إدارة API' : 'API', icon: Code2, path: '/admin/api' },
+      { label: isAr ? 'مفاتيح API' : 'API keys', icon: Code2, path: '/admin/api' },
     ],
   },
   {
@@ -111,7 +112,7 @@ function NavItemButton({
   );
 }
 
-export function AdminSidebar({ mobileOpen = false, onMobileClose }: AdminSidebarProps) {
+export function AdminSidebar({ mobileOpen = false, onMobileClose, role = "manager" }: AdminSidebarProps) {
   const [location, navigate] = useLocation();
   const { i18n } = useTranslation();
   const isAr = i18n.language !== 'en';
@@ -145,8 +146,17 @@ export function AdminSidebar({ mobileOpen = false, onMobileClose }: AdminSidebar
     navigate('/employee/login');
   };
 
-  const topItems = TOP_ITEMS(isAr);
+  const topItems = TOP_ITEMS(isAr).filter(item => !item.roles || item.roles.includes(role));
   const groups = NAV_GROUPS(isAr, unreadCount);
+
+  useEffect(() => {
+    const activeGroup = groups.find(group =>
+      group.items.some(item => location === item.path || location.startsWith(item.path + '/'))
+    );
+    if (activeGroup) {
+      setExpanded(prev => prev[activeGroup.key] ? prev : { ...prev, [activeGroup.key]: true });
+    }
+  }, [location]);
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full bg-white" dir="rtl">
@@ -195,7 +205,9 @@ export function AdminSidebar({ mobileOpen = false, onMobileClose }: AdminSidebar
         {groups.map(group => {
           const isGroupExpanded = expanded[group.key];
           const GroupIcon = group.icon;
-          const hasActiveChild = group.items.some(
+          const visibleItems = group.items.filter(item => !item.roles || item.roles.includes(role));
+          if (visibleItems.length === 0) return null;
+          const hasActiveChild = visibleItems.some(
             item => location === item.path || location.startsWith(item.path + '/')
           );
 
@@ -228,7 +240,7 @@ export function AdminSidebar({ mobileOpen = false, onMobileClose }: AdminSidebar
               {/* Sub-items */}
               {isGroupExpanded && (
                 <div>
-                  {group.items.map(item => (
+                {visibleItems.map(item => (
                     <NavItemButton
                       key={item.path}
                       label={item.label}
@@ -246,15 +258,6 @@ export function AdminSidebar({ mobileOpen = false, onMobileClose }: AdminSidebar
           );
         })}
 
-        {/* متجر التطبيقات — direct bottom item like Foodics */}
-        <div className="mx-4 my-1 border-t border-gray-100" />
-        <NavItemButton
-          label={isAr ? 'متجر التطبيقات' : 'App Store'}
-          icon={Store}
-          path="/admin/api"
-          active={location === '/admin/api'}
-          onClick={() => handleNavigate('/admin/api')}
-        />
       </nav>
 
       {/* ── Footer: رشح واكسب + مركز المساعدة + logout ── */}
@@ -267,6 +270,7 @@ export function AdminSidebar({ mobileOpen = false, onMobileClose }: AdminSidebar
           <span className="flex-1 text-right">{isAr ? 'رشح واكسب' : 'Refer & Earn'}</span>
         </button>
         <button
+          onClick={() => handleNavigate('/help')}
           className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
         >
           <HelpCircle className="w-4 h-4 text-gray-400" />

@@ -122,33 +122,54 @@ async function connectDatabase() {
     } catch (err) {
       console.error("Product branch migration error:", err);
     }
-    // Ensure admin/owner accounts exist and use the portal password
+    // Apply configured portal defaults once, then preserve password changes made by account owners.
     try {
       const bcrypt = await import("bcryptjs");
       const { v4: uuidv4 } = await import("uuid");
       const { EmployeeModel } = await import("@shared/schema");
       const ownerPass = process.env.PORTAL_DEFAULT_PASSWORD || "123456";
-      const adminPass = process.env.ADMIN_DEFAULT_PASSWORD || "123456";
-      const ownerPasswordHash = await bcrypt.hash(ownerPass, 10);
-      const adminPasswordHash = await bcrypt.hash(adminPass, 10);
+      const adminPass = process.env.ADMIN_DEFAULT_PASSWORD;
 
-      // Sync admin password
-      const adminResult = await EmployeeModel.updateOne(
-        { username: "admin" },
-        { $set: { password: adminPasswordHash, isActivated: 1, isActive: 1 } }
-      );
-      if (adminResult.matchedCount > 0) {
-        console.log(`✅ Portal account 'admin' password synced`);
-      }
+      const activateAndSeedPassword = async (username: string, configuredPassword?: string) => {
+        if (configuredPassword) {
+          const password = await bcrypt.hash(configuredPassword, 10);
+          const seeded = await EmployeeModel.updateOne(
+            {
+              username,
+              $or: [
+                { portalPasswordSeededAt: { $exists: false } },
+                { portalPasswordSeededAt: null },
+              ],
+            },
+            {
+              $set: {
+                password,
+                portalPasswordSeededAt: new Date(),
+                isActivated: 1,
+                isActive: 1,
+              },
+            },
+          );
+          if (seeded.matchedCount > 0) return;
+        }
+        await EmployeeModel.updateOne(
+          { username },
+          { $set: { isActivated: 1, isActive: 1 } },
+        );
+      };
 
-      // Create or sync owner account
+      await activateAndSeedPassword("admin", adminPass);
+
+      // Create the owner when missing, or apply the configured password once to an existing account.
       const ownerExists = await EmployeeModel.findOne({ username: "owner" });
       if (!ownerExists) {
+        const ownerPasswordHash = await bcrypt.hash(ownerPass, 10);
         await EmployeeModel.create({
           id: uuidv4(),
           tenantId: "demo-tenant",
           username: "owner",
           password: ownerPasswordHash,
+          ...(process.env.PORTAL_DEFAULT_PASSWORD ? { portalPasswordSeededAt: new Date() } : {}),
           fullName: "المالك",
           role: "owner",
           phone: "0000000001",
@@ -158,8 +179,7 @@ async function connectDatabase() {
         });
         console.log(`✅ Owner account created`);
       } else {
-        await EmployeeModel.updateOne({ username: "owner" }, { $set: { password: ownerPasswordHash, isActivated: 1, isActive: 1 } });
-        console.log(`✅ Portal account 'owner' password synced`);
+        await activateAndSeedPassword("owner", process.env.PORTAL_DEFAULT_PASSWORD);
       }
     } catch (err) { console.error("Owner sync error:", err); }
     // Ensure demo-tenant has Infinity plan — all features unlocked

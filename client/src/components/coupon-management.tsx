@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, ToggleLeft, ToggleRight, Ticket, Percent, Tag, Eye, EyeOff } from "lucide-react";
+import { Plus, ToggleLeft, ToggleRight, Ticket, Percent, Tag, Eye, EyeOff, Pencil } from "lucide-react";
 import { useTranslate } from "@/lib/useTranslate";
 
 interface DiscountCode {
@@ -20,47 +20,58 @@ interface DiscountCode {
   employeeId: string;
   isActive: number;
   usageCount?: number;
+  usageLimit?: number | null;
   visibleToCustomers?: boolean;
   createdAt?: string;
 }
 
-interface CouponManagementProps {
-  employeeId: string;
-}
-
-export function CouponManagement({ employeeId }: CouponManagementProps) {
+export function CouponManagement() {
   const { toast } = useToast();
   const tc = useTranslate();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newCoupon, setNewCoupon] = useState({
     code: "",
     discountPercentage: 10,
     reason: "",
+    usageLimit: "",
     visibleToCustomers: false,
+    isActive: 1,
   });
 
-  const { data: discountCodes = [], isLoading } = useQuery<DiscountCode[]>({
-    queryKey: ['/api/discount-codes/employee', employeeId],
-    enabled: !!employeeId,
+  const { data: discountCodes = [], isLoading, isError, refetch } = useQuery<DiscountCode[]>({
+    queryKey: ['/api/discount-codes'],
+    retry: false,
   });
 
-  const createCouponMutation = useMutation({
-    mutationFn: async (data: { code: string; discountPercentage: number; reason: string; employeeId: string; visibleToCustomers: boolean }) => {
-      return await apiRequest('POST', '/api/discount-codes', data);
+  const saveCouponMutation = useMutation({
+    mutationFn: async (data: {
+      code: string;
+      discountPercentage: number;
+      reason: string;
+      usageLimit: number | null;
+      visibleToCustomers: boolean;
+      isActive: number;
+    }) => {
+      const response = editingId
+        ? await apiRequest('PATCH', `/api/discount-codes/${editingId}`, data)
+        : await apiRequest('POST', '/api/discount-codes', data);
+      return response.json();
     },
     onSuccess: () => {
       toast({
-        title: tc("تم إنشاء الكوبون", "Coupon Created"),
-        description: tc("تم إنشاء كود الخصم بنجاح", "Discount code created successfully"),
+        title: editingId ? tc("تم تعديل الكوبون", "Coupon updated") : tc("تم إنشاء الكوبون", "Coupon created"),
+        description: editingId ? tc("تم حفظ التعديلات", "Your changes have been saved") : tc("تم إنشاء كود الخصم بنجاح", "Discount code created successfully"),
         className: "bg-green-600 text-white",
       });
       setIsAddDialogOpen(false);
-      setNewCoupon({ code: "", discountPercentage: 10, reason: "", visibleToCustomers: false });
-      queryClient.invalidateQueries({ queryKey: ['/api/discount-codes/employee', employeeId] });
+      setEditingId(null);
+      setNewCoupon({ code: "", discountPercentage: 10, reason: "", usageLimit: "", visibleToCustomers: false, isActive: 1 });
+      queryClient.invalidateQueries({ queryKey: ['/api/discount-codes'] });
     },
     onError: (error: Error) => {
       toast({
-        title: tc("خطأ", "Error"),
+        title: tc("تعذر حفظ الكوبون", "Could not save coupon"),
         description: error.message || tc("فشل في إنشاء كود الخصم", "Failed to create discount code"),
         variant: "destructive",
       });
@@ -68,19 +79,20 @@ export function CouponManagement({ employeeId }: CouponManagementProps) {
   });
 
   const toggleCouponMutation = useMutation({
-    mutationFn: async ({ id, field, value }: { id: string; field: string; value: any }) => {
-      return await apiRequest('PATCH', `/api/discount-codes/${id}`, { [field]: value, employeeId });
+    mutationFn: async ({ id, field, value }: { id: string; field: 'isActive' | 'visibleToCustomers'; value: number | boolean }) => {
+      const response = await apiRequest('PATCH', `/api/discount-codes/${id}`, { [field]: value });
+      return response.json();
     },
     onSuccess: () => {
       toast({ title: tc("تم التحديث", "Updated"), description: tc("تم تحديث حالة الكوبون", "Coupon status updated") });
-      queryClient.invalidateQueries({ queryKey: ['/api/discount-codes/employee', employeeId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/discount-codes'] });
     },
     onError: (error: Error) => {
-      toast({ title: tc("خطأ", "Error"), description: error.message || tc("فشل في تحديث الكوبون", "Failed to update coupon"), variant: "destructive" });
+      toast({ title: tc("تعذر تحديث الكوبون", "Could not update coupon"), description: error.message || tc("فشل في تحديث الكوبون", "Failed to update coupon"), variant: "destructive" });
     },
   });
 
-  const handleCreateCoupon = () => {
+  const handleSaveCoupon = () => {
     if (!newCoupon.code.trim()) {
       toast({ title: tc("خطأ", "Error"), description: tc("يرجى إدخال كود الخصم", "Please enter a discount code"), variant: "destructive" });
       return;
@@ -93,13 +105,38 @@ export function CouponManagement({ employeeId }: CouponManagementProps) {
       toast({ title: tc("خطأ", "Error"), description: tc("يرجى إدخال سبب الخصم", "Please enter a discount reason"), variant: "destructive" });
       return;
     }
-    createCouponMutation.mutate({
+    const usageLimit = newCoupon.usageLimit.trim() ? Number(newCoupon.usageLimit) : null;
+    if (usageLimit !== null && (!Number.isInteger(usageLimit) || usageLimit < 1)) {
+      toast({ title: tc("خطأ", "Error"), description: tc("حد الاستخدام يجب أن يكون رقماً صحيحاً موجباً", "Usage limit must be a positive whole number"), variant: "destructive" });
+      return;
+    }
+    saveCouponMutation.mutate({
       code: newCoupon.code.toUpperCase(),
       discountPercentage: newCoupon.discountPercentage,
-      reason: newCoupon.reason,
+      reason: newCoupon.reason.trim(),
       visibleToCustomers: newCoupon.visibleToCustomers,
-      employeeId,
+      usageLimit,
+      isActive: newCoupon.isActive,
     });
+  };
+
+  const openCreateDialog = () => {
+    setEditingId(null);
+    setNewCoupon({ code: "", discountPercentage: 10, reason: "", usageLimit: "", visibleToCustomers: false, isActive: 1 });
+    setIsAddDialogOpen(true);
+  };
+
+  const openEditDialog = (code: DiscountCode) => {
+    setEditingId(code.id || code._id || "");
+    setNewCoupon({
+      code: code.code,
+      discountPercentage: Number(code.discountPercentage) || 1,
+      reason: code.reason || "",
+      usageLimit: code.usageLimit ? String(code.usageLimit) : "",
+      visibleToCustomers: !!code.visibleToCustomers,
+      isActive: Number(code.isActive) === 0 ? 0 : 1,
+    });
+    setIsAddDialogOpen(true);
   };
 
   const generateRandomCode = () => {
@@ -127,16 +164,22 @@ export function CouponManagement({ employeeId }: CouponManagementProps) {
           <span className="font-medium">{tc("أكواد الخصم الخاصة بك", "Your Discount Codes")}</span>
           <Badge variant="secondary">{discountCodes.length}</Badge>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <Dialog
+          open={isAddDialogOpen}
+          onOpenChange={(open) => {
+            setIsAddDialogOpen(open);
+            if (!open) setEditingId(null);
+          }}
+        >
           <DialogTrigger asChild>
-            <Button data-testid="button-add-coupon">
+            <Button onClick={openCreateDialog} data-testid="button-add-coupon">
               <Plus className="w-4 h-4 ml-2" />
               {tc("إضافة كوبون", "Add Coupon")}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-md" dir="rtl">
             <DialogHeader>
-              <DialogTitle>{tc("إنشاء كود خصم جديد", "Create New Discount Code")}</DialogTitle>
+              <DialogTitle>{editingId ? tc("تعديل كود الخصم", "Edit Discount Code") : tc("إنشاء كود خصم جديد", "Create New Discount Code")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
@@ -148,11 +191,12 @@ export function CouponManagement({ employeeId }: CouponManagementProps) {
                     value={newCoupon.code}
                     onChange={(e) => setNewCoupon({ ...newCoupon, code: e.target.value.toUpperCase() })}
                     className="flex-1"
+                    dir="ltr"
                     data-testid="input-coupon-code"
                   />
-                  <Button variant="outline" onClick={generateRandomCode} type="button">
+                  {!editingId && <Button variant="outline" onClick={generateRandomCode} type="button">
                     {tc("توليد تلقائي", "Auto Generate")}
-                  </Button>
+                  </Button>}
                 </div>
               </div>
               <div className="space-y-2">
@@ -171,6 +215,19 @@ export function CouponManagement({ employeeId }: CouponManagementProps) {
                 </div>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="usage-limit">{tc("حد الاستخدام (اختياري)", "Usage limit (optional)")}</Label>
+                <Input
+                  id="usage-limit"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={newCoupon.usageLimit}
+                  onChange={(e) => setNewCoupon({ ...newCoupon, usageLimit: e.target.value })}
+                  placeholder={tc("اتركه فارغاً للاستخدام بلا حد", "Leave blank for unlimited uses")}
+                  data-testid="input-coupon-usage-limit"
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="reason">{tc("سبب الخصم", "Discount Reason")}</Label>
                 <Input
                   id="reason"
@@ -180,6 +237,19 @@ export function CouponManagement({ employeeId }: CouponManagementProps) {
                   data-testid="input-coupon-reason"
                 />
               </div>
+              {editingId && (
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <Label htmlFor="coupon-active" className="cursor-pointer">{tc("الكوبون مفعّل", "Coupon is active")}</Label>
+                  <input
+                    id="coupon-active"
+                    type="checkbox"
+                    checked={newCoupon.isActive === 1}
+                    onChange={(e) => setNewCoupon({ ...newCoupon, isActive: e.target.checked ? 1 : 0 })}
+                    className="h-4 w-4 accent-primary"
+                    data-testid="switch-edit-coupon-active"
+                  />
+                </div>
+              )}
               <div
                 className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${newCoupon.visibleToCustomers ? 'border-primary bg-primary/5' : 'border-dashed border-muted-foreground/30 bg-muted/30'}`}
                 onClick={() => setNewCoupon({ ...newCoupon, visibleToCustomers: !newCoupon.visibleToCustomers })}
@@ -210,18 +280,27 @@ export function CouponManagement({ employeeId }: CouponManagementProps) {
                 {tc("إلغاء", "Cancel")}
               </Button>
               <Button
-                onClick={handleCreateCoupon}
-                disabled={createCouponMutation.isPending}
+                onClick={handleSaveCoupon}
+                disabled={saveCouponMutation.isPending}
                 data-testid="button-confirm-create-coupon"
               >
-                {createCouponMutation.isPending ? tc("جاري الإنشاء...", "Creating...") : tc("إنشاء", "Create")}
+                {saveCouponMutation.isPending
+                  ? tc("جارٍ الحفظ...", "Saving...")
+                  : editingId ? tc("حفظ التعديلات", "Save changes") : tc("إنشاء", "Create")}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      {discountCodes.length === 0 ? (
+      {isError ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
+            <p className="text-sm text-muted-foreground">{tc("تعذر تحميل أكواد الخصم. تحقق من اتصالك وحاول مرة أخرى.", "Could not load discount codes. Check your connection and try again.")}</p>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>{tc("إعادة المحاولة", "Try again")}</Button>
+          </CardContent>
+        </Card>
+      ) : discountCodes.length === 0 ? (
         <Card className="bg-muted/30">
           <CardContent className="p-8 text-center">
             <Tag className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
@@ -234,7 +313,7 @@ export function CouponManagement({ employeeId }: CouponManagementProps) {
           {discountCodes.map((code) => {
             const codeId = code.id || code._id || '';
             return (
-              <Card key={codeId} className={`border ${code.isActive ? 'border-green-500/30 bg-green-50/50 dark:bg-green-950/10' : 'border-red-500/30 bg-red-50/50 dark:bg-red-950/10'}`}>
+              <Card key={codeId} className={`border ${Number(code.isActive) === 1 ? 'border-green-500/30 bg-green-50/50 dark:bg-green-950/10' : 'border-gray-300 bg-gray-50/70 dark:bg-gray-900/30'}`}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -248,8 +327,8 @@ export function CouponManagement({ employeeId }: CouponManagementProps) {
                           {tc("عام", "Public")}
                         </Badge>
                       )}
-                      <Badge className={code.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                        {code.isActive ? tc('نشط', 'Active') : tc('معطل', 'Inactive')}
+                      <Badge className={Number(code.isActive) === 1 ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'}>
+                        {Number(code.isActive) === 1 ? tc('نشط', 'Active') : tc('ملغى', 'Disabled')}
                       </Badge>
                     </div>
                   </div>
@@ -264,20 +343,20 @@ export function CouponManagement({ employeeId }: CouponManagementProps) {
                     </div>
                     {code.usageCount !== undefined && (
                       <div className="text-xs text-muted-foreground">
-                        {tc("تم الاستخدام:", "Used:")} {code.usageCount} {tc("مرة", "times")}
+                        {tc("الاستخدام:", "Uses:")} {code.usageCount}{code.usageLimit ? ` / ${code.usageLimit}` : ""} {tc("مرة", "times")}
                       </div>
                     )}
                   </div>
-                  <div className="mt-4 pt-3 border-t flex gap-2">
+                  <div className="mt-4 pt-3 border-t flex flex-wrap gap-2">
                     <Button
                       variant="outline"
                       size="sm"
                       className="flex-1"
-                      onClick={() => toggleCouponMutation.mutate({ id: codeId, field: 'isActive', value: code.isActive ? 0 : 1 })}
+                      onClick={() => toggleCouponMutation.mutate({ id: codeId, field: 'isActive', value: Number(code.isActive) === 1 ? 0 : 1 })}
                       disabled={toggleCouponMutation.isPending}
                       data-testid={`button-toggle-coupon-${code.code}`}
                     >
-                      {code.isActive ? <><ToggleRight className="w-4 h-4 ml-2" />{tc("تعطيل", "Disable")}</> : <><ToggleLeft className="w-4 h-4 ml-2" />{tc("تفعيل", "Enable")}</>}
+                      {Number(code.isActive) === 1 ? <><ToggleRight className="w-4 h-4 ml-2" />{tc("إلغاء التفعيل", "Disable")}</> : <><ToggleLeft className="w-4 h-4 ml-2" />{tc("تفعيل", "Enable")}</>}
                     </Button>
                     <Button
                       variant={code.visibleToCustomers ? "default" : "outline"}
@@ -288,6 +367,15 @@ export function CouponManagement({ employeeId }: CouponManagementProps) {
                       data-testid={`button-visibility-coupon-${code.code}`}
                     >
                       {code.visibleToCustomers ? <><EyeOff className="w-4 h-4 ml-2" />{tc("إخفاء", "Hide")}</> : <><Eye className="w-4 h-4 ml-2" />{tc("إظهار", "Show")}</>}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => openEditDialog(code)}
+                      data-testid={`button-edit-coupon-${code.code}`}
+                    >
+                      <Pencil className="w-4 h-4 ml-2" />{tc("تعديل", "Edit")}
                     </Button>
                   </div>
                 </CardContent>

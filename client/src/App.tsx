@@ -32,6 +32,8 @@ const CheckoutModal = lazy(() => import("@/components/checkout-modal"));
 const CustomerAuthModal = lazy(() => import("@/components/customer-auth-modal"));
 const MenuPage = lazy(() => import("@/pages/menu"));
 const CustomerProfile = lazy(() => import("@/pages/customer-profile"));
+const StaffProfile = lazy(() => import("@/pages/staff-profile"));
+const StaffCoupons = lazy(() => import("@/pages/staff-coupons"));
 const CartPage = lazy(() => import("@/pages/cart-page"));
 
 const ProductDetails = lazy(() => import("@/pages/product-details"));
@@ -137,7 +139,7 @@ const ManagerAuditLogs = lazy(() => import("@/pages/manager-audit-logs"));
 const ManagerSmartReports = lazy(() => import("@/pages/manager-smart-reports"));
 const GiftCardsManagement = lazy(() => import("@/pages/gift-cards-management"));
 const PromotionsManagement = lazy(() => import("@/pages/promotions-management"));
-const ApiManagement = lazy(() => import("@/pages/api-management"));
+const ApiManagement = lazy(() => import("@/pages/api-keys-management"));
 const KioskPage = lazy(() => import("@/pages/kiosk"));
 const AttendanceKiosk = lazy(() => import("@/pages/attendance-kiosk"));
 const FaceEnrollment = lazy(() => import("@/pages/face-enrollment"));
@@ -352,7 +354,7 @@ function AppRouter() {
       <Route path="/manager/forgot-password"><ManagerForgotPassword /></Route>
 
       {/* Manager protected routes */}
-      <Route path="/manager/employees"><AuthGuard userType="employee" allowedRoles={["manager", "admin", "owner"]}><ManagerEmployees /></AuthGuard></Route>
+      <Route path="/manager/employees"><AuthGuard userType="employee" allowedRoles={["manager", "admin", "owner"]}><ManagerLayout><ManagerEmployees /></ManagerLayout></AuthGuard></Route>
       <Route path="/manager/drivers"><AuthGuard userType="manager"><ManagerLayout><ManagerDrivers /></ManagerLayout></AuthGuard></Route>
       <Route path="/manager/dashboard"><AuthGuard userType="manager"><ManagerLayout><ManagerDashboard /></ManagerLayout></AuthGuard></Route>
       <Route path="/manager/tables"><AuthGuard userType="manager"><ManagerLayout><ManagerTables /></ManagerLayout></AuthGuard></Route>
@@ -388,6 +390,7 @@ function AppRouter() {
       <Route path="/manager/reviews"><AuthGuard userType="manager"><ManagerLayout><ManagerReviews /></ManagerLayout></AuthGuard></Route>
       <Route path="/manager/suppliers"><AuthGuard userType="manager"><ManagerLayout><SupplierManagement /></ManagerLayout></AuthGuard></Route>
       <Route path="/manager/loyalty"><AuthGuard userType="manager"><ManagerLayout><LoyaltyProgram /></ManagerLayout></AuthGuard></Route>
+      <Route path="/manager/coupons"><AuthGuard userType="manager" allowedRoles={["manager", "branch_manager", "admin", "owner"]}><ManagerLayout><StaffCoupons /></ManagerLayout></AuthGuard></Route>
       <Route path="/manager/integrations"><AuthGuard userType="manager"><ManagerLayout><ExternalIntegrations /></ManagerLayout></AuthGuard></Route>
       <Route path="/manager/warehouse"><AuthGuard userType="manager"><ManagerLayout><WarehouseManagement /></ManagerLayout></AuthGuard></Route>
       <Route path="/manager/inventory/cycle"><AuthGuard userType="manager"><ManagerLayout><InventoryCycleDashboard /></ManagerLayout></AuthGuard></Route>
@@ -421,24 +424,26 @@ function AppRouter() {
       <Route path="/admin/dashboard"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><AdminLayout><AdminDashboard /></AdminLayout></AuthGuard></Route>
       <Route path="/admin/employees"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><AdminLayout><AdminEmployees /></AdminLayout></AuthGuard></Route>
       <Route path="/admin/reports"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><AdminLayout><AdminReports /></AdminLayout></AuthGuard></Route>
-      <Route path="/admin/settings"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><AdminLayout><AdminSettings /></AdminLayout></AuthGuard></Route>
+      <Route path="/admin/settings"><AuthGuard userType="manager" allowedRoles={["owner", "admin"]}><AdminLayout><AdminSettings /></AdminLayout></AuthGuard></Route>
+      <Route path="/admin/coupons"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><AdminLayout><StaffCoupons /></AdminLayout></AuthGuard></Route>
       <Route path="/admin/branches"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><AdminLayout><AdminBranches /></AdminLayout></AuthGuard></Route>
       <Route path="/admin/email"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><AdminLayout><AdminEmail /></AdminLayout></AuthGuard></Route>
       <Route path="/admin/payment-logs"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><AdminLayout><AdminPaymentLogs /></AdminLayout></AuthGuard></Route>
       <Route path="/admin/branding"><AuthGuard userType="manager" allowedRoles={["owner", "admin"]}><AdminBranding /></AuthGuard></Route>
       <Route path="/admin/printing"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><AdminPrinting /></AuthGuard></Route>
-      <Route path="/admin/setup-wizard"><AuthGuard userType="manager" allowedRoles={["owner", "admin"]}><AdminSetupWizard /></AuthGuard></Route>
-      <Route path="/admin/customers"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><AdminLayout><AdminEmployees /></AdminLayout></AuthGuard></Route>
-      <Route path="/admin/payment-terminals"><AuthGuard userType="manager" allowedRoles={["owner", "admin"]}><PaymentTerminalConfig /></AuthGuard></Route>
+      <Route path="/admin/setup-wizard"><AuthGuard userType="manager" allowedRoles={["owner", "admin"]}><AdminLayout><AdminSetupWizard /></AdminLayout></AuthGuard></Route>
+      <Route path="/admin/customers"><Redirect to="/admin/employees" /></Route>
+      <Route path="/admin/profile"><AuthGuard userType="manager" allowedRoles={["owner", "admin"]}><AdminLayout><StaffProfile /></AdminLayout></AuthGuard></Route>
+      <Route path="/admin/payment-terminals"><AuthGuard userType="manager" allowedRoles={["owner", "admin"]}><AdminLayout><PaymentTerminalConfig /></AdminLayout></AuthGuard></Route>
       <Route path="/manager/payment-tracking"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><PaymentTrackingPage /></AuthGuard></Route>
 
       {/* ERP Accounting System */}
-      <Route path="/erp/accounting"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><ErpAccountingPage /></AuthGuard></Route>
+      <Route path="/erp/accounting"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><ManagerLayout><ErpAccountingPage /></ManagerLayout></AuthGuard></Route>
 
 
       {/* Hardware, B2B & Partner routes */}
-      <Route path="/admin/health-check"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><HealthCheck /></AuthGuard></Route>
-      <Route path="/admin/error-logs"><AuthGuard userType="manager" allowedRoles={["owner", "admin"]}><ErrorLogsPage /></AuthGuard></Route>
+      <Route path="/admin/health-check"><AuthGuard userType="manager" allowedRoles={["owner", "admin", "manager"]}><AdminLayout><HealthCheck /></AdminLayout></AuthGuard></Route>
+      <Route path="/admin/error-logs"><AuthGuard userType="manager" allowedRoles={["owner", "admin"]}><AdminLayout><ErrorLogsPage /></AdminLayout></AuthGuard></Route>
       <Route path="/manager/hardware"><AuthGuard userType="manager"><ManagerLayout><HardwareManagement /></ManagerLayout></AuthGuard></Route>
       <Route path="/manager/b2b"><AuthGuard userType="manager"><ManagerLayout><B2BMarketplace /></ManagerLayout></AuthGuard></Route>
       <Route path="/manager/partners"><AuthGuard userType="manager"><ManagerLayout><PartnerProgram /></ManagerLayout></AuthGuard></Route>

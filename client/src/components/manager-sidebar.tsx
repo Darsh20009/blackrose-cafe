@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import {
@@ -10,7 +10,7 @@ import {
   LogOut, X, BarChart2, Box, FlaskConical,
   ArrowRightLeft, Bell, BookOpen, CreditCard,
   Sparkles, MessageSquare, RefreshCw, Calculator, Megaphone,
-  Shield, Monitor, Table, UserCheck
+  Shield, Monitor, Table, UserCheck, Ticket
 } from "lucide-react";
 import { brand } from "@/lib/brand";
 import { cn } from "@/lib/utils";
@@ -84,8 +84,10 @@ const NAV_GROUPS: {
     label: "إدارة", labelEn: "Management", icon: Settings,
     items: [
       { label: "موظفو الفرع", labelEn: "Branch Staff", icon: Users, path: "/manager/employees/hub" },
-      { label: "التحضير", labelEn: "Attendance", icon: UserCheck, path: "/employee/attendance" },
+      { label: "التحضير", labelEn: "Attendance", icon: UserCheck, path: "/manager/attendance" },
       { label: "الورديات", labelEn: "Shifts", icon: Clock, path: "/manager/shifts" },
+      { label: "إعدادات المتجر", labelEn: "Store settings", icon: Settings, path: "/admin/settings", roles: ["admin", "owner"] },
+      { label: "الفروع", labelEn: "Branches", icon: Store, path: "/admin/branches", roles: ["admin", "owner"] },
       { label: "سجلات المراجعة", labelEn: "Audit Logs", icon: FileText, path: "/manager/audit-logs", roles: ["admin", "owner"] },
       { label: "ERP المحاسبة", labelEn: "ERP", icon: Calculator, path: "/erp/accounting", roles: ["admin", "owner"] },
     ],
@@ -95,6 +97,7 @@ const NAV_GROUPS: {
     label: "التسويق", labelEn: "Marketing", icon: Megaphone,
     items: [
       { label: "برنامج النقاط", labelEn: "Loyalty", icon: Star, path: "/manager/loyalty" },
+      { label: "أكواد الخصم", labelEn: "Discount codes", icon: Ticket, path: "/manager/coupons" },
       { label: "العروض والخصومات", labelEn: "Promotions", icon: Gift, path: "/manager/promotions" },
       { label: "الإشعارات", labelEn: "Notifications", icon: Bell, path: "/admin/notifications" },
       { label: "التسويق بالإيميل", labelEn: "Email Marketing", icon: MessageSquare, path: "/admin/email" },
@@ -145,6 +148,15 @@ export function ManagerSidebar({ manager, onLogout, mobileOpen, onMobileClose, r
   const userRole = role || manager?.role || "manager";
 
   const [location, navigate] = useLocation();
+
+  useEffect(() => {
+    const activeGroup = NAV_GROUPS.find(group =>
+      group.items.some(item => location === item.path || location.startsWith(item.path + '/'))
+    );
+    if (activeGroup) {
+      setExpanded(prev => prev[activeGroup.key] ? prev : { ...prev, [activeGroup.key]: true });
+    }
+  }, [location]);
 
   const toggleGroup = (key: string) =>
     setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
@@ -239,15 +251,6 @@ export function ManagerSidebar({ manager, onLogout, mobileOpen, onMobileClose, r
           );
         })}
 
-        {/* متجر التطبيقات */}
-        <div className="mx-4 my-1 border-t border-gray-100" />
-        <NavItemButton
-          label={isAr ? "متجر التطبيقات" : "App Store"}
-          icon={Store}
-          path="/manager/api"
-          active={location === "/manager/api"}
-          onClick={() => handleNavigate("/manager/api")}
-        />
       </nav>
 
       {/* ── Footer ── */}
@@ -259,7 +262,10 @@ export function ManagerSidebar({ manager, onLogout, mobileOpen, onMobileClose, r
           <Gift className="w-4 h-4 text-gray-400" />
           <span className="flex-1 text-right">{isAr ? "رشح واكسب" : "Refer & Earn"}</span>
         </button>
-        <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+        <button
+          onClick={() => handleNavigate("/help")}
+          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+        >
           <HelpCircle className="w-4 h-4 text-gray-400" />
           <span className="flex-1 text-right">{isAr ? "مركز المساعدة" : "Help Center"}</span>
         </button>

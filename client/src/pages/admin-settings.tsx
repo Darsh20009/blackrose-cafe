@@ -745,79 +745,6 @@ export default function AdminSettings() {
     });
   };
 
-  const { data: discountCodes = [], isLoading: codesLoading } = useQuery<any[]>({
-    queryKey: ["/api/discount-codes"],
-  });
-
-  const [newCodeDialogOpen, setNewCodeDialogOpen] = useState(false);
-  const [newCode, setNewCode] = useState("");
-  const [newCodeType, setNewCodeType] = useState<'percent' | 'amount'>('percent');
-  const [newCodeValue, setNewCodeValue] = useState(10);
-  const [newCodeMaxUses, setNewCodeMaxUses] = useState(100);
-  const [newCodeVisible, setNewCodeVisible] = useState(false);
-  const [showAppGuide, setShowAppGuide] = useState(false);
-
-  const createCodeMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/discount-codes", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/discount-codes"] });
-      setNewCodeDialogOpen(false);
-      setNewCode("");
-      setNewCodeType('percent');
-      setNewCodeValue(10);
-      setNewCodeMaxUses(100);
-      setNewCodeVisible(true);
-      toast({ title: tc("تم إنشاء كود الخصم بنجاح","Discount code created successfully") });
-    },
-    onError: (error: Error) => {
-      toast({ title: tc("خطأ","Error"), description: error.message, variant: "destructive" });
-    },
-  });
-
-  const toggleCodeMutation = useMutation({
-    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      const res = await apiRequest("PATCH", `/api/discount-codes/${id}`, { isActive: isActive ? 1 : 0, employeeId: 'admin' });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/discount-codes"] });
-      toast({ title: tc("تم تحديث حالة الكود","Code status updated") });
-    },
-    onError: (error: Error) => {
-      toast({ title: tc("خطأ","Error"), description: error.message, variant: "destructive" });
-    },
-  });
-
-  const toggleVisibilityMutation = useMutation({
-    mutationFn: async ({ id, visibleToCustomers }: { id: string; visibleToCustomers: boolean }) => {
-      const res = await apiRequest("PATCH", `/api/discount-codes/${id}`, { visibleToCustomers, employeeId: 'admin' });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/discount-codes"] });
-      toast({ title: tc("تم تحديث ظهور الكود","Code visibility updated") });
-    },
-    onError: (error: Error) => {
-      toast({ title: tc("خطأ","Error"), description: error.message, variant: "destructive" });
-    },
-  });
-
-  const handleCreateCode = () => {
-    createCodeMutation.mutate({
-      code: newCode.toUpperCase(),
-      discountPercentage: newCodeType === 'percent' ? newCodeValue : 0,
-      discountType: newCodeType,
-      value: newCodeValue,
-      maxUses: newCodeMaxUses,
-      reason: `كود خصم - ${newCodeType === 'percent' ? newCodeValue + '%' : newCodeValue + ' ريال'}`,
-      employeeId: 'admin',
-      isActive: 1,
-      visibleToCustomers: newCodeVisible,
-    });
-  };
 
   const handleSaveStoreManagement = () => {
     // Construct the payload correctly for Mongoose Map
@@ -845,6 +772,7 @@ export default function AdminSettings() {
     sunday: tc("الأحد", "Sunday"),
   };
 
+  const [showAppGuide, setShowAppGuide] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('store');
   const settingsTabs = [
     { key: 'store',      labelAr: 'المتجر',     labelEn: 'Store',      icon: Store },
@@ -1012,8 +940,8 @@ export default function AdminSettings() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold font-ibm-arabic">{tc("إدارة الموقع والنظام","Site & System Management")}</h1>
-          <p className="text-muted-foreground mt-1 font-ibm-arabic text-sm">{tc("تخصيص كامل للهوية، نوع النشاط، وحالة النظام","Full customization of identity, business type, and system status")}</p>
+           <h1 className="text-xl sm:text-2xl font-bold font-ibm-arabic">{tc("إعدادات المتجر والنظام","Store & system settings")}</h1>
+           <p className="text-muted-foreground mt-1 font-ibm-arabic text-sm">{tc("إدارة ساعات العمل والتشغيل والقائمة والدفع والولاء من مكان واحد","Manage store hours, operations, menu, payments and loyalty in one place")}</p>
         </div>
         <div className="bg-accent/10 p-3 rounded-full">
           <Layout className="w-6 h-6 text-accent" />
@@ -3368,168 +3296,10 @@ export default function AdminSettings() {
           </CardContent>
         </Card>
 
-        {/* Discount Codes Management */}
-        <Card className="hover-elevate border-indigo-100 dark:border-indigo-900/30 md:col-span-2 shadow-lg">
-          <CardHeader className="bg-indigo-50/50 dark:bg-indigo-900/10 border-b">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/20 rounded-lg">
-                  <Percent className="w-6 h-6 text-indigo-600" />
-                </div>
-                <div>
-                  <CardTitle className="text-xl font-bold">{tc("إدارة أكواد الخصم","Discount Codes")}</CardTitle>
-                  <CardDescription>{tc("إنشاء وإدارة أكواد الخصم الترويجية","Create and manage promotional discount codes")}</CardDescription>
-                </div>
-              </div>
-              <Dialog open={newCodeDialogOpen} onOpenChange={setNewCodeDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button data-testid="button-add-discount-code">
-                    <Plus className="w-4 h-4 ml-2" />
-                    {tc("إضافة كود خصم جديد","Add Discount Code")}
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="font-ibm-arabic">
-                  <DialogHeader>
-                    <DialogTitle>{tc("إنشاء كود خصم جديد","Create New Discount Code")}</DialogTitle>
-                    <DialogDescription>{tc("أدخل بيانات كود الخصم الجديد","Enter the details for the new discount code")}</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">{tc("الكود","Code")}</Label>
-                      <Input
-                        value={newCode}
-                        onChange={(e) => setNewCode(e.target.value)}
-                        placeholder="مثال: WELCOME10"
-                        className="font-mono uppercase"
-                        dir="ltr"
-                        data-testid="input-new-code"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">{tc("نوع الخصم","Discount Type")}</Label>
-                      <Select value={newCodeType} onValueChange={(v: 'percent' | 'amount') => setNewCodeType(v)}>
-                        <SelectTrigger data-testid="select-new-code-type">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="percent">{tc("نسبة مئوية (%)","Percentage (%)")}</SelectItem>
-                          <SelectItem value="amount">{tc("مبلغ ثابت (ريال)","Fixed Amount (SAR)")}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">{tc("قيمة الخصم","Discount Value")} {newCodeType === 'percent' ? '(%)' : `(${tc("ريال","SAR")})`}</Label>
-                      <Input
-                        type="number"
-                        value={newCodeValue}
-                        onChange={(e) => setNewCodeValue(Number(e.target.value))}
-                        min={0}
-                        data-testid="input-new-code-value"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">{tc("الحد الأقصى للاستخدام","Max Uses")}</Label>
-                      <Input
-                        type="number"
-                        value={newCodeMaxUses}
-                        onChange={(e) => setNewCodeMaxUses(Number(e.target.value))}
-                        min={1}
-                        data-testid="input-new-code-max-uses"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
-                      <div>
-                        <p className="text-sm font-medium">{tc("ظاهر للعملاء","Visible to Customers")}</p>
-                        <p className="text-xs text-muted-foreground">{tc("يظهر الكود في صفحة الدفع للعملاء","Code appears on customer checkout page")}</p>
-                      </div>
-                      <Switch
-                        checked={newCodeVisible}
-                        onCheckedChange={setNewCodeVisible}
-                        data-testid="switch-new-code-visible"
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      onClick={handleCreateCode}
-                      disabled={!newCode.trim() || createCodeMutation.isPending}
-                      data-testid="button-create-code"
-                    >
-                      {createCodeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Plus className="w-4 h-4 ml-2" />}
-                      {tc("إنشاء الكود","Create Code")}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </CardHeader>
-          <CardContent className="p-3 sm:p-6">
-            {codesLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
-              </div>
-            ) : discountCodes.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Percent className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                <p className="text-sm">{tc("لا توجد أكواد خصم حالياً","No discount codes yet")}</p>
-                <p className="text-xs mt-1">{tc('اضغط على "إضافة كود خصم جديد" لإنشاء أول كود','Click "Add Discount Code" to create the first code')}</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {discountCodes.map((dc: any) => (
-                  <div
-                    key={dc._id || dc.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border bg-white dark:bg-gray-900 shadow-sm"
-                    data-testid={`discount-code-row-${dc._id || dc.id}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
-                        <Tag className="w-4 h-4 text-indigo-600" />
-                      </div>
-                      <div>
-                        <span className="font-mono font-bold text-sm" dir="ltr">{dc.code}</span>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <Badge variant="secondary" className="text-[10px]">
-                            {dc.discountType === 'percent' ? `${dc.value}%` : `${dc.value} ${tc("ريال","SAR")}`}
-                          </Badge>
-                          {dc.usageCount !== undefined && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {tc("استخدام","Uses")}: {dc.usageCount}{dc.maxUses ? `/${dc.maxUses}` : ''}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="text-[9px] text-muted-foreground">{tc("نشط","Active")}</span>
-                        <Switch
-                          checked={!!dc.isActive}
-                          onCheckedChange={(checked) => toggleCodeMutation.mutate({ id: dc._id || dc.id, isActive: checked })}
-                          disabled={toggleCodeMutation.isPending}
-                          data-testid={`switch-code-active-${dc._id || dc.id}`}
-                        />
-                      </div>
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="text-[9px] text-muted-foreground">{tc("ظاهر للعملاء","Visible")}</span>
-                        <Switch
-                          checked={!!dc.visibleToCustomers}
-                          onCheckedChange={(checked) => toggleVisibilityMutation.mutate({ id: dc._id || dc.id, visibleToCustomers: checked })}
-                          disabled={toggleVisibilityMutation.isPending}
-                          data-testid={`switch-code-visible-${dc._id || dc.id}`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
       )}
 
-      {/* App Publishing Guide Section */}
+      {false && (
       <div className="mt-8">
         <button
           data-testid="button-app-guide-toggle"
@@ -3711,6 +3481,7 @@ export default function AdminSettings() {
           </div>
         )}
       </div>
+      )}
 
       {/* ── Tab: Sounds ── */}
       {activeTab === 'sounds' && (

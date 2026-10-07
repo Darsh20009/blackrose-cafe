@@ -607,6 +607,7 @@ export class DBStorage implements IStorage {
   async updateEmployee(id: string, updates: any): Promise<any> {
     if (updates.password) {
       updates.password = await bcrypt.hash(updates.password, 10);
+      updates.portalPasswordSeededAt = updates.portalPasswordSeededAt || new Date();
     }
     updates.updatedAt = new Date();
     let employee = await EmployeeModel.findOneAndUpdate({ id }, updates, { new: true }).lean();

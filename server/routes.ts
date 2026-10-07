@@ -6839,6 +6839,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/employees/me/change-password", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body || {};
+      if (typeof currentPassword !== "string" || typeof newPassword !== "string") {
+        return res.status(400).json({ error: "أدخل كلمة المرور الحالية والجديدة" });
+      }
+      if (newPassword.length < 8) {
+        return res.status(400).json({ error: "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل" });
+      }
+      if (currentPassword === newPassword) {
+        return res.status(400).json({ error: "اختر كلمة مرور مختلفة عن الحالية" });
+      }
+
+      const employee = await EmployeeModel.findOne({
+        $or: [{ id: req.employee!.id }, { username: req.employee!.username }],
+      });
+      if (!employee || !employee.password) {
+        return res.status(404).json({ error: "تعذر العثور على حساب الموظف" });
+      }
+      const matches = await bcrypt.compare(currentPassword, employee.password);
+      if (!matches) {
+        return res.status(400).json({ error: "كلمة المرور الحالية غير صحيحة" });
+      }
+
+      employee.password = await bcrypt.hash(newPassword, 10);
+      employee.portalPasswordSeededAt = employee.portalPasswordSeededAt || new Date();
+      employee.lastRestoreKey = null;
+      employee.restoreKeyIssuedAt = null;
+      employee.updatedAt = new Date();
+      await employee.save();
+
+      res.json({ success: true, message: "تم تغيير كلمة المرور بنجاح" });
+    } catch (error) {
+      console.error("[Employee] change own password failed:", error);
+      res.status(500).json({ error: "تعذر تغيير كلمة المرور" });
+    }
+  });
+
   app.get("/api/employees/active-cashiers", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
       const allCashiers = await storage.getActiveCashiers();
@@ -7279,9 +7317,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all discount codes
   app.get("/api/discount-codes", async (req, res) => {
     try {
-      const isEmployee = !!(req as any).employee;
+      const sessionEmployee = (req as any).session?.employee;
+      const isManager = ["owner", "admin", "manager", "branch_manager"].includes(sessionEmployee?.role);
       const { DiscountCodeModel } = await import("@shared/schema");
-      if (isEmployee) {
+      if (isManager) {
         const codes = await DiscountCodeModel.find({}).sort({ createdAt: -1 }).lean();
         return res.json(codes);
       }
@@ -7300,7 +7339,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/discount-codes", requireAuth, requireManager, async (req, res) => {
     try {
       const { insertDiscountCodeSchema } = await import("@shared/schema");
-      const validatedData = insertDiscountCodeSchema.parse(req.body);
+      const validatedData = insertDiscountCodeSchema.parse({
+        ...req.body,
+        employeeId: (req as AuthRequest).employee!.id,
+      });
 
       // Check if code already exists
       const existing = await storage.getDiscountCodeByCode(validatedData.code);
@@ -7339,12 +7381,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all discount codes for an employee
-  app.get("/api/discount-codes/employee/:employeeId", async (req, res) => {
+  app.get("/api/discount-codes/employee/:employeeId", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
-      const { employeeId } = req.params;
-      // Using standard discount code lookup if specific method missing
       const { DiscountCodeModel } = await import("@shared/schema");
-      const codes = await DiscountCodeModel.find({ employeeId }).lean();
+      const codes = await DiscountCodeModel.find({}).sort({ createdAt: -1 }).lean();
       res.json(codes);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch discount codes" });
@@ -7352,30 +7392,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update discount code (toggle active status or visibility)
-  app.patch("/api/discount-codes/:id", requireAuth, async (req: AuthRequest, res) => {
+  app.patch("/api/discount-codes/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { isActive, visibleToCustomers, employeeId } = req.body;
-
-      // Require employee ID for authorization
-      if (!employeeId) {
-        return res.status(401).json({ error: "Employee authentication required" });
-      }
+      const { isActive, visibleToCustomers, discountPercentage, reason, usageLimit, code } = req.body || {};
 
       // Verify the discount code exists
       const existingCode = await storage.getDiscountCode(id);
       if (!existingCode) {
         return res.status(404).json({ error: "Discount code not found" });
-      }
-
-      // Ownership check: code creator OR an admin/manager/owner may update.
-      // The 'admin' string is the legacy marker used by admin-settings UI.
-      const sessionEmp: any = (req as any).session?.employee || (req as any).employee;
-      const sessionRole = sessionEmp?.role || '';
-      const elevatedRoles = ['admin', 'owner', 'manager', 'branch_manager'];
-      const isElevated = elevatedRoles.includes(sessionRole) || employeeId === 'admin';
-      if (existingCode.employeeId !== employeeId && !isElevated) {
-        return res.status(403).json({ error: "Unauthorized: You can only update your own discount codes" });
       }
 
       const updates: Record<string, any> = {};
@@ -7388,7 +7413,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (visibleToCustomers !== undefined) {
-        updates.visibleToCustomers = !!visibleToCustomers;
+        if (typeof visibleToCustomers !== "boolean") {
+          return res.status(400).json({ error: "visibleToCustomers must be true or false" });
+        }
+        updates.visibleToCustomers = visibleToCustomers;
+      }
+
+      if (discountPercentage !== undefined) {
+        const percentage = Number(discountPercentage);
+        if (!Number.isFinite(percentage) || percentage < 1 || percentage > 100) {
+          return res.status(400).json({ error: "نسبة الخصم يجب أن تكون بين 1 و100" });
+        }
+        updates.discountPercentage = percentage;
+      }
+
+      if (reason !== undefined) {
+        if (typeof reason !== "string" || !reason.trim() || reason.trim().length > 300) {
+          return res.status(400).json({ error: "أدخل سبباً صحيحاً للخصم" });
+        }
+        updates.reason = reason.trim();
+      }
+
+      if (usageLimit !== undefined) {
+        if (usageLimit !== null && (!Number.isInteger(Number(usageLimit)) || Number(usageLimit) < 1)) {
+          return res.status(400).json({ error: "حد الاستخدام يجب أن يكون رقماً صحيحاً موجباً" });
+        }
+        updates.usageLimit = usageLimit === null ? null : Number(usageLimit);
+      }
+
+      if (code !== undefined) {
+        if (typeof code !== "string" || !code.trim() || code.trim().length > 40) {
+          return res.status(400).json({ error: "أدخل كود خصم صحيحاً" });
+        }
+        const normalizedCode = code.trim().toLowerCase();
+        const duplicate = await storage.getDiscountCodeByCode(normalizedCode);
+        if (duplicate && String((duplicate as any)._id || duplicate.id) !== String((existingCode as any)._id || existingCode.id)) {
+          return res.status(409).json({ error: "كود الخصم مستخدم بالفعل" });
+        }
+        updates.code = normalizedCode;
       }
 
       if (Object.keys(updates).length === 0) {
