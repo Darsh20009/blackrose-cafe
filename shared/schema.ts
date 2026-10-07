@@ -799,6 +799,7 @@ export interface IPaymentGatewayConfig {
     walletIntegrationId?: string;
     integrationIds?: number[];
     applePayIntegrationId?: string;
+    cardIntegrationIdsMigrationV1Applied?: boolean;
     baseUrl?: string;
     callbackUrl?: string;
   };
@@ -901,6 +902,20 @@ const PaymentGatewayConfigSchema = new Schema({
     publicKey: { type: String },
     apiPassword: { type: String },
     baseUrl: { type: String, default: 'https://api.merchant.geidea.net' },
+    callbackUrl: { type: String },
+  },
+  paymob: {
+    secretKey: { type: String },
+    publicKey: { type: String },
+    hmacSecret: { type: String },
+    apiKey: { type: String },
+    integrationId: { type: String },
+    iframeId: { type: String },
+    walletIntegrationId: { type: String },
+    integrationIds: [{ type: Number }],
+    applePayIntegrationId: { type: String },
+    cardIntegrationIdsMigrationV1Applied: { type: Boolean },
+    baseUrl: { type: String, default: 'https://ksa.paymob.com' },
     callbackUrl: { type: String },
   },
   paymentTestMode: { type: Boolean, default: false },

@@ -26,6 +26,7 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const PAYMOB_SA_CARD_INTEGRATION_IDS = [24948];
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -802,6 +803,59 @@ app.use((req, res, next) => {
       console.error('⚠️ Auto-migration of main branch skipped:', err);
     }
 
+    // One-time restoration of the original PayMob Saudi card integration.
+    // Keep this separate from credential setup so existing saved credentials are never overwritten.
+    try {
+      const { BusinessConfigModel } = await import("./models");
+      const config = await BusinessConfigModel.findOne({ tenantId: 'demo-tenant' }).lean() as any;
+      const pg = config?.paymentGateway;
+      const paymob = pg?.paymob;
+      let isSaudiPaymob = false;
+
+      try {
+        const baseUrl = new URL(String(paymob?.baseUrl || 'https://ksa.paymob.com'));
+        isSaudiPaymob = baseUrl.protocol === 'https:' && baseUrl.hostname.toLowerCase() === 'ksa.paymob.com';
+      } catch {
+        isSaudiPaymob = false;
+      }
+
+      if (
+        pg?.provider === 'paymob' &&
+        paymob?.secretKey &&
+        paymob?.publicKey &&
+        isSaudiPaymob &&
+        paymob.cardIntegrationIdsMigrationV1Applied !== true
+      ) {
+        const validCardIntegrationIds = Array.isArray(paymob.integrationIds)
+          ? paymob.integrationIds.map(Number).filter((id: number) => Number.isSafeInteger(id) && id > 0)
+          : [];
+        const migrationUpdates: Record<string, unknown> = {
+          'paymentGateway.paymob.cardIntegrationIdsMigrationV1Applied': true,
+        };
+
+        if (validCardIntegrationIds.length === 0) {
+          migrationUpdates['paymentGateway.paymob.integrationIds'] = PAYMOB_SA_CARD_INTEGRATION_IDS;
+        }
+
+        await BusinessConfigModel.updateOne(
+          {
+            tenantId: 'demo-tenant',
+            'paymentGateway.provider': 'paymob',
+            'paymentGateway.paymob.cardIntegrationIdsMigrationV1Applied': { $ne: true },
+          },
+          { $set: migrationUpdates },
+          { strict: false },
+        );
+        console.log(
+          validCardIntegrationIds.length === 0
+            ? '✅ Restored the saved PayMob Saudi card integration configuration'
+            : '✅ Marked PayMob Saudi card integration migration complete',
+        );
+      }
+    } catch (err) {
+      console.error('⚠️ PayMob Saudi card integration restoration skipped:', err);
+    }
+
     // Auto-configure PayMob Saudi Arabia payment gateway when credentials are provided
     try {
       const { BusinessConfigModel } = await import("./models");
@@ -831,7 +885,7 @@ app.use((req, res, next) => {
                 'paymentGateway.paymob.publicKey': PAYMOB_PUBLIC_KEY,
                 'paymentGateway.paymob.hmacSecret': PAYMOB_HMAC_SECRET,
                 'paymentGateway.paymob.baseUrl': 'https://ksa.paymob.com',
-                'paymentGateway.paymob.integrationIds': [24948],
+                'paymentGateway.paymob.integrationIds': PAYMOB_SA_CARD_INTEGRATION_IDS,
                 'paymentGateway.cashEnabled': false,
                 'paymentGateway.stcPayEnabled': false,
                 'paymentGateway.qahwaCardEnabled': true,
