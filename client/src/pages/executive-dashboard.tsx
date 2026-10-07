@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { logoutEmployeePortal } from "@/lib/portal-logout";
 import { useTranslate } from "@/lib/useTranslate";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -263,8 +264,7 @@ export default function ExecutiveDashboard() {
   })();
 
   const handleLogout = () => {
-    localStorage.removeItem("currentEmployee");
-    setLocation("/employee/gateway");
+    void logoutEmployeePortal("/employee/gateway");
   };
 
   return (

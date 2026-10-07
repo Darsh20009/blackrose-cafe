@@ -1,4 +1,5 @@
 import { ReactNode, useState } from "react";
+import { logoutEmployeePortal } from "@/lib/portal-logout";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Menu, User } from "lucide-react";
@@ -42,9 +43,7 @@ export function ManagerLayout({ children }: ManagerLayoutProps) {
   const managerName: string = manager?.fullName || '';
 
   const handleLogout = async () => {
-    await fetch("/api/employees/logout", { method: "POST" });
-    localStorage.removeItem("qirox-restore-key");
-    navigate("/manager/login");
+    await logoutEmployeePortal("/manager");
   };
 
   return (

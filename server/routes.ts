@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { resolveBranchScope } from "./middleware/branch-scope";
 import { cache, cacheKey, CACHE_TTL } from "./cache";
 import { 
   insertOrderSchema, 
@@ -63,7 +64,7 @@ import {
   DELIVERY_FEE_SAR,
   DELIVERY_RADIUS_KM,
 } from "@shared/delivery-policy";
-import { requireAuth, requireManager, requireAdmin, filterByBranch, requireKitchenAccess, requireCashierAccess, requireDeliveryAccess, requirePermission, requireCustomerAuth, type AuthRequest, type CustomerAuthRequest } from "./middleware/auth";
+import { requireAuth, requireManager, requireAdmin, filterByBranch, requireKitchenAccess, requireCashierAccess, requireDeliveryAccess, requirePermission, requireCustomerAuth, isEmployeeActive, type AuthRequest, type CustomerAuthRequest } from "./middleware/auth";
 import { logFromRequest, logAudit } from "./audit-logger";
 import { PermissionsEngine, PERMISSIONS } from "./permissions-engine";
 import { registerPhoneOtpAuthRoutes } from "./phone-otp-auth";
@@ -1640,7 +1641,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               phoneNumber: cleanPhone,
               customerId: body.customerId || undefined,
             } as any);
-            console.log(`[LOYALTY] Created new card for ${cleanPhone}`);
+            console.info("[LOYALTY] Created a customer card");
           }
           if (card && body.customerId && !card.customerId) {
             await mongoose.model('LoyaltyCard').findByIdAndUpdate(card._id, { $set: { customerId: body.customerId } });
@@ -1657,14 +1658,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 await CustomerModel.findOneAndUpdate({ id: body.customerId }, { $inc: { points: earnedPts } });
               }
               await OrderModel.findOneAndUpdate({ id: order.id }, { pointsAwarded: true });
-              console.log(`[LOYALTY] POS: Awarded ${earnedPts} actual points to card ${card.id} (${cleanPhone})`);
+              console.info(`[LOYALTY] POS points awarded: ${earnedPts}`);
             } else {
               // Online order: add pending points — converted when order reaches ready/completed
               await mongoose.model('LoyaltyCard').findByIdAndUpdate(card._id, {
                 $inc: { pendingPoints: earnedPts },
                 $set: { lastUsedAt: new Date() },
               });
-              console.log(`[LOYALTY] Online: Added ${earnedPts} pending points to card ${card.id} (${cleanPhone})`);
+              console.info(`[LOYALTY] Online pending points added: ${earnedPts}`);
             }
           }
         }
@@ -6386,13 +6387,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/employees/login", async (req, res) => {
     try {
-      const { username, password } = req.body;
+      const { username, password } = req.body ?? {};
 
-      if (!username || !password) {
+      if (
+        typeof username !== "string" ||
+        typeof password !== "string" ||
+        !username.trim() ||
+        !password ||
+        username.length > 160 ||
+        password.length > 1024
+      ) {
         return res.status(400).json({ error: "الرجاء إدخال اسم المستخدم أو البريد الإلكتروني وكلمة المرور" });
       }
-
-      console.log(`[AUTH] Login attempt for: ${username}`);
 
       // Support login by username, email, or phone number (case-insensitive)
       const trimmedUsername = username.trim();
@@ -6410,11 +6416,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         employee = await EmployeeModel.findOne({ phone: { $in: [normalizedPhone, `0${normalizedPhone}`, `+966${normalizedPhone}`, `966${normalizedPhone}`] } });
       } else {
         // Username search — case-insensitive
-        employee = await EmployeeModel.findOne({ username: { $regex: `^${trimmedUsername}$`, $options: 'i' } });
+        const escapedUsername = trimmedUsername.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        employee = await EmployeeModel.findOne({ username: { $regex: `^${escapedUsername}$`, $options: 'i' } });
       }
 
       if (!employee || !employee.password) {
-        console.log(`[AUTH] Employee not found or no password: ${username}`);
         return res.status(401).json({ error: "اسم المستخدم أو كلمة المرور غير صحيحة" });
       }
 
@@ -6422,13 +6428,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isPasswordValid = await bcrypt.compare(password, employee.password);
 
       if (!isPasswordValid) {
-        console.log(`[AUTH] Invalid password for: ${username}`);
         return res.status(401).json({ error: "اسم المستخدم أو كلمة المرور غير صحيحة" });
       }
 
-      // Check activation — isActivated can be 0, false, or "0" to mean inactive
-      const notActivated = employee.isActivated === 0 || employee.isActivated === false || employee.isActivated === "0";
-      if (notActivated) {
+      if (!isEmployeeActive(employee)) {
         return res.status(403).json({ error: "هذا الحساب غير مفعل. تواصل مع المدير لتفعيل الحساب" });
       }
 
@@ -6453,7 +6456,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(500).json({ error: "فشل في إنشاء الجلسة" });
         }
 
-        console.log(`[AUTH] Login successful: ${username} (${employee.role})`);
         // Audit log for login
         logAudit({
           tenantId: employee.tenantId || 'demo-tenant',
@@ -6483,24 +6485,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/employees/restore-session", async (req, res) => {
     try {
-      const { employeeId, restoreKey } = req.body;
-      if (!employeeId || !restoreKey) {
+      const { employeeId, restoreKey } = req.body ?? {};
+      if (
+        typeof employeeId !== "string" ||
+        !/^[a-f\d]{24}$/i.test(employeeId) ||
+        typeof restoreKey !== "string" ||
+        !/^[a-f\d]{64}$/i.test(restoreKey)
+      ) {
         return res.status(400).json({ error: "Employee ID and restore key required" });
       }
       
-      const employee = await EmployeeModel.findOne({ id: employeeId }) || await EmployeeModel.findById(employeeId).catch(() => null);
-      if (!employee || !employee.isActive) {
+      const employee = await EmployeeModel.findById(employeeId).lean() as any;
+      if (!isEmployeeActive(employee)) {
         return res.status(404).json({ error: "Employee not found or inactive" });
       }
 
-      const storedKey = (employee as any).lastRestoreKey;
-      if (!storedKey || storedKey !== restoreKey) {
-        console.log(`[AUTH-RESTORE] Invalid restore key for employee: ${employeeId}`);
+      const storedKey = employee.lastRestoreKey;
+      if (typeof storedKey !== "string" || storedKey !== restoreKey) {
+        console.warn("[AUTH-RESTORE] Invalid restore key");
         return res.status(401).json({ error: "Invalid restore key" });
       }
-      
+
+      const issuedAt = employee.restoreKeyIssuedAt;
+      const keyAgeMs = issuedAt instanceof Date ? Date.now() - issuedAt.getTime() : NaN;
+      const restoreKeyTtlMs = 24 * 60 * 60 * 1000;
+      if (!Number.isFinite(keyAgeMs) || keyAgeMs < 0 || keyAgeMs > restoreKeyTtlMs) {
+        await EmployeeModel.updateOne(
+          { _id: employee._id, lastRestoreKey: restoreKey },
+          { $set: { lastRestoreKey: null, restoreKeyIssuedAt: null } },
+        );
+        return res.status(401).json({ error: "Restore key expired" });
+      }
+
       const newRestoreKey = crypto.randomBytes(32).toString('hex');
-      await EmployeeModel.findByIdAndUpdate(employee._id, { $set: { lastRestoreKey: newRestoreKey } });
+      const rotation = await EmployeeModel.updateOne(
+        { _id: employee._id, lastRestoreKey: restoreKey, restoreKeyIssuedAt: issuedAt },
+        { $set: { lastRestoreKey: newRestoreKey, restoreKeyIssuedAt: new Date() } },
+      );
+      if (rotation.modifiedCount !== 1) {
+        return res.status(401).json({ error: "Restore key has already been used" });
+      }
 
       const sessionEmployee = {
         id: employee.id || (employee as any)._id?.toString(),
@@ -6515,7 +6539,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       req.session.employee = sessionEmployee;
       req.session.restoreKey = newRestoreKey;
       
-      res.json({ success: true, employee: sessionEmployee, restoreKey: newRestoreKey });
+      req.session.save((error) => {
+        if (error) {
+          console.error("Restored employee session could not be saved");
+          return res.status(500).json({ error: "Failed to restore session" });
+        }
+        res.json({ success: true, employee: sessionEmployee, restoreKey: newRestoreKey });
+      });
     } catch (error) {
       console.error("Session restore error:", error);
       res.status(500).json({ error: "Failed to restore session" });
@@ -6544,18 +6574,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Logout endpoint
-  app.post("/api/employees/logout", (req: AuthRequest, res) => {
+  app.post("/api/employees/logout", async (req: AuthRequest, res) => {
     try {
+      const employeeId = req.session?.employee?.id;
+      const restoreKey = req.session?.restoreKey;
+
+      if (
+        typeof employeeId === "string" &&
+        /^[a-f\d]{24}$/i.test(employeeId) &&
+        typeof restoreKey === "string" &&
+        /^[a-f\d]{64}$/i.test(restoreKey)
+      ) {
+        await EmployeeModel.updateOne(
+          { _id: new mongoose.Types.ObjectId(employeeId), lastRestoreKey: restoreKey },
+          { $set: { lastRestoreKey: null, restoreKeyIssuedAt: null } },
+        );
+      }
+
       req.session.destroy((err) => {
         if (err) {
-          console.error("Logout session destroy error:", err);
+          console.error("Employee logout session destruction failed");
           return res.status(500).json({ error: "Logout failed" });
         }
-        res.clearCookie("connect.sid", { path: '/' });
-        res.json({ success: true, redirect: '/employee/login' });
+        const production = process.env.NODE_ENV === "production";
+        const sessionCookieOptions = {
+          path: "/",
+          httpOnly: true,
+          secure: production,
+          sameSite: production ? "none" as const : "lax" as const,
+        };
+        res.clearCookie("qirox.sid", sessionCookieOptions);
+        res.clearCookie("connect.sid", { path: "/" });
+        res.setHeader("Cache-Control", "no-store");
+        res.json({ success: true });
       });
     } catch (error) {
-      console.error("Logout catch error:", error);
+      console.error("Employee logout failed");
       res.status(500).json({ error: "Logout failed" });
     }
   });
@@ -6715,7 +6769,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emailSent = await sendPointsVerificationEmail(customerEmail, customerName, code, points, valueSAR);
       }
 
-      console.log(`[POINTS-VERIFY] Code generated for ${cleanPhone}: ${code} (${points} pts = ${valueSAR} SAR)`);
+      console.info("[POINTS-VERIFY] Verification code issued");
 
       // Broadcast the code to the customer dashboard if they are connected via WebSocket
       wsManager.broadcastToCustomer(loyaltyCard.customerId.toString(), {
@@ -6774,11 +6828,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       entry.verified = true;
 
-      const verificationToken = `pv_${cleanPhone}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      const verificationToken = `pv_${crypto.randomBytes(32).toString("hex")}`;
 
       pointsVerificationCodes.set(cleanPhone, { ...entry, code: verificationToken });
 
-      console.log(`[POINTS-VERIFY] Code verified for ${cleanPhone}. Token: ${verificationToken}`);
+      console.info("[POINTS-VERIFY] Verification completed");
 
       res.json({
         success: true,
@@ -7251,7 +7305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Generate 6-digit OTP
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otp = crypto.randomInt(100_000, 1_000_000).toString();
       const expiry = Date.now() + 15 * 60 * 1000; // 15 minutes
 
       employeeOtpStore.set(employee.username, { otp, expiry, email: employee.email });
@@ -7260,7 +7314,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { sendEmployeePasswordResetEmail } = await import("./mail-service");
       await sendEmployeePasswordResetEmail(employee.email, employee.fullName || employee.username, otp);
 
-      console.log(`[Employee] Password reset OTP sent to ${employee.email} for ${employee.username}`);
+      console.info("[Employee] Password reset OTP dispatched");
       res.json({ success: true, message: "تم إرسال رمز التحقق إلى بريدك الإلكتروني" });
     } catch (error: any) {
       console.error("[Employee] forgot-password error:", error);
@@ -7762,7 +7816,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               });
             }
             
-            console.log(`[REFERRAL] Bonus applied: Referrer ${referralCode} and new customer ${cleanPhone} each got 50 points`);
+            console.info("[REFERRAL] Referral bonus applied");
           }
         } catch (referralError) {
           console.error("[REFERRAL] Error processing referral code:", referralError);
@@ -7778,7 +7832,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           { $set: { customerId: customer.id } }
         );
         if (linkedResult.modifiedCount > 0) {
-          console.log(`[REGISTRATION] Linked ${linkedResult.modifiedCount} guest orders to new customer ${customer.id} (phone: ${cleanPhone})`);
+          console.info(`[REGISTRATION] Linked ${linkedResult.modifiedCount} guest orders`);
         }
       } catch (linkError) {
         console.error("[REGISTRATION] Order linking failed (non-critical):", linkError);
@@ -7876,12 +7930,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Customer logout - تسجيل خروج العميل
   app.post("/api/customers/logout", (req, res) => {
-    if ((req.session as any).customer) {
-      delete (req.session as any).customer;
-    }
     req.session.destroy((err) => {
-      if (err) console.error("[CUSTOMER_LOGOUT] Session destroy error:", err);
-      res.clearCookie('connect.sid');
+      if (err) {
+        console.error("[CUSTOMER_LOGOUT] Session destruction failed");
+        return res.status(500).json({ error: "Logout failed" });
+      }
+      const production = process.env.NODE_ENV === "production";
+      res.clearCookie("qirox.sid", {
+        path: "/",
+        httpOnly: true,
+        secure: production,
+        sameSite: production ? "none" : "lax",
+      });
+      res.clearCookie("connect.sid", { path: "/" });
+      res.setHeader("Cache-Control", "no-store");
       res.json({ success: true });
     });
   });
@@ -8310,6 +8372,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/orders/customer/:identifier", async (req, res) => {
     try {
       const { identifier } = req.params;
+      if (typeof identifier !== "string" || identifier.length === 0 || identifier.length > 128) {
+        return res.status(400).json({ error: "Invalid customer identifier" });
+      }
+
+      const sessionCustomer = (req.session as any)?.customer;
+      const sessionEmployee = (req.session as any)?.employee;
+      const canViewAllCustomerOrders =
+        sessionEmployee?.role === "owner" || sessionEmployee?.role === "admin";
+      const sessionCustomerIds = [
+        sessionCustomer?.id,
+        sessionCustomer?._id?.toString?.(),
+      ].filter((value): value is string => typeof value === "string");
+      const normalizePhone = (value: unknown) =>
+        String(value ?? "")
+          .replace(/\D/g, "")
+          .replace(/^00966/, "")
+          .replace(/^966/, "")
+          .replace(/^0/, "");
+      const ownsRequestedOrders =
+        !!sessionCustomer &&
+        (sessionCustomerIds.includes(identifier) ||
+          (!!sessionCustomer.phone &&
+            normalizePhone(sessionCustomer.phone) === normalizePhone(identifier)));
+
+      if (!canViewAllCustomerOrders && !sessionCustomer) {
+        return res.status(401).json({ error: "Customer sign-in is required" });
+      }
+      if (!canViewAllCustomerOrders && !ownsRequestedOrders) {
+        return res.status(403).json({ error: "You can only view your own orders" });
+      }
+
       const { OrderModel } = await import("@shared/schema");
       
       // Clean phone number for consistent matching
@@ -8360,15 +8453,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         (queryConditions as any[]).push({ "customerId": identifier });
       }
       
+      const tenantId =
+        sessionCustomer?.tenantId ||
+        sessionEmployee?.tenantId ||
+        await getDefaultTenantId();
       const orders = await OrderModel.find({
-        $or: queryConditions
+        tenantId,
+        $or: queryConditions,
       }).sort({ createdAt: -1 });
 
       const serializedOrders = orders.map(order => serializeDoc(order));
-      console.log(`[GET /api/orders/customer/:identifier] Found ${serializedOrders.length} orders for identifier ${identifier}`);
+      res.setHeader("Cache-Control", "private, no-store");
       res.json(serializedOrders);
     } catch (error) {
-      console.error("[GET /api/orders/customer/:identifier] Error:", error);
+      console.error("[GET /api/orders/customer/:identifier] Request failed");
       res.status(500).json({ error: "Failed to fetch customer orders" });
     }
   });
@@ -8491,10 +8589,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             sendOTPEmail(customer.email, customer.name, otp).catch(err =>
               console.error("[MAIL] OTP email failed:", err)
             );
-            console.log(`[OTP] Sent OTP via email to ${customer.email} for phone ${cleanPhone}`);
+            console.info("[OTP] Customer verification email dispatched");
           } else {
             // No email — OTP is in DB for 10min, cashier can relay verbally if needed
-            console.log(`[OTP] No email for customer ${cleanPhone}. OTP generated and stored (expires: ${expiresAt}). Customer must retrieve via cashier.`);
+            console.info("[OTP] Customer verification code issued");
           }
         } catch (otpError: any) {
           // If rate limit exceeded, return specific error
@@ -10203,20 +10301,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { OrderModel } = await import("@shared/schema");
       const { limit, offset, status, today, fromDate, period, branchId: qBranchId } = req.query;
 
-      const employee = req.session?.employee;
-      const tenantId = (employee as any)?.tenantId || getTenantIdFromRequest(req) || 'demo-tenant';
+      const sessionEmployee = req.session?.employee;
+      const employee = req.employee || sessionEmployee;
+      const tenantId =
+        (sessionEmployee as any)?.tenantId ||
+        getTenantIdFromRequest(req) ||
+        (employee as any)?.tenantId ||
+        "demo-tenant";
 
-      const limitNum = limit ? parseInt(limit as string) : 300;
-      const offsetNum = offset ? parseInt(offset as string) : 0;
+      const requestedLimit = typeof limit === "string" ? Number(limit) : NaN;
+      const requestedOffset = typeof offset === "string" ? Number(offset) : NaN;
+      const limitNum = Number.isSafeInteger(requestedLimit) && requestedLimit > 0
+        ? Math.min(requestedLimit, 500)
+        : 300;
+      const offsetNum = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0
+        ? Math.min(requestedOffset, 100_000)
+        : 0;
 
       const query: any = { tenantId };
-      // Branch filter: query param takes precedence; owner/admin see all branches unless filtered explicitly
-      const isOwnerOrAdmin = employee?.role === 'owner' || employee?.role === 'admin';
-      const resolvedBranch = (qBranchId && qBranchId !== 'all') ? (qBranchId as string) : (isOwnerOrAdmin ? null : (employee?.branchId || null));
+      const branchScope = resolveBranchScope(employee || {}, qBranchId);
+      if ("error" in branchScope) {
+        return res.status(branchScope.status).json({ error: branchScope.error });
+      }
+      const resolvedBranch = branchScope.branchId;
       if (resolvedBranch) query.branchId = resolvedBranch;
 
       // Support status filter (comma-separated)
       if (status && status !== 'all') {
+        if (typeof status !== "string") {
+          return res.status(400).json({ error: "Invalid order status filter" });
+        }
         const statuses = (status as string).split(',').map(s => s.trim()).filter(Boolean);
         if (statuses.length === 1) query.status = statuses[0];
         else if (statuses.length > 1) query.status = { $in: statuses };

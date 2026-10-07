@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { logoutEmployeePortal } from "@/lib/portal-logout";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -406,8 +407,7 @@ export default function ManagerDashboard() {
  });
 
  const handleLogout = () => {
- localStorage.removeItem("currentEmployee");
- setLocation("/employee/gateway");
+ void logoutEmployeePortal("/employee/gateway");
  };
 
  const handleCreateBranch = () => {

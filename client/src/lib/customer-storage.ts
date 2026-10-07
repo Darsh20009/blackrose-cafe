@@ -26,7 +26,6 @@ export interface CustomerProfile {
  freeDrinks: number;
  usedFreeDrinks?: number;
  cardDesign?: CardDesignPreference;
- cardPassword?: string;
  cardBalance?: number;
 }
 
@@ -76,6 +75,15 @@ const STORAGE_KEYS = {
  CARD_PASSWORD: 'qahwa-card-password',
  ACTIVE_OFFER: 'qahwa-active-offer'
 };
+
+// Remove a legacy card password that was stored in browser storage.
+if (typeof localStorage !== "undefined") {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.CARD_PASSWORD);
+  } catch {
+    // Storage can be unavailable in browser privacy modes.
+  }
+}
 
 // Pre-generated card numbers pool (10% discount cards)
 const CARD_NUMBERS_POOL = [
@@ -165,7 +173,14 @@ export const customerStorage = {
   // Get current customer profile
   getProfile(): CustomerProfile | null {
     const stored = localStorage.getItem(STORAGE_KEYS.CUSTOMER_PROFILE);
-    return safeJsonParse<CustomerProfile | null>(stored, null);
+    const profile = safeJsonParse<CustomerProfile | null>(stored, null);
+    if (profile && Object.prototype.hasOwnProperty.call(profile, "cardPassword")) {
+      const sanitizedProfile = { ...profile } as CustomerProfile & { cardPassword?: string };
+      delete sanitizedProfile.cardPassword;
+      localStorage.setItem(STORAGE_KEYS.CUSTOMER_PROFILE, JSON.stringify(sanitizedProfile));
+      return sanitizedProfile;
+    }
+    return profile;
   },
 
   // Register or login customer
@@ -268,16 +283,6 @@ export const customerStorage = {
   getCardDesign(): CardDesignPreference | null {
     const stored = localStorage.getItem(STORAGE_KEYS.CARD_DESIGN);
     return safeJsonParse<CardDesignPreference | null>(stored, null);
-  },
-
-  // Card Password Management (Security: removed plain storage in profile)
-  setCardPassword(password: string): void {
-    // Note: Plain text storage is insecure. In production, use hashing.
-    localStorage.setItem(STORAGE_KEYS.CARD_PASSWORD, password);
-  },
-
-  getCardPassword(): string | null {
-    return localStorage.getItem(STORAGE_KEYS.CARD_PASSWORD);
   },
 
  // Card Balance Management

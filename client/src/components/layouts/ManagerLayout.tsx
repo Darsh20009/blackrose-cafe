@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
+import { logoutEmployeePortal } from "@/lib/portal-logout";
 import { useLocation, Link } from "wouter";
 import { LanguageToggle } from "@/components/language-toggle";
 import { useTranslation } from "react-i18next";
@@ -80,8 +81,7 @@ export function ManagerLayout({
   }, [location]);
 
   const handleLogout = () => {
-    localStorage.removeItem("currentManager");
-    setLocation("/manager/login");
+    void logoutEmployeePortal("/manager");
   };
 
   const navItems = [

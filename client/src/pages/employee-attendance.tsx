@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
+import { logoutEmployeePortal } from "@/lib/portal-logout";
 import { useLocation } from "wouter";
 import { useTranslate } from "@/lib/useTranslate";
 import { Button } from "@/components/ui/button";
@@ -287,7 +288,7 @@ export default function EmployeeAttendance() {
     } finally { setIsLoading(false); }
   };
 
-  const handleLogout = () => { localStorage.removeItem("currentEmployee"); setLocation("/employee/gateway"); };
+  const handleLogout = () => { void logoutEmployeePortal("/employee/gateway"); };
 
   if (!employee) return null;
 

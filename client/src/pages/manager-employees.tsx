@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { logoutEmployeePortal } from "@/lib/portal-logout";
 import { useTranslate } from "@/lib/useTranslate";
 import SarIcon from "@/components/sar-icon";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -216,8 +217,7 @@ export default function ManagerEmployees() {
  });
 
  const handleLogout = () => {
- localStorage.removeItem("currentEmployee");
- setLocation("/employee/gateway");
+ void logoutEmployeePortal("/employee/gateway");
  };
 
  const handleSubmitNew = (e: React.FormEvent<HTMLFormElement>) => {

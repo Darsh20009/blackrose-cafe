@@ -46,6 +46,11 @@ function getBranchCoords(branch: Branch): { lat: number; lng: number } | null {
   return { lat, lng };
 }
 
+function isAlMuroojBranch(branch: Branch): boolean {
+  return /المروج/.test(`${branch.nameAr || ""} ${branch.nameEn || ""}`) ||
+    /mur(?:u|oo?)j/i.test(branch.nameEn || "");
+}
+
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   if (digits.startsWith('966')) return `+${digits}`;
@@ -288,6 +293,11 @@ export default function DeliverySelectionPage() {
     queryKey: ["/api/branches"],
   });
 
+  const deliveryBranch = branches.find(isAlMuroojBranch);
+  const displayedBranches = selectedMethod === "delivery" && deliveryBranch
+    ? [deliveryBranch]
+    : branches;
+
   const { data: businessConfig } = useQuery<any>({
     queryKey: ["/api/business-config"],
   });
@@ -298,6 +308,12 @@ export default function DeliverySelectionPage() {
       setSelectedBranchId(branches[0].id);
     }
   }, [branches]);
+
+  useEffect(() => {
+    if (selectedMethod === "delivery" && deliveryBranch && selectedBranchId !== deliveryBranch.id) {
+      setSelectedBranchId(deliveryBranch.id);
+    }
+  }, [selectedMethod, deliveryBranch, selectedBranchId]);
 
   useEffect(() => {
     if (selectedMethod !== 'delivery' || !selectedBranchId || !deliveryLocation) {
@@ -536,6 +552,14 @@ export default function DeliverySelectionPage() {
     }
 
     if (selectedMethod === 'delivery') {
+      if (!deliveryBranch || branch.id !== deliveryBranch.id) {
+        toast({
+          title: t("product.error"),
+          description: "التوصيل متاح من فرع المروج فقط.",
+          variant: 'destructive',
+        });
+        return;
+      }
       if (!detailedAddress.trim()) {
         toast({ title: t("product.error"), description: "يرجى إدخال تفاصيل العنوان (الحي، الشارع، المبنى)", variant: 'destructive' });
         return;
@@ -658,7 +682,7 @@ export default function DeliverySelectionPage() {
       ring: 'ring-orange-500',
       bg: 'bg-orange-50 dark:bg-orange-950/20',
     },
-    (enableDelivery && branchAllowsOnline) && {
+    (enableDelivery && deliveryBranch?.allowOnlineOrders !== false) && {
       id: 'delivery' as OrderMethod,
       icon: Truck,
       label: 'توصيل للمنزل',
@@ -696,6 +720,16 @@ export default function DeliverySelectionPage() {
       </div>
 
       <div className="container mx-auto max-w-2xl px-4 py-6 space-y-5">
+        {!enableDelivery && (
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100"
+            data-testid="delivery-disabled-notice"
+          >
+            <Truck className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>التوصيل متوقف حاليًا. يمكن للإدارة تفعيله من إعدادات طرق الطلب.</span>
+          </div>
+        )}
 
         {/* Branch Selection — shown for all methods when there are multiple branches */}
         {(branches.length > 1 || selectedMethod === 'dine-in') && (
@@ -719,7 +753,7 @@ export default function DeliverySelectionPage() {
                     <SelectValue placeholder="اختر الفرع الأقرب إليك" />
                   </SelectTrigger>
                   <SelectContent>
-                    {branches.map((branch) => (
+                    {displayedBranches.map((branch) => (
                       <SelectItem key={branch.id} value={branch.id}>
                         <div className="flex flex-col items-start gap-0.5 py-1">
                           <span className="font-semibold">{branch.nameAr}</span>
@@ -731,7 +765,7 @@ export default function DeliverySelectionPage() {
                 </Select>
               ) : (
                 <div className="space-y-2" data-testid="branch-cards">
-                  {branches.map((branch) => {
+                  {displayedBranches.map((branch) => {
                     const isSelected = selectedBranchId === branch.id;
                     const coords = getBranchCoords(branch);
                     return (

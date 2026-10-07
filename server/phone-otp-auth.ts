@@ -2,6 +2,7 @@ import crypto from "crypto";
 import type { Express } from "express";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { CustomerModel, EmployeeModel, LoginOTPModel } from "@shared/schema";
+import { isEmployeeActive } from "./middleware/auth";
 import { sendQiroxWhatsAppCode } from "./qirox-project-integrations";
 
 type UserType = "employee" | "customer";
@@ -175,7 +176,7 @@ export function registerPhoneOtpAuthRoutes(app: Express) {
       }
 
       const employee = userType === "employee" ? await findEmployee(phone) : null;
-      if (userType === "employee" && (!employee || [0, false, "0"].includes(employee.isActivated as any))) {
+      if (userType === "employee" && !isEmployeeActive(employee)) {
         return res.status(403).json({ error: "الحساب غير مفعل من الإدارة. تواصل مع مديرك." });
       }
 

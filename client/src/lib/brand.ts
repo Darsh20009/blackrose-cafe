@@ -6,23 +6,10 @@
 //  ██████╔╝███████╗██║  ██║╚██████╗██║  ██╗    ██║  ██║╚██████╔╝███████║███████╗
 //  ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝
 //
-//  ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-//  │                        MASTER BRAND CONFIGURATION — SINGLE SOURCE OF TRUTH                  │
-//  │                                                                                             │
-//  │  This file controls EVERY branding detail across the entire BLACK ROSE system:             │
-//  │  • System name (Arabic + English)                                                           │
-//  │  • Logo paths (customer app, staff app, admin panel)                                        │
-//  │  • Primary & accent colors (HSL format for Tailwind + CSS variables)                        │
-//  │  • App metadata (title, description, keywords, Open Graph)                                  │
-//  │  • PWA manifest settings (theme color, background color, display name)                      │
-//  │  • Contact / social info (email, phone, website, social handles)                            │
-//  │  • Loyalty / points program name                                                            │
-//  │  • Email template branding                                                                  │
-//  │                                                                                             │
-//  │  HOW TO REBRAND:                                                                            │
-//  │  1. Change the values below                                                                 │
-//  │  2. Run: npm run dev — the entire system reflects the new brand instantly                   │
-//  └─────────────────────────────────────────────────────────────────────────────────────────────┘
+// Client-side default brand values for components that import this module.
+// This is not yet the only brand source: tenant settings, directly imported
+// assets, public files, and server email templates also contain brand values.
+// Updating this module alone does not complete a tenant-wide rebrand.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const brand = {

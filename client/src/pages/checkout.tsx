@@ -203,7 +203,7 @@ export default function CheckoutPage() {
   const tc = useTranslate();
   const { t, i18n } = useTranslation();
   const [, setLocation] = useLocation();
-  const { cartItems, clearCart, getFinalTotal, deliveryInfo } = useCartStore();
+  const { cartItems, clearCart, getTotalPrice, deliveryInfo } = useCartStore();
   const { toast } = useToast();
   const isAr = i18n.language === 'ar';
 
@@ -260,7 +260,7 @@ export default function CheckoutPage() {
   const loyaltyPoints: number = loyaltyCard?.points || 0;
 
   const getBaseTotal = () => {
-    let total = getFinalTotal();
+    let total = getTotalPrice();
     if (appliedDiscount) {
       total = total * (1 - appliedDiscount.percentage / 100);
     }
@@ -276,7 +276,7 @@ export default function CheckoutPage() {
 
   const getServiceFee = () => {
     if (!businessConfig?.serviceFeeEnabled) return 0;
-    const subtotal = getFinalTotal();
+    const subtotal = getTotalPrice();
     const threshold = businessConfig?.serviceFeeLowOrderThreshold ?? 5;
     const lowFee = businessConfig?.serviceFeeLowOrderAmount ?? 0.35;
     const normalFee = businessConfig?.serviceFeeAmount ?? 0.70;
@@ -749,7 +749,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({ 
           code: codeToUse, 
           customerId: customer?.id,
-          amount: getFinalTotal()
+          amount: getTotalPrice()
         }),
       });
       const data = await response.json();
@@ -1549,7 +1549,7 @@ export default function CheckoutPage() {
                 {appliedDiscount && (
                   <div className="flex justify-between items-center gap-2 text-sm text-green-600 bg-green-50 dark:bg-green-950/30 p-2 rounded">
                     <span>{t("points.discount")} ({appliedDiscount.percentage}%)</span>
-                    <span>-{(getFinalTotal() * appliedDiscount.percentage / 100).toFixed(2)} <SarIcon /></span>
+                    <span>-{(getTotalPrice() * appliedDiscount.percentage / 100).toFixed(2)} <SarIcon /></span>
                   </div>
                 )}
                 {usePointsAsDiscount && pointsDiscountSAR > 0 && (

@@ -13,6 +13,14 @@ export interface AuthRequest extends Request {
   };
 }
 
+export function isEmployeeActive(employee: unknown): boolean {
+  if (!employee || typeof employee !== "object") return false;
+  const status = employee as { isActive?: unknown; isActivated?: unknown };
+  const explicitlyInactive = (value: unknown) =>
+    value === false || value === 0 || value === "0";
+  return !explicitlyInactive(status.isActive) && !explicitlyInactive(status.isActivated);
+}
+
 export function requirePermission(permission: Permission) {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.employee) {
@@ -33,21 +41,25 @@ export function requirePermission(permission: Permission) {
 }
 
 async function tryRestoreFromHeaders(req: AuthRequest, res?: any): Promise<boolean> {
-  const employeeId = req.headers['x-employee-id'] as string;
-  const restoreKey = req.headers['x-restore-key'] as string;
+  const employeeId = req.get("x-employee-id");
+  const restoreKey = req.get("x-restore-key");
   
-  if (!employeeId || !restoreKey) return false;
+  if (
+    !employeeId ||
+    !restoreKey ||
+    !/^[a-f\d]{24}$/i.test(employeeId) ||
+    !/^[a-f\d]{64}$/i.test(restoreKey)
+  ) {
+    return false;
+  }
   
   try {
     const EmployeeCollection = mongoose.connection.collection('employees');
     const employee = await EmployeeCollection.findOne({
-      $or: [
-        { id: employeeId },
-        { _id: (() => { try { return new mongoose.Types.ObjectId(employeeId); } catch { return null; } })() },
-      ].filter((x) => x !== null) as any[]
+      _id: new mongoose.Types.ObjectId(employeeId),
     });
     
-    if (!employee) return false;
+    if (!employee || !isEmployeeActive(employee)) return false;
     
     const storedKey = (employee as any).lastRestoreKey;
     if (!storedKey || storedKey !== restoreKey) return false;
@@ -55,7 +67,8 @@ async function tryRestoreFromHeaders(req: AuthRequest, res?: any): Promise<boole
     // TTL check — restore keys expire after 24 hours
     const issuedAt: Date | null = (employee as any).restoreKeyIssuedAt ?? null;
     const TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-    if (!issuedAt || Date.now() - issuedAt.getTime() > TTL_MS) {
+    const keyAgeMs = issuedAt instanceof Date ? Date.now() - issuedAt.getTime() : NaN;
+    if (!Number.isFinite(keyAgeMs) || keyAgeMs < 0 || keyAgeMs > TTL_MS) {
       // Key is expired — clear it so it can't be reused
       await EmployeeCollection.updateOne(
         { _id: employee._id },
@@ -69,7 +82,7 @@ async function tryRestoreFromHeaders(req: AuthRequest, res?: any): Promise<boole
       username: employee.username,
       role: employee.role,
       branchId: employee.branchId,
-      tenantId: employee.tenantId || 'demo-tenant',
+      tenantId: employee.tenantId || 'default',
       fullName: employee.fullName || employee.username,
     };
     

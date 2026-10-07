@@ -1,4 +1,4 @@
-import { BranchModel } from "@shared/schema";
+import { BranchModel, BusinessConfigModel } from "@shared/schema";
 import {
   calculateDistanceKm,
   DELIVERY_FEE_SAR,
@@ -44,13 +44,34 @@ function branchMatchesId(branch: BranchLike, id: string): boolean {
   return String(branch.id || "") === id || String(branch._id || "") === id;
 }
 
+function isAlMuroojBranch(branch: BranchLike): boolean {
+  return /المروج/.test(`${branch.nameAr || ""} ${branch.nameEn || ""}`) ||
+    /mur(?:u|oo?)j/i.test(branch.nameEn || "");
+}
+
 export async function checkDeliveryLocation(
   tenantId: string,
   customerLocation: DeliveryCoordinates,
   requestedBranchId?: string,
 ): Promise<DeliveryAvailability> {
-  const branches = await BranchModel.find({ tenantId }).lean() as unknown as BranchLike[];
+  const [branches, config] = await Promise.all([
+    BranchModel.find({ tenantId }).lean() as unknown as Promise<BranchLike[]>,
+    BusinessConfigModel.findOne({ tenantId }, { orderMethodsConfig: 1 }).lean(),
+  ]);
+
+  if ((config as any)?.orderMethodsConfig?.enableDelivery === false) {
+    return {
+      canDeliver: false,
+      branch: null,
+      distanceKm: null,
+      distanceMeters: null,
+      deliveryFee: 0,
+      messageAr: "خدمة التوصيل متوقفة حاليًا. يمكن للإدارة تفعيلها من إعدادات طرق الطلب.",
+    };
+  }
+
   let eligibleBranches = branches.filter((branch) =>
+    isAlMuroojBranch(branch) &&
     isAvailableOnlineBranch(branch) &&
     validCoordinate(branch.location?.lat, -90, 90) !== null &&
     validCoordinate(branch.location?.lng, -180, 180) !== null
@@ -68,8 +89,8 @@ export async function checkDeliveryLocation(
       distanceMeters: null,
       deliveryFee: 0,
       messageAr: requestedBranchId
-        ? "الفرع المختار غير متاح حاليًا للتوصيل الإلكتروني."
-        : "لا يوجد فرع متاح حاليًا لاستقبال طلبات التوصيل.",
+        ? "التوصيل متاح من فرع المروج فقط، والفرع المختار غير متاح حاليًا."
+        : "فرع المروج غير متاح حاليًا لاستقبال طلبات التوصيل.",
     };
   }
 

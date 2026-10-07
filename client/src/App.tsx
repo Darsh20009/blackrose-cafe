@@ -1,6 +1,6 @@
 import i18n from "@/lib/i18n";
 import { lazy, Suspense, useState, useEffect, useCallback } from "react";
-import { Router as WouterRouter, Switch, Route, Redirect } from "wouter";
+import { Router as WouterRouter, Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -20,17 +20,19 @@ import { AppDownloadBanner } from "@/components/app-download-banner";
 import { OfflineIndicator } from "@/components/offline-indicator";
 import { NativeBackButton } from "@/components/native-back-button";
 import { CustomerNotificationListener } from "@/components/customer-notification-listener";
+import { CustomerBottomNav } from "@/components/customer-bottom-nav";
 import { GlobalCommandPalette } from "@/components/global-command-palette";
 import { QuickActionBar } from "@/components/quick-action-bar";
 import { CapacitorServerSetup, useCapacitorServerReady } from "@/components/capacitor-server-setup";
 import { useProximityNotify } from "@/hooks/useProximityNotify";
 import { SplashScreen, useSplash } from "@/components/splash-screen";
 import { NativeAppInit } from "@/components/native-app-init";
+import MenuPage from "@/pages/menu";
+import WelcomePage from "@/pages/welcome";
 
 const CartModal = lazy(() => import("@/components/cart-modal"));
 const CheckoutModal = lazy(() => import("@/components/checkout-modal"));
 const CustomerAuthModal = lazy(() => import("@/components/customer-auth-modal"));
-const MenuPage = lazy(() => import("@/pages/menu"));
 const CustomerProfile = lazy(() => import("@/pages/customer-profile"));
 const StaffProfile = lazy(() => import("@/pages/staff-profile"));
 const StaffCoupons = lazy(() => import("@/pages/staff-coupons"));
@@ -164,7 +166,6 @@ const DeliveryZoneSettings = lazy(() => import("@/pages/delivery-zone-settings")
 const DriverPortal = lazy(() => import("@/pages/driver-portal"));
 const DriverLogin = lazy(() => import("@/pages/driver-login"));
 const DeliveryTracking = lazy(() => import("@/pages/delivery-tracking"));
-const WelcomePage = lazy(() => import("@/pages/welcome"));
 const PromoPage = lazy(() => import("@/pages/promo"));
 const PricingPage = lazy(() => import("@/pages/pricing"));
 const EmployeeHome = lazy(() => import("@/pages/employee-home"));
@@ -184,24 +185,21 @@ import blackroseLogoStaff from "@assets/blackrose-logo.png";
 import { brand } from "@/lib/brand";
 
 const PageLoader = () => (
-  <div className="fixed inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 z-50">
-    <div className="relative flex items-center justify-center">
-      {/* Rotating ring around the logo */}
-      <div className="absolute w-32 h-32 rounded-full border-[3px] border-primary/20 border-t-primary animate-spin" style={{ animationDuration: "1.1s" }} />
-      {/* Pulse halo */}
-      <div className="absolute w-32 h-32 rounded-full bg-primary/10 animate-ping" style={{ animationDuration: "1.6s" }} />
-      {/* Logo */}
-      <img
-        src={brand.logoCustomer}
-        alt={brand.nameEn}
-        className="relative w-20 h-20 object-contain drop-shadow-lg animate-pulse"
-        style={{ animationDuration: "1.4s" }}
-        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-      />
-    </div>
-    <div className="mt-8 text-center">
-      <p className="text-lg font-black text-foreground tracking-tight">{brand.nameEn}</p>
-      <p className="text-xs text-muted-foreground mt-1 tracking-wide">{brand.taglineEn}</p>
+  <div
+    role="status"
+    aria-live="polite"
+    aria-label="جار تحميل الصفحة"
+    className="fixed inset-0 z-[70] flex flex-col items-center justify-center gap-4 bg-background text-foreground"
+  >
+    <img
+      src={brand.logoCustomer}
+      alt=""
+      className="h-14 w-14 object-contain"
+      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+    />
+    <p className="text-sm text-muted-foreground">جار تحميل الصفحة…</p>
+    <div className="h-1 w-24 overflow-hidden rounded-full bg-muted">
+      <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
     </div>
   </div>
 );
@@ -350,6 +348,7 @@ function AppRouter() {
       <Route path="/manager/product-reservations"><AuthGuard userType="manager" allowedRoles={["manager", "admin", "owner"]}><ManagerLayout><EmployeeProductReservations /></ManagerLayout></AuthGuard></Route>
 
       {/* Manager auth routes (public) */}
+      <Route path="/manager/login"><Redirect to="/manager" /></Route>
       <Route path="/manager"><ManagerLogin /></Route>
       <Route path="/manager/forgot-password"><ManagerForgotPassword /></Route>
 
@@ -464,8 +463,27 @@ function AppRouter() {
 
 function AppContent() {
   const cartStore = useCartStore();
+  const [currentPath] = useLocation();
   const isCartOpen = cartStore?.isCartOpen;
   const isCheckoutOpen = cartStore?.isCheckoutOpen;
+  const showCustomerNav =
+    currentPath === "/" ||
+    currentPath === "/welcome" ||
+    currentPath === "/menu" ||
+    currentPath === "/menu-view" ||
+    currentPath === "/my-orders" ||
+    currentPath === "/my-offers" ||
+    currentPath === "/my-card" ||
+    currentPath === "/profile" ||
+    currentPath === "/referrals" ||
+    currentPath === "/my-reservations" ||
+    currentPath === "/cart" ||
+    currentPath === "/delivery" ||
+    currentPath === "/delivery/map" ||
+    currentPath === "/checkout" ||
+    currentPath.startsWith("/product/") ||
+    currentPath.startsWith("/track/") ||
+    currentPath.startsWith("/delivery/track/");
 
   // Proximity-based push notification (fires when customer is within 100 m of a branch)
   useProximityNotify();
@@ -477,7 +495,6 @@ function AppContent() {
       (window as any).requestIdleCallback || ((cb: () => void) => window.setTimeout(cb, 1200));
     const id = idle(() => {
       // Customer-facing common routes
-      import("@/pages/menu");
       import("@/pages/cart-page");
       import("@/pages/checkout");
       import("@/pages/delivery-selection");
@@ -503,9 +520,12 @@ function AppContent() {
       <CustomerNotificationListener />
       {/* Native iOS: APNs push + Home Screen Quick Actions */}
       <NativeAppInit />
-      <Suspense fallback={null}>
-        <AppRouter />
-      </Suspense>
+      <div className={showCustomerNav ? "pb-nav" : undefined}>
+        <Suspense fallback={<PageLoader />}>
+          <AppRouter />
+        </Suspense>
+      </div>
+      {showCustomerNav && <CustomerBottomNav />}
       {/* Modals inside Router to ensure they can use routing hooks if needed */}
       <Suspense fallback={null}>
         {isCartOpen && <CartModal />}
@@ -560,7 +580,6 @@ function App() {
         () => import("@/pages/cashier-tables"),
         () => import("@/pages/cashier-table-orders"),
         () => import("@/pages/employee-loyalty"),
-        () => import("@/pages/menu"),
         () => import("@/pages/manager-employees"),
         () => import("@/pages/admin-employees"),
         () => import("@/pages/accounting-dashboard"),

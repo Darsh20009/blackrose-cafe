@@ -1,4 +1,5 @@
 import { useTranslate } from "@/lib/useTranslate";
+import { logoutEmployeePortal } from "@/lib/portal-logout";
 import { useEffect, useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -323,8 +324,7 @@ export default function EmployeeDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("currentEmployee");
-    setLocation("/employee/gateway");
+    void logoutEmployeePortal("/employee/gateway");
   };
 
   const downloadCard = async () => {

@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
+import { logoutEmployeePortal } from "@/lib/portal-logout";
 import { useLocation, Link } from "wouter";
 import { LanguageToggle } from "@/components/language-toggle";
 import { useTranslation } from "react-i18next";
@@ -60,9 +61,7 @@ export function KitchenLayout({
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem("currentEmployee");
-    localStorage.removeItem("qirox-restore-key");
-    setLocation("/employee/gateway");
+    void logoutEmployeePortal("/employee/gateway");
   };
 
   const navItems = [

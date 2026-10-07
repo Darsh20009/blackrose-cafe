@@ -1472,7 +1472,7 @@ export default function AdminSettings() {
               { key: 'enableTakeaway', icon: Store, label: tc('استلام من الفرع','Branch Pickup'), desc: tc('الاستلام المباشر من الفرع','Direct pickup from branch'), color: 'text-blue-600' },
               { key: 'enableDineIn', icon: Utensils, label: tc('داخل المطعم (طاولة)','Dine-in (Table)'), desc: tc('الجلوس والطلب من الطاولة','Sit and order at the table'), color: 'text-orange-600' },
               { key: 'enableCarPickup', icon: Car, label: tc('استلام من السيارة','Car Pickup'), desc: tc('توصيل الطلب للسيارة أمام الفرع','Deliver order to car in front of branch'), color: 'text-purple-600' },
-              { key: 'enableDelivery', icon: Truck, label: tc('توصيل للمنزل','Home Delivery'), desc: tc('توصيل الطلب لعنوان العميل','Deliver order to customer address'), color: 'text-red-600' },
+              { key: 'enableDelivery', icon: Truck, label: tc('توصيل للمنزل','Home Delivery'), desc: tc('يتحكم في ظهور التوصيل للعميل وقبوله في النظام','Controls customer delivery availability and order acceptance'), color: 'text-red-600' },
             ].map(({ key, icon: Icon, label, desc, color }) => (
               <div key={key} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border">
                 <div className="flex items-center gap-3">

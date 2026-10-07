@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { logoutEmployeePortal } from '@/lib/portal-logout';
 import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -141,9 +142,7 @@ export function AdminSidebar({ mobileOpen = false, onMobileClose, role = "manage
   };
 
   const handleLogout = async () => {
-    await fetch('/api/employees/logout', { method: 'POST' });
-    localStorage.removeItem('qirox-restore-key');
-    navigate('/employee/login');
+    await logoutEmployeePortal('/employee/login');
   };
 
   const topItems = TOP_ITEMS(isAr).filter(item => !item.roles || item.roles.includes(role));

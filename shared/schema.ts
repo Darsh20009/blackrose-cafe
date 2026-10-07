@@ -1005,7 +1005,7 @@ const BusinessConfigSchema = new Schema<IBusinessConfig>({
     default: () => ({
       enableDineIn: true,
       enableCarPickup: true,
-      enableDelivery: false,
+      enableDelivery: true,
       enableScheduledPickup: true,
       enableTakeaway: true,
     })

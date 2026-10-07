@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { logoutEmployeePortal } from "@/lib/portal-logout";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -37,8 +38,7 @@ export default function EmployeeHome() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem("currentEmployee");
-    setLocation("/employee/gateway");
+    void logoutEmployeePortal("/employee/gateway");
   };
 
   function copyDriveThroughLink() {

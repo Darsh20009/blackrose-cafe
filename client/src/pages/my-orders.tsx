@@ -154,11 +154,6 @@ export default function MyOrders() {
   const customerId = customer?.id;
   const isAuthenticated = !!customer && (!!customerPhone || !!customerId);
   
-  useEffect(() => {
-    console.log("[MyOrders] Customer:", customer);
-    console.log("[MyOrders] Phone:", customerPhone, "ID:", customerId);
-  }, [customer, customerPhone, customerId]);
-  
   const { data: orders = [], isLoading, refetch } = useQuery<OrderDisplay[]>({
     queryKey: ["/api/orders/customer", customerPhone || customerId],
     enabled: !!(customerPhone || customerId),

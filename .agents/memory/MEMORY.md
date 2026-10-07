@@ -1,6 +1,7 @@
 - [Foodics UI Overhaul](foodics-ui-overhaul.md) — الثيم الأساسي أحمر داكن وفاتح مع حفظ مركزي لكل مستأجر؛ admin/manager sidebar أبيض Foodics-style; الألوان الوظيفية مستقلة.
 - [Employee OTP eligibility](employee-otp-eligibility.md) — بوابة الموظفين ترسل OTP للموظف النشط فقط؛ رقم العميل وحده يُرفض برسالة صريحة ولا يُرسل له رمز.
 - [Portal password bootstrap](portal-password-bootstrap.md) — إعدادات كلمة مرور المالك/الأدمن تُطبق مرة واحدة فقط؛ إعادة التشغيل لا تستبدل كلمة مرور غيّرها المستخدم.
+- [Employee session security](employee-session-restoration.md) — مفتاح استعادة الجلسة اعتماد حامل؛ تسجيل الخروج يجب أن يبطله على الخادم، لا أن يمسحه من المتصفح فقط.
 - [Customer auth entry](customer-auth-entry.md) — واتساب هو دخول العملاء الافتراضي؛ الحساب الجديد يطلب الاسم والبريد الاختياري بعد التحقق.
 - [Yanbu delivery area](yanbu-delivery.md) — التوصيل داخل ينبع فقط؛ ٢٥ ريال حتى ٣٠ كم من فرع المروج، دون اختيار دولة أو منطقة.
 - [External Render npm installs](render-package-lock.md) — Before deploying outside Replit, scan lockfiles for all Replit package-firewall hosts, not just one hostname variant.

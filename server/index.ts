@@ -608,9 +608,14 @@ app.use((req, res, next) => {
 app.disable('x-powered-by');
 
 // Session configuration
+const sessionSecret = process.env.SESSION_SECRET;
+if (process.env.NODE_ENV === "production" && !sessionSecret?.trim()) {
+  throw new Error("SESSION_SECRET must be configured in production.");
+}
+
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "dev-secret",
+    secret: sessionSecret || "dev-secret",
     resave: false,
     saveUninitialized: false, 
     name: 'qirox.sid', // custom cookie name

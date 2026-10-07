@@ -1,4 +1,5 @@
 import { useLocation, Link } from "wouter";
+import { logoutEmployeePortal } from "@/lib/portal-logout";
 import { useTranslation } from "react-i18next";
 import { Home, ClipboardList, CreditCard, LogOut, Menu, Languages, Bell } from "lucide-react";
 import { useState } from "react";
@@ -42,9 +43,7 @@ export function MobileBottomNav({ employeeRole, onLogout }: MobileBottomNavProps
     if (onLogout) {
       onLogout();
     } else {
-      localStorage.removeItem("currentEmployee");
-      localStorage.removeItem("qirox-restore-key");
-      window.location.href = "/employee/gateway";
+      void logoutEmployeePortal("/employee/gateway");
     }
   };
 
