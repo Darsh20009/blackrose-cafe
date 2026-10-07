@@ -2224,7 +2224,7 @@ export default function CheckoutPage() {
                         {selectedPaymentMethod === 'cash' && cashDistanceChecking ? (
                           <><Loader2 className="w-5 h-5 animate-spin ml-2" />جاري التحقق من الموقع...</>
                         ) : isPaymobMethod(selectedPaymentMethod) ? (
-                          <><CreditCard className="w-5 h-5 ml-2" />اذهب للدفع</>
+                          <><CreditCard className="w-5 h-5 ml-2" />ادفع الآن</>
                         ) : (isCardPaymentMethod(selectedPaymentMethod) || isOnlinePaymentMethod(selectedPaymentMethod)) ? (
                           <><CreditCard className="w-5 h-5 ml-2" />ادفع الآن</>
                         ) : t("checkout.confirm_order")}

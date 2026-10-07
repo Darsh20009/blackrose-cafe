@@ -797,6 +797,7 @@ export interface IPaymentGatewayConfig {
     integrationId?: string;
     iframeId?: string;
     walletIntegrationId?: string;
+    integrationIds?: number[];
     applePayIntegrationId?: string;
     baseUrl?: string;
     callbackUrl?: string;

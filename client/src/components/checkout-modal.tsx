@@ -24,7 +24,7 @@ import SarIcon from "@/components/sar-icon";
 import { isFlutterWebView, openFlutterPaymentInSafari, withFlutterAppReturn } from "@/lib/platform";
 
 const GEIDEA_METHODS = ['geidea', 'apple_pay', 'neoleap', 'neoleap-apple-pay'];
-const PAYMOB_METHODS = ['paymob-card', 'paymob-wallet'];
+const PAYMOB_METHODS = ['paymob-card', 'paymob-wallet', 'paymob-apple-pay'];
 
 type CheckoutStep = 'review' | 'delivery' | 'payment' | 'confirmation' | 'success';
 type DeliveryType = 'pickup' | 'delivery' | 'curbside' | null;
@@ -485,7 +485,7 @@ const CheckoutModal = memo(() => {
            ) : selectedPaymentMethod && GEIDEA_METHODS.includes(selectedPaymentMethod as string) ? (
              <><CreditCard className="w-4 h-4 mr-2" /> الدفع الآن</>
           ) : selectedPaymentMethod && PAYMOB_METHODS.includes(selectedPaymentMethod as string) ? (
-            <><CreditCard className="w-4 h-4 mr-2" /> الدفع عبر Paymob</>
+            <><CreditCard className="w-4 h-4 mr-2" /> الدفع الآن</>
            ) : t('checkout.confirm_order')}
          </Button>
        </div>

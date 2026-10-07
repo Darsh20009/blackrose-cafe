@@ -7,6 +7,7 @@
 - [Face-api model serving](face-api-setup.md) — copy @vladmandic/face-api models to public/face-models; CDN fails in Replit; local static serving is the only reliable approach.
 - [PWA Icon Generation](pwa-icons.md) — icons generated via scripts/generate-pwa-icons.mjs using sharp from attached_assets/qirox-logo-customer.png; rerun after logo changes.
 - [APNs native push architecture](apns-native-push.md) — @capacitor/push-notifications v8 for token registration; server sends via HTTP/2 JWT (APNS_KEY_ID, APNS_TEAM_ID, APNS_P8_KEY env vars); tokens in APNsDeviceTokenModel; hooked into order status changes.
+- [Paymob checkout](paymob-checkout.md) — معرّفات PayMob مطلوبة؛ ابدأ الدفع مباشرة، واحتفظ بمسار Safari وعودة iOS للتطبيق.
 - [iOS shortcuts deep-link pattern](ios-shortcuts.md) — UIApplicationShortcutItems injected via codemagic.yaml PlistBuddy; AppDelegate.swift injected via python3 to open blackrose://shortcut/<type>; handled by @capacitor/app appUrlOpen in ios-shortcuts.ts.
 - [Codemagic publish fix](codemagic-publish-fix.md) — Root cause: missing aps-environment entitlement + no explicit export method. Fixed by creating App.entitlements with aps-environment:production, registering in pbxproj, and adding --export-xcargs method=app-store to build-ipa.
 - [flutter_app missing native scaffold](flutter-app-missing-native-scaffold.md) — flutter_app/ios & /android only had customization files in git, no real Xcode/Gradle project ever existed; this was the real cause of the App Store black screen.

@@ -3201,11 +3201,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } else if (pg?.provider === 'paymob') {
         const hasSACredentials = !!(pg.paymob?.secretKey && pg.paymob?.publicKey);
-        const hasLegacyCredentials = !!(pg.paymob?.apiKey && pg.paymob?.integrationId);
-        if (hasSACredentials || hasLegacyCredentials) {
+        const hasLegacyCredentials = !!(pg.paymob?.apiKey && pg.paymob?.integrationId && pg.paymob?.iframeId);
+        const cardIntegrationIds = Array.isArray(pg.paymob?.integrationIds)
+          ? pg.paymob.integrationIds.map((id: unknown) => Number(id)).filter((id: number) => Number.isSafeInteger(id) && id > 0)
+          : [];
+        const applePayIntegrationId = Number(pg.paymob?.applePayIntegrationId);
+        const hasApplePayIntegrationId = Number.isSafeInteger(applePayIntegrationId) && applePayIntegrationId > 0;
+
+        if (hasSACredentials) {
+          if (cardIntegrationIds.length > 0) {
+            allMethods.push({ id: 'paymob-card', nameAr: 'بطاقة بنكية', nameEn: 'Card Payment', details: 'مدى، فيزا، ماستر كارد عبر Paymob', icon: 'fas fa-credit-card', gateway: 'paymob' });
+          }
+          if (hasApplePayIntegrationId) {
+            allMethods.push({ id: 'paymob-apple-pay', nameAr: 'Apple Pay', nameEn: 'Apple Pay', details: 'الدفع السريع عبر Apple Pay', icon: 'fas fa-mobile-alt', gateway: 'paymob' });
+          }
+        } else if (hasLegacyCredentials) {
           allMethods.push({ id: 'paymob-card', nameAr: 'بطاقة بنكية', nameEn: 'Card Payment', details: 'مدى، فيزا، ماستر كارد عبر Paymob', icon: 'fas fa-credit-card', gateway: 'paymob' });
-          allMethods.push({ id: 'paymob-apple-pay', nameAr: 'Apple Pay', nameEn: 'Apple Pay', details: 'الدفع السريع عبر Apple Pay', icon: 'fas fa-mobile-alt', gateway: 'paymob' });
-          if (!hasSACredentials && pg.paymob?.walletIntegrationId) {
+          if (pg.paymob?.walletIntegrationId) {
             allMethods.push({ id: 'paymob-wallet', nameAr: 'محفظة إلكترونية', nameEn: 'Mobile Wallet', details: 'الدفع عبر المحفظة الإلكترونية', icon: 'fas fa-mobile-alt', gateway: 'paymob' });
           }
         }
@@ -3359,6 +3371,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           apiKey: maskSecret(pg.paymob?.apiKey),
           integrationId: pg.paymob?.integrationId || '',
           iframeId: pg.paymob?.iframeId || '',
+          integrationIds: pg.paymob?.integrationIds || [],
+          applePayIntegrationId: pg.paymob?.applePayIntegrationId || '',
           walletIntegrationId: pg.paymob?.walletIntegrationId || '',
           hmacSecret: maskSecret(pg.paymob?.hmacSecret),
           callbackUrl: pg.paymob?.callbackUrl || '',
@@ -3421,7 +3435,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (body.paymobSecretKey) updates['paymentGateway.paymob.secretKey'] = body.paymobSecretKey;
       if (body.paymobPublicKey) updates['paymentGateway.paymob.publicKey'] = body.paymobPublicKey;
       if (body.paymobBaseUrl) updates['paymentGateway.paymob.baseUrl'] = body.paymobBaseUrl;
-      if (body.paymobIntegrationIds !== undefined) updates['paymentGateway.paymob.integrationIds'] = (Array.isArray(body.paymobIntegrationIds) ? body.paymobIntegrationIds : []).map(Number).filter(Boolean);
+      if (body.paymobIntegrationIds !== undefined) {
+        const rawIntegrationIds = Array.isArray(body.paymobIntegrationIds)
+          ? body.paymobIntegrationIds.map((id: unknown) => String(id).trim()).filter(Boolean)
+          : [];
+        const invalidIntegrationId = rawIntegrationIds.some((id: string) => {
+          const numericId = Number(id);
+          return !/^\d+$/.test(id) || !Number.isSafeInteger(numericId) || numericId <= 0;
+        });
+        if (invalidIntegrationId) {
+          return res.status(400).json({ error: "معرّفات تكامل البطاقات يجب أن تكون أرقاماً صحيحة وموجبة" });
+        }
+        updates['paymentGateway.paymob.integrationIds'] = [...new Set(rawIntegrationIds.map(Number))];
+      }
+      if (body.paymobApplePayIntegrationId !== undefined) {
+        const applePayIntegrationId = String(body.paymobApplePayIntegrationId || '').trim();
+        const numericApplePayId = Number(applePayIntegrationId);
+        if (applePayIntegrationId && (!/^\d+$/.test(applePayIntegrationId) || !Number.isSafeInteger(numericApplePayId) || numericApplePayId <= 0)) {
+          return res.status(400).json({ error: "معرّف تكامل Apple Pay يجب أن يكون رقماً صحيحاً" });
+        }
+        updates['paymentGateway.paymob.applePayIntegrationId'] = applePayIntegrationId;
+      }
 
       updates['updatedAt'] = new Date();
 
@@ -3431,6 +3465,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { new: true, upsert: true, strict: false }
       );
 
+      cache.invalidateKey(cacheKey('biz-config', tenantId));
+      cache.invalidate('payment-methods:' + tenantId);
       res.json({ success: true, message: "تم حفظ إعدادات الدفع بنجاح" });
     } catch (error) {
       res.status(500).json({ error: "فشل في حفظ إعدادات الدفع" });
@@ -3718,10 +3754,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // ── PayMob Saudi Arabia — Unified Checkout (Intention API) ──
           const baseUrl = pg.paymob?.baseUrl || 'https://ksa.paymob.com';
           const cardIntegrationIds: number[] = pg.paymob?.integrationIds?.length
-            ? pg.paymob.integrationIds.map(Number).filter(Boolean)
+            ? pg.paymob.integrationIds.map(Number).filter((id: number) => Number.isSafeInteger(id) && id > 0)
             : [];
-          const applePayId = pg.paymob?.applePayIntegrationId ? Number(pg.paymob.applePayIntegrationId) : null;
+          const rawApplePayId = Number(pg.paymob?.applePayIntegrationId);
+          const applePayId = Number.isSafeInteger(rawApplePayId) && rawApplePayId > 0 ? rawApplePayId : null;
           const isApplePayRequest = reqPaymentMethod === 'paymob-apple-pay';
+
+          if (isApplePayRequest && !applePayId) {
+            return res.status(400).json({ error: "معرّف تكامل Apple Pay غير مهيأ في إعدادات Paymob" });
+          }
+          if (!isApplePayRequest && cardIntegrationIds.length === 0) {
+            return res.status(400).json({ error: "أضف معرّف تكامل البطاقة في إعدادات Paymob أولاً" });
+          }
+
           const integrationIds: number[] = isApplePayRequest && applePayId
             ? [...cardIntegrationIds, applePayId]
             : cardIntegrationIds;
@@ -3817,6 +3862,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await logPayment({ tenantId, event: 'failed', provider: 'paymob', amount: Number(amount), currency: currency || 'SAR', status: 'failed', errorMessage: paymobError.message, orderId: orderId || undefined, customerPhone: customerPhone || undefined, ipAddress: req.ip });
             return res.status(500).json({ error: "خطأ في الاتصال بـ Paymob Saudi", details: paymobError.message });
           }
+        }
+
+        if (reqPaymentMethod === 'paymob-apple-pay') {
+          return res.status(400).json({ error: "Apple Pay يتطلب إعداد Paymob السعودية باستخدام Unified Checkout" });
         }
 
         // ── PayMob Legacy (Egypt) flow ──

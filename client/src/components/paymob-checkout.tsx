@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Loader2, ShieldCheck, X, CheckCircle2, XCircle, CreditCard, AlertCircle, ExternalLink } from "lucide-react";
+import { Loader2, ShieldCheck, X, CheckCircle2, XCircle, CreditCard, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SarIcon from "@/components/sar-icon";
 import { useTranslate } from "@/lib/useTranslate";
@@ -54,23 +54,12 @@ export default function PaymobCheckout({
   const [confirmCancel, setConfirmCancel] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const successTriggered = useRef(false);
+  const checkoutStarted = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const flutterVerifyInFlight = useRef(false);
 
   useEffect(() => {
-    if (checkoutUrl) {
-      if (isCapacitorNative()) {
-        // Capacitor: show button immediately
-        setState("ready");
-        const t = setTimeout(() => setVisible(true), 30);
-        return () => clearTimeout(t);
-      } else {
-        // Web / iOS Safari redirect mode: set visible first, then "ready" after animation
-        const t1 = setTimeout(() => setVisible(true), 30);
-        const t2 = setTimeout(() => setState("ready"), 350);
-        return () => { clearTimeout(t1); clearTimeout(t2); };
-      }
-    }
+    if (checkoutUrl) setVisible(true);
   }, [checkoutUrl]);
 
   const stopPolling = () => {
@@ -299,10 +288,52 @@ export default function PaymobCheckout({
         presentationStyle: "popover",
       });
     } catch (err: any) {
-      // Fallback: open in default external browser if plugin fails
-      window.open(checkoutUrl, "_blank");
-      setState("ready");
+      // Keep checkout moving if the native browser plugin is unavailable.
+      try {
+        window.location.replace(new URL(checkoutUrl, window.location.origin).toString());
+      } catch {
+        triggerError(err?.message || tc("تعذّر فتح صفحة الدفع.", "Could not open the payment page."));
+      }
     }
+  };
+
+  const startGatewayCheckout = () => {
+    if (!checkoutUrl || checkoutStarted.current) return;
+    checkoutStarted.current = true;
+    successTriggered.current = false;
+    setConfirmCancel(false);
+    setVisible(true);
+
+    let paymentUrl: URL;
+    try {
+      paymentUrl = new URL(checkoutUrl, window.location.origin);
+      if (paymentUrl.protocol !== "https:") {
+        throw new Error(tc("رابط بوابة الدفع غير آمن.", "The payment gateway URL is not secure."));
+      }
+    } catch (error: any) {
+      triggerError(error?.message || tc("رابط بوابة الدفع غير صالح.", "The payment gateway URL is invalid."));
+      return;
+    }
+
+    if (isFlutterWebView()) {
+      openFlutterSafari();
+      return;
+    }
+    if (isCapacitorNative()) {
+      void openCapacitorBrowser();
+      return;
+    }
+
+    setState("processing");
+    window.location.replace(paymentUrl.toString());
+  };
+
+  const retryGatewayCheckout = () => {
+    checkoutStarted.current = false;
+    setErrorMessage("");
+    setState("loading");
+    setConfirmCancel(false);
+    startGatewayCheckout();
   };
 
   // ── postMessage handler for web iframe ─────────────────────────────────────
@@ -342,6 +373,11 @@ export default function PaymobCheckout({
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
+  useEffect(() => {
+    if (!checkoutUrl || checkoutStarted.current) return;
+    startGatewayCheckout();
+  }, [checkoutUrl]);
+
   // Cleanup polling on unmount
   useEffect(() => () => stopPolling(), []);
 
@@ -366,25 +402,15 @@ export default function PaymobCheckout({
             </div>
           </div>
 
-          {state === "ready" && (
-            <>
-              <p className="text-sm text-muted-foreground text-center">
-                {tc("ستفتح صفحة الدفع في Safari، ثم يعود التطبيق تلقائياً بعد إتمام العملية.", "Payment opens in Safari. The app returns automatically when the payment finishes.")}
-              </p>
-              <Button className="w-full h-12 gap-2 font-bold" onClick={openFlutterSafari} data-testid="button-paymob-open-safari">
-                <ExternalLink className="w-5 h-5" />
-                {tc("المتابعة إلى Safari", "Continue to Safari")}
-              </Button>
-            </>
-          )}
-
-          {(state === "processing" || state === "verifying") && (
+          {(state === "loading" || state === "processing" || state === "verifying") && (
             <div className="flex flex-col items-center gap-3 py-3 text-center">
               <Loader2 className="w-9 h-9 animate-spin text-primary" />
               <p className="font-semibold">
-                {state === "processing"
-                  ? tc("أكمل الدفع في Safari، وسيعود التطبيق تلقائياً.", "Complete payment in Safari. The app will return automatically.")
-                  : tc("جارٍ التحقق من حالة الدفع...", "Checking payment status...")}
+                {state === "loading"
+                  ? tc("جارٍ فتح صفحة الدفع في Safari...", "Opening the payment page in Safari...")
+                  : state === "processing"
+                    ? tc("أكمل الدفع في Safari، وسيعود التطبيق تلقائياً.", "Complete payment in Safari. The app will return automatically.")
+                    : tc("جارٍ التحقق من حالة الدفع...", "Checking payment status...")}
               </p>
             </div>
           )}
@@ -400,7 +426,7 @@ export default function PaymobCheckout({
             <div className="flex flex-col items-center gap-3 py-3 text-center">
               <XCircle className="w-10 h-10 text-red-500" />
               <p className="font-semibold">{errorMessage}</p>
-              <Button className="w-full" variant="outline" onClick={() => setState("ready")}>
+              <Button className="w-full" variant="outline" onClick={retryGatewayCheckout}>
                 {tc("حاول مرة أخرى", "Try again")}
               </Button>
             </div>
@@ -506,29 +532,14 @@ export default function PaymobCheckout({
           </div>
 
           <div className="px-5 py-6 space-y-4">
-            {state === "ready" && (
-              <>
-                <p className="text-sm text-muted-foreground text-center leading-relaxed">
-                  {tc(
-                    "سيتم فتح صفحة الدفع الآمنة داخل التطبيق. أدخل بيانات بطاقتك وأكمل الدفع.",
-                    "The secure payment page will open inside the app. Enter your card details and complete the payment."
-                  )}
-                </p>
-                <Button
-                  className="w-full h-12 gap-2 font-bold text-base"
-                  onClick={openCapacitorBrowser}
-                  data-testid="button-paymob-open"
-                >
-                  <CreditCard className="w-5 h-5" />
-                  {tc("ادفع الآن", "Pay Now")}
-                </Button>
-              </>
-            )}
-
-            {state === "processing" && (
+            {(state === "loading" || state === "processing") && (
               <div className="flex flex-col items-center gap-3 py-4 text-center">
                 <Loader2 className="w-10 h-10 animate-spin text-primary" />
-                <p className="text-sm font-semibold">{tc("صفحة الدفع مفتوحة", "Payment page is open")}</p>
+                <p className="text-sm font-semibold">
+                  {state === "loading"
+                    ? tc("جارٍ فتح بوابة الدفع...", "Opening the payment gateway...")
+                    : tc("صفحة الدفع مفتوحة", "Payment page is open")}
+                </p>
                 <p className="text-xs text-muted-foreground">{tc("أكمل الدفع في النافذة أعلاه", "Complete payment in the window above")}</p>
               </div>
             )}
@@ -555,7 +566,7 @@ export default function PaymobCheckout({
                 <p className="text-sm text-muted-foreground">{errorMessage}</p>
                 <div className="flex gap-3 w-full">
                   <Button variant="outline" onClick={handleForceClose} className="flex-1">{tc("إلغاء", "Cancel")}</Button>
-                  <Button onClick={() => setState("ready")} className="flex-1">{tc("إعادة المحاولة", "Try Again")}</Button>
+                  <Button onClick={retryGatewayCheckout} className="flex-1">{tc("إعادة المحاولة", "Try Again")}</Button>
                 </div>
               </div>
             )}
@@ -568,7 +579,7 @@ export default function PaymobCheckout({
                   {tc('إذا أكملت الدفع بالفعل، سيظهر طلبك في "طلباتي" قريباً.', 'If you already paid, your order will appear in "My Orders" shortly.')}
                 </p>
                 <div className="flex gap-3 w-full">
-                  <Button variant="outline" onClick={() => { setConfirmCancel(false); setState("ready"); }} className="flex-1">
+                  <Button variant="outline" onClick={retryGatewayCheckout} className="flex-1">
                     {tc("العودة للدفع", "Back")}
                   </Button>
                   <Button variant="destructive" onClick={handleForceClose} className="flex-1">
@@ -642,32 +653,14 @@ export default function PaymobCheckout({
           </div>
 
           <div className="px-5 py-6 space-y-4">
-            {state === "ready" && (
-              <>
-                <p className="text-sm text-muted-foreground text-center leading-relaxed">
-                  {tc(
-                    "سيتم فتح صفحة الدفع الآمنة. يمكنك الدفع بـ Apple Pay أو البطاقة.",
-                    "The secure payment page will open. You can pay with Apple Pay or card."
-                  )}
-                </p>
-                <Button
-                  className="w-full h-12 gap-2 font-bold text-base"
-                  onClick={() => {
-                    setState("processing");
-                    window.location.href = checkoutUrl;
-                  }}
-                  data-testid="button-paymob-ios-redirect"
-                >
-                  <ExternalLink className="w-5 h-5" />
-                  {tc("ادفع الآن", "Pay Now")}
-                </Button>
-              </>
-            )}
-
-            {state === "processing" && (
+            {(state === "loading" || state === "processing") && (
               <div className="flex flex-col items-center gap-3 py-4 text-center">
                 <Loader2 className="w-10 h-10 animate-spin text-primary" />
-                <p className="text-sm font-semibold">{tc("جارٍ الانتقال لصفحة الدفع...", "Redirecting to payment page...")}</p>
+                <p className="text-sm font-semibold">
+                  {state === "loading"
+                    ? tc("جارٍ فتح بوابة الدفع...", "Opening the payment gateway...")
+                    : tc("جارٍ الانتقال لصفحة الدفع...", "Redirecting to payment page...")}
+                </p>
               </div>
             )}
 
@@ -685,7 +678,7 @@ export default function PaymobCheckout({
                 <p className="text-sm text-muted-foreground">{errorMessage}</p>
                 <div className="flex gap-3 w-full">
                   <Button variant="outline" onClick={handleForceClose} className="flex-1">{tc("إلغاء", "Cancel")}</Button>
-                  <Button onClick={() => setState("ready")} className="flex-1">{tc("إعادة المحاولة", "Try Again")}</Button>
+                  <Button onClick={retryGatewayCheckout} className="flex-1">{tc("إعادة المحاولة", "Try Again")}</Button>
                 </div>
               </div>
             )}
@@ -698,7 +691,7 @@ export default function PaymobCheckout({
                   {tc('إذا أكملت الدفع، سيظهر طلبك في "طلباتي" قريباً.', 'If you already paid, your order will appear in "My Orders" shortly.')}
                 </p>
                 <div className="flex gap-3 w-full">
-                  <Button variant="outline" onClick={() => { setConfirmCancel(false); setState("ready"); }} className="flex-1">
+                  <Button variant="outline" onClick={retryGatewayCheckout} className="flex-1">
                     {tc("العودة", "Back")}
                   </Button>
                   <Button variant="destructive" onClick={handleForceClose} className="flex-1">
@@ -771,28 +764,6 @@ export default function PaymobCheckout({
         </div>
 
         <div className="px-5 py-6 space-y-4">
-          {state === "ready" && (
-            <>
-              <p className="text-sm text-muted-foreground text-center leading-relaxed">
-                {tc(
-                  "سيتم فتح صفحة الدفع الآمنة. أدخل بيانات بطاقتك وأكمل الدفع.",
-                  "The secure payment page will open. Enter your card details and complete the payment."
-                )}
-              </p>
-              <Button
-                className="w-full h-12 gap-2 font-bold text-base"
-                onClick={() => {
-                  setState("processing");
-                  window.location.href = checkoutUrl;
-                }}
-                data-testid="button-paymob-web-redirect"
-              >
-                <CreditCard className="w-5 h-5" />
-                {tc("ادفع الآن", "Pay Now")}
-              </Button>
-            </>
-          )}
-
           {(state === "loading" || state === "processing") && (
             <div className="flex flex-col items-center gap-3 py-4 text-center">
               <Loader2 className="w-10 h-10 animate-spin text-primary" />
@@ -822,7 +793,7 @@ export default function PaymobCheckout({
               <p className="text-sm text-muted-foreground">{errorMessage}</p>
               <div className="flex gap-3 w-full">
                 <Button variant="outline" onClick={handleForceClose} className="flex-1">{tc("إلغاء", "Cancel")}</Button>
-                <Button onClick={() => setState("ready")} className="flex-1">{tc("إعادة المحاولة", "Try Again")}</Button>
+                <Button onClick={retryGatewayCheckout} className="flex-1">{tc("إعادة المحاولة", "Try Again")}</Button>
               </div>
             </div>
           )}
@@ -835,7 +806,7 @@ export default function PaymobCheckout({
                 {tc('إذا أكملت الدفع بالفعل، سيظهر طلبك في "طلباتي" قريباً.', 'If you already paid, your order will appear in "My Orders" shortly.')}
               </p>
               <div className="flex gap-3 w-full">
-                <Button variant="outline" onClick={() => { setConfirmCancel(false); setState("ready"); }} className="flex-1">
+                <Button variant="outline" onClick={retryGatewayCheckout} className="flex-1">
                   {tc("العودة للدفع", "Back")}
                 </Button>
                 <Button variant="destructive" onClick={handleForceClose} className="flex-1">
