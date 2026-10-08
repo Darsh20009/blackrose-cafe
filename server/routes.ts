@@ -60,6 +60,12 @@ import { ErpAccountingService } from "./erp-accounting-service";
 import { deliveryService } from "./delivery-service";
 import { applyDeliveryPolicyToOrderData, checkDeliveryLocation } from "./delivery-policy";
 import {
+  getBranchOperationalSettings,
+  isBranchOpenNow,
+  resolveBranchOperationalSettings,
+  validateBranchOrderOperations,
+} from "./branch-operational-settings";
+import {
   buildDeliveryMapUrl,
   DELIVERY_FEE_SAR,
   DELIVERY_RADIUS_KM,
@@ -1204,24 +1210,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const tenantId = body.tenantId || getTenantIdFromRequest(req) || await getDefaultTenantId();
       const orderChannel = String(body.channel || "online").toLowerCase();
+      const mappedPaymentMethod = paymentMethodMap[body.paymentMethod] || body.paymentMethod || 'other';
       let orderBranchName = "";
+      let branchVatPercentage: number | null = null;
       if (["online", "web", "app", "whatsapp"].includes(orderChannel)) {
         const branchId = String(body.branchId || "").trim();
         if (!branchId || ["all", "default"].includes(branchId.toLowerCase())) {
           return res.status(400).json({ error: "يرجى اختيار فرع صالح للطلب الإلكتروني" });
         }
-        const { BranchModel } = await import("@shared/schema");
-        let selectedBranch: any = await BranchModel.findOne({ id: branchId, tenantId }).lean();
-        if (!selectedBranch && /^[a-fA-F0-9]{24}$/.test(branchId)) {
-          selectedBranch = await BranchModel.findOne({ _id: branchId, tenantId }).lean();
-        }
-        if (!selectedBranch || selectedBranch.isActive === false || selectedBranch.isActive === 0 || selectedBranch.allowOnlineOrders === false || selectedBranch.isOnline === false) {
+        const branchSettings = await getBranchOperationalSettings(tenantId, branchId);
+        if (!branchSettings) {
           return res.status(400).json({ error: "الفرع المختار غير متاح لاستقبال الطلبات الإلكترونية" });
         }
+        const operationsError = validateBranchOrderOperations(
+          branchSettings.branch,
+          branchSettings.effective,
+          body,
+          branchSettings.timezone,
+          mappedPaymentMethod,
+        );
+        if (operationsError) return res.status(400).json({ error: operationsError, code: "BRANCH_OPERATION_UNAVAILABLE" });
+        const selectedBranch: any = branchSettings.branch;
         orderBranchName = selectedBranch.nameAr || selectedBranch.nameEn || "";
+        branchVatPercentage = branchSettings.effective.vatPercentage;
       }
-
-      const mappedPaymentMethod = paymentMethodMap[body.paymentMethod] || body.paymentMethod || 'other';
 
       // Auto-confirm orders from POS channel with immediate payment methods
       const autoConfirmMethods = ['cash', 'pos', 'pos-network', 'mada', 'stc-pay', 'qahwa-card', 'qirox-card', 'split'];
@@ -1340,8 +1352,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Ensure subtotal and tax are always stored (VAT-inclusive pricing)
       const rawTotal = Number(orderData.totalAmount) || 0;
+      if (branchVatPercentage !== null) {
+        orderData.vatPercentage = branchVatPercentage;
+      }
       if (rawTotal > 0 && (orderData.subtotal == null || orderData.tax == null)) {
-        const computedSubtotal = rawTotal / (1 + VAT_RATE);
+        const effectiveVatRate = branchVatPercentage !== null ? branchVatPercentage / 100 : VAT_RATE;
+        const computedSubtotal = rawTotal / (1 + effectiveVatRate);
         const computedTax = rawTotal - computedSubtotal;
         if (orderData.subtotal == null) orderData.subtotal = computedSubtotal;
         if (orderData.tax == null) orderData.tax = computedTax;
@@ -1879,12 +1895,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let subscription = null;
       try {
-        const { SubscriptionConfigModel } = await import("./qirox-admin");
-        const sub = await SubscriptionConfigModel.findOne({ tenantId });
+        const { SubscriptionConfigModel, DEFAULT_SUBSCRIPTION_TERM_DAYS } = await import("./qirox-admin");
+        let sub = await SubscriptionConfigModel.findOne({ tenantId });
         if (sub) {
+          if (sub.isActive && !sub.expiresAt) {
+            const initialExpiresAt = new Date(Date.now() + DEFAULT_SUBSCRIPTION_TERM_DAYS * 24 * 60 * 60 * 1000);
+            sub = await SubscriptionConfigModel.findOneAndUpdate(
+              {
+                tenantId,
+                $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }],
+              },
+              { $set: { expiresAt: initialExpiresAt } },
+              { new: true },
+            ) || await SubscriptionConfigModel.findOne({ tenantId }) || sub;
+          }
+
           subscription = {
             plan: sub.plan,
             isActive: sub.isActive,
+            expiresAt: sub.expiresAt || null,
             maxBranches: sub.maxBranches,
             maxEmployees: sub.maxEmployees,
             maxProducts: sub.maxProducts,
@@ -1923,19 +1952,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenantId = (req as any).session?.employee?.tenantId || getTenantIdFromRequest(req) || "demo-tenant";
       const config = await BusinessConfigModel.findOne({ tenantId }).lean();
       if (!config) return res.json({ brandPrimaryColor: "#9f1239" });
+      const branchId = String(req.query.branchId || "").trim();
+      const branchSettings = branchId
+        ? await getBranchOperationalSettings(tenantId, branchId)
+        : null;
+      if (branchId && !branchSettings) return res.status(404).json({ error: "الفرع غير موجود" });
+      const operationalSettings = branchSettings?.effective || resolveBranchOperationalSettings(config);
+      const isOpen = isBranchOpenNow(operationalSettings, (config as any).timezone || "Asia/Riyadh");
       res.json({
         tradeNameAr: (config as any).tradeNameAr,
         tradeNameEn: (config as any).tradeNameEn,
         brandPrimaryColor: (config as any).brandPrimaryColor || "#9f1239",
         currency: (config as any).currency || 'SAR',
-        vatPercentage: (config as any).vatPercentage || 15,
-        isEmergencyClosed: (config as any).isEmergencyClosed || false,
+        vatPercentage: operationalSettings.vatPercentage,
+        isEmergencyClosed: operationalSettings.isEmergencyClosed,
+        isOpen,
         maintenanceMode: (config as any).maintenanceMode || false,
         allowGuestCheckout: (config as any).allowGuestCheckout ?? true,
         minimumOrderAmount: (config as any).minimumOrderAmount || 0,
-        deliveryFee: (config as any).deliveryPolicy?.feeSar ?? DELIVERY_FEE_SAR,
-        deliveryRadiusKm: (config as any).deliveryPolicy?.radiusKm ?? DELIVERY_RADIUS_KM,
-        deliveryBranchId: (config as any).deliveryPolicy?.branchId || "",
+        deliveryFee: operationalSettings.deliveryPolicy.feeSar,
+        deliveryRadiusKm: operationalSettings.deliveryPolicy.radiusKm,
+        deliveryBranchId: branchId || (config as any).deliveryPolicy?.branchId || "",
+        operationalSettings: {
+          ...operationalSettings,
+          isOpen,
+          allowOnlineOrders: branchSettings?.branch?.allowOnlineOrders !== false,
+        },
         timezone: (config as any).timezone || 'Asia/Riyadh',
       });
     } catch (error) {
@@ -2022,6 +2064,239 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("[CONFIG] Error updating delivery policy:", error);
       res.status(500).json({ error: "تعذر حفظ إعدادات التوصيل." });
+    }
+  });
+
+  app.get("/api/admin/branches/:id/operational-settings", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const tenantId = req.employee?.tenantId;
+      if (!tenantId) return res.status(400).json({ error: "Tenant ID is required" });
+      const result = await getBranchOperationalSettings(tenantId, req.params.id);
+      if (!result) return res.status(404).json({ error: "الفرع غير موجود" });
+      const branchId = String(result.branch.id || (result.branch as any)._id || "");
+      const configuredBranch = result.globalDeliveryBranchId
+        ? branchId === result.globalDeliveryBranchId || String((result.branch as any)._id || "") === result.globalDeliveryBranchId
+        : /المروج/.test(`${result.branch.nameAr || ""} ${(result.branch as any).nameEn || ""}`) ||
+          /mur(?:u|oo?)j/i.test((result.branch as any).nameEn || "");
+      const explicitlyEnabledDelivery = (result.overrides as any)?.orderMethodsConfig?.enableDelivery === true;
+      const branchCoordinates = (result.branch as any).location || {};
+      const hasDeliveryCoordinates = Number.isFinite(Number(branchCoordinates.lat)) &&
+        Number(branchCoordinates.lat) >= -90 && Number(branchCoordinates.lat) <= 90 &&
+        Number.isFinite(Number(branchCoordinates.lng)) &&
+        Number(branchCoordinates.lng) >= -180 && Number(branchCoordinates.lng) <= 180;
+      res.json({
+        branch: {
+          id: branchId,
+          nameAr: result.branch.nameAr,
+          nameEn: result.branch.nameEn,
+          isActive: result.branch.isActive,
+          allowOnlineOrders: result.branch.allowOnlineOrders,
+          isOnline: (result.branch as any).isOnline !== false,
+          deliveryEnabled: result.effective.orderMethodsConfig.enableDelivery &&
+            result.branch.isActive !== false &&
+            (result.branch as any).isOnline !== false &&
+            result.branch.allowOnlineOrders !== false &&
+            hasDeliveryCoordinates &&
+            (configuredBranch || explicitlyEnabledDelivery),
+        },
+        defaults: result.defaults,
+        effective: result.effective,
+        overrides: result.overrides,
+      });
+    } catch (error) {
+      console.error("[BranchOperationalSettings] read error:", error);
+      res.status(500).json({ error: "تعذر تحميل إعدادات الفرع" });
+    }
+  });
+
+  app.patch("/api/admin/branches/:id/operational-settings", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const tenantId = req.employee?.tenantId;
+      if (!tenantId) return res.status(400).json({ error: "Tenant ID is required" });
+      const current = await getBranchOperationalSettings(tenantId, req.params.id);
+      if (!current) return res.status(404).json({ error: "الفرع غير موجود" });
+
+      const input = req.body?.settings;
+      if (!input || typeof input !== "object" || Array.isArray(input)) {
+        return res.status(400).json({ error: "إعدادات الفرع غير صالحة" });
+      }
+      const allowedKeys = new Set([
+        "isEmergencyClosed",
+        "storeHours",
+        "orderMethodsConfig",
+        "deliveryPolicy",
+        "enabledPaymentMethodIds",
+        "vatPercentage",
+        "serviceFeeEnabled",
+        "serviceFeeAmount",
+        "serviceFeeLowOrderThreshold",
+        "serviceFeeLowOrderAmount",
+      ]);
+      const unknownKey = Object.keys(input).find((key) => !allowedKeys.has(key));
+      if (unknownKey) return res.status(400).json({ error: `إعداد غير مدعوم: ${unknownKey}` });
+      if (Object.keys(input).length === 0) return res.status(400).json({ error: "لا توجد تغييرات لحفظها" });
+
+      const updates: Record<string, any> = {};
+      const booleanKeys = ["isEmergencyClosed", "serviceFeeEnabled"];
+      for (const key of booleanKeys) {
+        if (key in input) {
+          if (typeof input[key] !== "boolean") return res.status(400).json({ error: `قيمة ${key} يجب أن تكون نعم أو لا` });
+          updates[key] = input[key];
+        }
+      }
+
+      if ("storeHours" in input) {
+        const hours = input.storeHours;
+        const weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+        const validTime = (value: unknown) => typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+        if (!hours || typeof hours !== "object" || Array.isArray(hours)) {
+          return res.status(400).json({ error: "جدول ساعات العمل غير صالح" });
+        }
+        for (const day of weekdays) {
+          const schedule = hours[day];
+          if (
+            !schedule ||
+            typeof schedule !== "object" ||
+            typeof schedule.isOpen !== "boolean" ||
+            (schedule.isAlwaysOpen !== undefined && typeof schedule.isAlwaysOpen !== "boolean") ||
+            !validTime(schedule.open) ||
+            !validTime(schedule.close)
+          ) {
+            return res.status(400).json({ error: `تحقق من ساعات العمل ليوم ${day}` });
+          }
+        }
+        updates.storeHours = Object.fromEntries(weekdays.map((day) => {
+          const schedule = hours[day];
+          return [day, {
+            open: schedule.open,
+            close: schedule.close,
+            isOpen: schedule.isOpen,
+            isAlwaysOpen: schedule.isAlwaysOpen === true,
+          }];
+        }));
+      }
+
+      if ("orderMethodsConfig" in input) {
+        const methods = input.orderMethodsConfig;
+        const supportedMethods = [
+          "enableDineIn",
+          "enableCarPickup",
+          "enableDelivery",
+          "enableScheduledPickup",
+          "enableTakeaway",
+        ];
+        if (!methods || typeof methods !== "object" || Array.isArray(methods)) {
+          return res.status(400).json({ error: "طرق الطلب غير صالحة" });
+        }
+        const methodUpdates: Record<string, boolean> = {};
+        for (const [key, value] of Object.entries(methods)) {
+          if (!supportedMethods.includes(key) || typeof value !== "boolean") {
+            return res.status(400).json({ error: "إعداد إحدى طرق الطلب غير صالح" });
+          }
+          methodUpdates[key] = value;
+        }
+        if (Object.keys(methodUpdates).length === 0) return res.status(400).json({ error: "لم يتم تحديد طرق الطلب" });
+        updates.orderMethodsConfig = methodUpdates;
+      }
+
+      if ("deliveryPolicy" in input) {
+        const policy = input.deliveryPolicy;
+        if (!policy || typeof policy !== "object" || Array.isArray(policy)) {
+          return res.status(400).json({ error: "إعدادات التوصيل غير صالحة" });
+        }
+        const policyUpdates: Record<string, number> = {};
+        if ("radiusKm" in policy) {
+          const value = Number(policy.radiusKm);
+          if (!Number.isFinite(value) || value < 1 || value > 200) return res.status(400).json({ error: "نطاق التوصيل يجب أن يكون بين ١ و٢٠٠ كم." });
+          policyUpdates.radiusKm = value;
+        }
+        if ("feeSar" in policy) {
+          const value = Number(policy.feeSar);
+          if (!Number.isFinite(value) || value < 0 || value > 1000) return res.status(400).json({ error: "رسوم التوصيل يجب أن تكون بين ٠ و١٠٠٠ ريال." });
+          policyUpdates.feeSar = value;
+        }
+        if (Object.keys(policyUpdates).length === 0) return res.status(400).json({ error: "لم يتم تحديد إعدادات التوصيل" });
+        updates.deliveryPolicy = policyUpdates;
+      }
+
+      if ("enabledPaymentMethodIds" in input) {
+        const ids = input.enabledPaymentMethodIds;
+        if (!Array.isArray(ids) || ids.length > 100 || ids.some((id: unknown) => typeof id !== "string" || id.length < 1 || id.length > 100)) {
+          return res.status(400).json({ error: "قائمة طرق الدفع غير صالحة" });
+        }
+        updates.enabledPaymentMethodIds = [...new Set(ids)];
+      }
+
+      const numericRanges: Record<string, { min: number; max: number }> = {
+        vatPercentage: { min: 0, max: 100 },
+        serviceFeeAmount: { min: 0, max: 1000 },
+        serviceFeeLowOrderThreshold: { min: 0, max: 10000 },
+        serviceFeeLowOrderAmount: { min: 0, max: 1000 },
+      };
+      for (const [key, range] of Object.entries(numericRanges)) {
+        if (key in input) {
+          const value = Number(input[key]);
+          if (!Number.isFinite(value) || value < range.min || value > range.max) {
+            return res.status(400).json({ error: `قيمة ${key} خارج النطاق المسموح` });
+          }
+          updates[key] = value;
+        }
+      }
+
+      const merged = { ...current.overrides };
+      for (const [key, value] of Object.entries(updates)) {
+        if (key === "orderMethodsConfig" || key === "deliveryPolicy") {
+          merged[key] = { ...(merged[key] || {}), ...value };
+        } else {
+          merged[key] = value;
+        }
+      }
+      const branchId = String(current.branch.id || (current.branch as any)._id);
+      const selectors: any[] = [{ id: branchId }, { id: req.params.id }];
+      if (/^[a-fA-F0-9]{24}$/.test(req.params.id)) selectors.push({ _id: req.params.id });
+      const branch = await BranchModel.findOneAndUpdate(
+        { tenantId, $or: selectors },
+        { $set: { operationalSettings: merged } },
+        { new: true },
+      ).lean();
+      if (!branch) return res.status(404).json({ error: "الفرع غير موجود" });
+
+      cache.invalidate("payment-methods:" + tenantId);
+      const businessConfig = await BusinessConfigModel.findOne({ tenantId }).lean();
+      res.json({
+        overrides: merged,
+        effective: resolveBranchOperationalSettings(businessConfig, branch),
+      });
+    } catch (error) {
+      console.error("[BranchOperationalSettings] update error:", error);
+      res.status(500).json({ error: "تعذر حفظ إعدادات الفرع" });
+    }
+  });
+
+  app.delete("/api/admin/branches/:id/operational-settings", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const tenantId = req.employee?.tenantId;
+      if (!tenantId) return res.status(400).json({ error: "Tenant ID is required" });
+      const current = await getBranchOperationalSettings(tenantId, req.params.id);
+      if (!current) return res.status(404).json({ error: "الفرع غير موجود" });
+      const branchId = String(current.branch.id || (current.branch as any)._id);
+      const selectors: any[] = [{ id: branchId }, { id: req.params.id }];
+      if (/^[a-fA-F0-9]{24}$/.test(req.params.id)) selectors.push({ _id: req.params.id });
+      const branch = await BranchModel.findOneAndUpdate(
+        { tenantId, $or: selectors },
+        { $unset: { operationalSettings: 1 } },
+        { new: true },
+      ).lean();
+      if (!branch) return res.status(404).json({ error: "الفرع غير موجود" });
+      cache.invalidate("payment-methods:" + tenantId);
+      const businessConfig = await BusinessConfigModel.findOne({ tenantId }).lean();
+      res.json({
+        overrides: {},
+        effective: resolveBranchOperationalSettings(businessConfig, branch),
+      });
+    } catch (error) {
+      console.error("[BranchOperationalSettings] reset error:", error);
+      res.status(500).json({ error: "تعذر استعادة الإعدادات الافتراضية" });
     }
   });
 
@@ -3201,9 +3476,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/payment-methods", async (req, res) => {
     try {
       const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const branchId = String(req.query.branchId || "").trim();
       const ck = cacheKey('payment-methods', tenantId);
-      const cached = cache.get<any[]>(ck);
-      if (cached) return res.json(cached);
+      if (!branchId) {
+        const cached = cache.get<any[]>(ck);
+        if (cached) return res.json(cached);
+      }
       const configDoc = await BusinessConfigModel.findOne({ tenantId });
       const pg = configDoc?.toObject()?.paymentGateway;
 
@@ -3303,6 +3581,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      if (branchId) {
+        const branchSettings = await getBranchOperationalSettings(tenantId, branchId);
+        if (!branchSettings) return res.status(404).json({ error: "الفرع غير موجود" });
+        if (
+          branchSettings.branch.allowOnlineOrders === false ||
+          branchSettings.branch.isOnline === false ||
+          branchSettings.branch.isActive === false
+        ) return res.json([]);
+        const allowedIds = branchSettings.effective.enabledPaymentMethodIds;
+        const branchMethods = allowedIds
+          ? allMethods.filter((method) => allowedIds.includes(method.id))
+          : allMethods;
+        return res.json(branchMethods);
+      }
       cache.set(ck, allMethods, CACHE_TTL.PAYMENT_METHODS);
       res.json(allMethods);
     } catch (error) {
@@ -4620,6 +4912,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const tenantId = orderData.tenantId || getTenantIdFromRequest(req) || await getDefaultTenantId();
       const normalizedOrderData = { ...orderData, tenantId };
+      const branchId = String(normalizedOrderData.branchId || "").trim();
+      if (!branchId) return res.status(400).json({ error: "يرجى اختيار فرع صالح قبل بدء الدفع" });
+      const branchSettings = await getBranchOperationalSettings(tenantId, branchId);
+      if (!branchSettings) return res.status(400).json({ error: "الفرع المختار غير موجود" });
+      const operationsError = validateBranchOrderOperations(
+        branchSettings.branch,
+        branchSettings.effective,
+        normalizedOrderData,
+        branchSettings.timezone,
+        String(normalizedOrderData.paymentMethod || ""),
+      );
+      if (operationsError) return res.status(400).json({ error: operationsError, code: "BRANCH_OPERATION_UNAVAILABLE" });
       const deliveryPolicy = await applyDeliveryPolicyToOrderData(normalizedOrderData, tenantId);
       if (!deliveryPolicy.ok) {
         return res.status(400).json({
@@ -7573,6 +7877,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(discountCode);
     } catch (error) {
       res.status(500).json({ error: "Failed to update discount code" });
+    }
+  });
+
+  app.delete("/api/discount-codes/:id", requireAuth, requireManager, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      if (!/^[a-f\d]{24}$/i.test(id)) {
+        return res.status(400).json({ error: "معرّف كود الخصم غير صالح" });
+      }
+
+      const { DiscountCodeModel } = await import("@shared/schema");
+      const deletedCode = await DiscountCodeModel.findOneAndDelete({ _id: id }).lean();
+      if (!deletedCode) {
+        return res.status(404).json({ error: "كود الخصم غير موجود" });
+      }
+
+      return res.json({ success: true, id });
+    } catch (error) {
+      console.error("Failed to delete discount code:", error);
+      return res.status(500).json({ error: "تعذر حذف كود الخصم" });
     }
   });
 
@@ -12200,24 +12524,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/public/branches", async (req, res) => {
     try {
       const { BranchModel } = await import("@shared/schema");
-      const tenantId = (req as any).employee?.tenantId || 'demo-tenant';
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
       const branches = await BranchModel.find({
+        tenantId,
         isActive: { $in: [1, true] },
         isOnline: { $ne: false },
       }).lean();
-      const result = branches.map((b: any) => ({
-        id: b.id || b._id?.toString(),
-        nameAr: b.nameAr,
-        nameEn: b.nameEn,
-        address: b.address,
-        phone: b.phone,
-        location: b.location,
-        workingHours: b.workingHours,
-        allowOnlineOrders: b.allowOnlineOrders,
-        allowCarOrders: b.allowCarOrders,
-        allowTableOrders: b.allowTableOrders,
-        isOnline: b.isOnline !== false,
-      }));
+      const businessConfig = await BusinessConfigModel.findOne({ tenantId }).lean();
+      const configuredDeliveryBranchId = String((businessConfig as any)?.deliveryPolicy?.branchId || "").trim();
+      const result = branches.map((b: any) => {
+        const operational = resolveBranchOperationalSettings(businessConfig, b);
+        const id = String(b.id || b._id?.toString());
+        const isConfiguredDeliveryBranch = configuredDeliveryBranchId
+          ? id === configuredDeliveryBranchId || String(b._id || "") === configuredDeliveryBranchId
+          : /المروج/.test(`${b.nameAr || ""} ${b.nameEn || ""}`) || /mur(?:u|oo?)j/i.test(b.nameEn || "");
+        const explicitlyEnabledDelivery = b.operationalSettings?.orderMethodsConfig?.enableDelivery === true;
+        const latitude = Number(b.location?.lat);
+        const longitude = Number(b.location?.lng);
+        const hasDeliveryCoordinates = Number.isFinite(latitude) && latitude >= -90 && latitude <= 90 &&
+          Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
+        const deliveryEnabled = b.allowOnlineOrders !== false &&
+          operational.orderMethodsConfig.enableDelivery &&
+          hasDeliveryCoordinates &&
+          (isConfiguredDeliveryBranch || explicitlyEnabledDelivery);
+        const timezone = (businessConfig as any)?.timezone || "Asia/Riyadh";
+        return {
+          id,
+          nameAr: b.nameAr,
+          nameEn: b.nameEn,
+          address: b.address,
+          phone: b.phone,
+          city: b.city,
+          location: b.location,
+          mapsUrl: b.mapsUrl,
+          workingHours: b.workingHours,
+          allowOnlineOrders: b.allowOnlineOrders,
+          allowCarOrders: b.allowCarOrders,
+          allowTableOrders: b.allowTableOrders,
+          isOnline: b.isOnline !== false,
+          deliveryEnabled,
+          operationalSettings: {
+            ...operational,
+            isOpen: isBranchOpenNow(operational, timezone),
+          },
+        };
+      });
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message });

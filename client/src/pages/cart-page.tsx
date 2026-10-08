@@ -246,19 +246,19 @@ export default function CartPage() {
 
         {/* Fixed Bottom Summary for Mobile */}
         <div
-          className="lg:hidden fixed left-0 right-0 bg-card/95 backdrop-blur-xl border-t border-border shadow-2xl p-4 z-50"
+          className="lg:hidden fixed left-0 right-0 bg-card/95 backdrop-blur-xl border-t border-border p-3 sm:p-4 z-50"
           style={{
             bottom: "calc(4.25rem + max(env(safe-area-inset-bottom, 0px), 4px) + 8px)",
           }}
         >
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex flex-col text-start">
-              <span className="text-xs text-muted-foreground">{t("cart.total")} ({t("cart.items_pcs", { count: cartItems.reduce((sum, item) => sum + item.quantity, 0) })})</span>
-              <span className="text-xl font-black text-primary">{totalPrice.toFixed(2)} <SarIcon /></span>
+          <div className="mx-auto flex max-w-xl items-center gap-3 sm:gap-4">
+            <div className="flex min-w-0 flex-1 flex-col text-start">
+              <span className="whitespace-nowrap text-[11px] sm:text-xs text-muted-foreground">{t("cart.total")} ({t("cart.items_pcs", { count: cartItems.reduce((sum, item) => sum + item.quantity, 0) })})</span>
+              <span className="whitespace-nowrap text-lg sm:text-xl font-black text-primary">{totalPrice.toFixed(2)} <SarIcon /></span>
             </div>
             <Button 
               onClick={goCheckout}
-              className="flex-1 max-w-[200px] bg-primary text-primary-foreground py-5 text-lg font-bold hover:bg-primary/90 rounded-full shadow-lg"
+              className="min-w-[8.5rem] max-w-[200px] flex-1 whitespace-nowrap bg-primary text-primary-foreground py-5 text-base sm:text-lg font-bold hover:bg-primary/90 rounded-full"
               data-testid="button-checkout-mobile"
             >
               {t("cart.checkout")}

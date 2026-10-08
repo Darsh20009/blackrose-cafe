@@ -18,7 +18,6 @@ import { GlobalPrompts } from "@/components/global-prompts";
 import { PWAInstallBanner } from "@/components/pwa-install";
 import { AppDownloadBanner } from "@/components/app-download-banner";
 import { OfflineIndicator } from "@/components/offline-indicator";
-import { NativeBackButton } from "@/components/native-back-button";
 import { CustomerNotificationListener } from "@/components/customer-notification-listener";
 import { CustomerBottomNav } from "@/components/customer-bottom-nav";
 import { GlobalCommandPalette } from "@/components/global-command-palette";
@@ -126,7 +125,6 @@ const PaymentTrackingPage = lazy(() => import("@/pages/payment-tracking"));
 const TenantSignup = lazy(() => import("@/pages/tenant-signup"));
 const HealthCheck = lazy(() => import("@/pages/health-check"));
 const ErrorLogsPage = lazy(() => import("@/pages/error-logs"));
-const NotFound = lazy(() => import("@/pages/not-found"));
 const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
 const ExecutiveDashboard = lazy(() => import("@/pages/executive-dashboard"));
 const ZATCAInvoices = lazy(() => import("@/pages/zatca-invoices"));
@@ -207,10 +205,7 @@ const PageLoader = () => (
 const MaintenancePage = lazy(() => import("@/pages/maintenance"));
 
 function RouterFallback() {
-  const path = window.location.pathname;
-  const isStaffPath = path.startsWith('/employee') || path.startsWith('/manager') || path.startsWith('/admin') || path.startsWith('/driver') || path.startsWith('/qirox');
-  if (isStaffPath) return <NotFound />;
-  return <MenuPage />;
+  return <Redirect to="/" />;
 }
 
 function AppRouter() {
@@ -654,7 +649,6 @@ function App() {
               <ErrorBoundary>
                 <WouterRouter>
                   <AppContent />
-                  <ErrorBoundary silent><NativeBackButton /></ErrorBoundary>
                 </WouterRouter>
               </ErrorBoundary>
               <ErrorBoundary silent><GlobalPrompts /></ErrorBoundary>

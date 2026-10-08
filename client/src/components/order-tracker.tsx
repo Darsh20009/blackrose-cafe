@@ -30,8 +30,19 @@ const getStepIndex = (status: string) => {
   return statusMap[status] ?? 0;
 };
 
+function formatElapsedTime(totalSeconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+  const twoDigits = (value: number) => String(value).padStart(2, "0");
+  return hours > 0
+    ? `${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}`
+    : `${twoDigits(minutes)}:${twoDigits(seconds)}`;
+}
+
 export default function OrderTracker({ order, compact = false }: OrderTrackerProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [currentStepIndex, setCurrentStepIndex] = useState(getStepIndex(order.status));
 
   const orderSteps = [
@@ -87,6 +98,21 @@ export default function OrderTracker({ order, compact = false }: OrderTrackerPro
 
   const isCancelled = order.status === "cancelled" || order.status === "refunded";
   const isSuspended = order.status === "suspended";
+  const isOrderActive = !isCancelled && !isSuspended && !["completed", "received"].includes(order.status);
+  const createdAtMs = new Date(order.createdAt as any).getTime();
+  const canShowElapsed = isOrderActive && Number.isFinite(createdAtMs);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!canShowElapsed) return;
+    const interval = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [canShowElapsed, createdAtMs]);
+
+  const elapsedSeconds = canShowElapsed
+    ? Math.max(0, Math.floor((clockNow - createdAtMs) / 1000))
+    : null;
+  const elapsedLabel = i18n.language.startsWith("ar") ? "الوقت منذ الطلب" : "Time since order";
 
   useEffect(() => {
     const stepIndex = getStepIndex(order.status);
@@ -125,15 +151,25 @@ export default function OrderTracker({ order, compact = false }: OrderTrackerPro
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.8, opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="flex items-center gap-2"
+            className="flex flex-wrap items-center gap-2"
           >
             <div className={`p-2 rounded-full ${currentStep.bgColor}`}>
               <currentStep.icon className={`w-5 h-5 ${currentStep.color}`} />
             </div>
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               <p className={`font-semibold ${currentStep.color}`}>{currentStep.label}</p>
               <p className="text-xs text-gray-400">{currentStep.description}</p>
             </div>
+            {elapsedSeconds !== null && (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary/10 px-2 py-1 font-mono text-xs font-semibold tabular-nums text-primary"
+                aria-label={`${elapsedLabel}: ${formatElapsedTime(elapsedSeconds)}`}
+                data-testid="order-elapsed-timer"
+              >
+                <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                <time>{formatElapsedTime(elapsedSeconds)}</time>
+              </span>
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -204,6 +240,21 @@ export default function OrderTracker({ order, compact = false }: OrderTrackerPro
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {elapsedSeconds !== null && (
+          <div
+            className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"
+            data-testid="order-elapsed-timer"
+          >
+            <span className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
+              {elapsedLabel}
+            </span>
+            <time className="shrink-0 font-mono text-base font-bold tabular-nums text-primary">
+              {formatElapsedTime(elapsedSeconds)}
+            </time>
           </div>
         )}
 

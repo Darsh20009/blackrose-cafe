@@ -81,14 +81,16 @@ export function CustomerBottomNav() {
       style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 4px)" }}
       data-testid="customer-bottom-nav"
     >
-      <div className={`mx-auto flex h-[4.25rem] max-w-xl items-center px-2 ${showBackButton ? "justify-between gap-0" : "justify-around"}`}>
+      <div className={`mx-auto grid h-[4.25rem] w-full max-w-xl items-center px-1 sm:px-2 ${
+        showBackButton ? "grid-cols-5" : "grid-cols-4"
+      }`}>
         {showBackButton && (
           <button
             type="button"
             onClick={goBack}
             aria-label={isArabic ? "الرجوع للصفحة السابقة" : "Go to the previous page"}
             data-testid="customer-bottom-nav-back"
-            className="relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2 text-[11px] text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="relative flex min-w-0 w-full flex-col items-center justify-center gap-1 rounded-xl px-0.5 py-2 text-[9px] min-[360px]:text-[10px] sm:text-xs text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             {isArabic
               ? <ArrowRight className="h-5 w-5" aria-hidden="true" />
@@ -105,7 +107,7 @@ export function CustomerBottomNav() {
               href={href}
               aria-current={active ? "page" : undefined}
               data-testid={`bottom-nav-${key}`}
-              className={`relative flex ${showBackButton ? "min-w-0 flex-1 px-1.5" : "min-w-[4.5rem] px-3"} flex-col items-center justify-center gap-1 rounded-xl py-2 text-xs transition-colors ${
+              className={`relative flex min-w-0 w-full flex-col items-center justify-center gap-1 rounded-xl px-0.5 sm:px-2 py-2 text-[9px] min-[360px]:text-[10px] sm:text-xs transition-colors ${
                 active ? "font-semibold text-primary" : "text-muted-foreground"
               }`}
             >
@@ -117,7 +119,7 @@ export function CustomerBottomNav() {
                   </span>
                 )}
               </span>
-              <span>{label}</span>
+              <span className="max-w-full truncate whitespace-nowrap">{label}</span>
             </Link>
           );
         })}

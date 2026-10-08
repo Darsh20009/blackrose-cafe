@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, ToggleLeft, ToggleRight, Ticket, Percent, Tag, Eye, EyeOff, Pencil } from "lucide-react";
+import { Plus, ToggleLeft, ToggleRight, Ticket, Percent, Tag, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 import { useTranslate } from "@/lib/useTranslate";
 
 interface DiscountCode {
@@ -30,6 +30,7 @@ export function CouponManagement() {
   const tc = useTranslate();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [couponToDelete, setCouponToDelete] = useState<DiscountCode | null>(null);
   const [newCoupon, setNewCoupon] = useState({
     code: "",
     discountPercentage: 10,
@@ -89,6 +90,28 @@ export function CouponManagement() {
     },
     onError: (error: Error) => {
       toast({ title: tc("تعذر تحديث الكوبون", "Could not update coupon"), description: error.message || tc("فشل في تحديث الكوبون", "Failed to update coupon"), variant: "destructive" });
+    },
+  });
+
+  const deleteCouponMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("DELETE", `/api/discount-codes/${encodeURIComponent(id)}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: tc("تم حذف كود الخصم", "Discount code deleted"),
+        description: tc("لن يمكن استخدامه بعد الآن. بقيت الطلبات السابقة محفوظة.", "It can no longer be used. Previous orders remain unchanged."),
+      });
+      setCouponToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/discount-codes"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: tc("تعذر حذف كود الخصم", "Could not delete discount code"),
+        description: error.message || tc("حاول مرة أخرى", "Please try again"),
+        variant: "destructive",
+      });
     },
   });
 
@@ -293,6 +316,44 @@ export function CouponManagement() {
         </Dialog>
       </div>
 
+      <Dialog open={!!couponToDelete} onOpenChange={(open) => { if (!open && !deleteCouponMutation.isPending) setCouponToDelete(null); }}>
+        <DialogContent dir={tc("rtl", "ltr")}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              {tc("حذف كود الخصم", "Delete discount code")}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {tc(
+              `سيُحذف الكود ${couponToDelete?.code || ""} وإحصائيات استخدامه نهائيًا، ولن يمكن استخدامه بعد ذلك. الطلبات السابقة ستبقى محفوظة.`,
+              `The code ${couponToDelete?.code || ""} and its usage statistics will be permanently deleted. It can no longer be used, but previous orders will remain unchanged.`,
+            )}
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setCouponToDelete(null)}
+              disabled={deleteCouponMutation.isPending}
+            >
+              {tc("إلغاء", "Cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const id = couponToDelete?.id || couponToDelete?._id;
+                if (id) deleteCouponMutation.mutate(id);
+              }}
+              disabled={!couponToDelete || deleteCouponMutation.isPending}
+              data-testid="button-confirm-delete-coupon"
+            >
+              <Trash2 className="ml-2 h-4 w-4" />
+              {deleteCouponMutation.isPending ? tc("جارٍ الحذف...", "Deleting...") : tc("حذف نهائي", "Delete permanently")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {isError ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
@@ -376,6 +437,17 @@ export function CouponManagement() {
                       data-testid={`button-edit-coupon-${code.code}`}
                     >
                       <Pencil className="w-4 h-4 ml-2" />{tc("تعديل", "Edit")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="basis-full border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                      onClick={() => setCouponToDelete(code)}
+                      disabled={deleteCouponMutation.isPending}
+                      data-testid={`button-delete-coupon-${code.code}`}
+                    >
+                      <Trash2 className="w-4 h-4 ml-2" />
+                      {tc("حذف كود الخصم", "Delete discount code")}
                     </Button>
                   </div>
                 </CardContent>

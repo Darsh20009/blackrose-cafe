@@ -1271,12 +1271,35 @@ export interface IBranch extends Document {
   allowCarOrders?: boolean;
   isOnline?: boolean;
   allowTableOrders?: boolean;  // هل يقبل طلبات الطاولات؟
+  operationalSettings?: IBranchOperationalSettings;
   carType?: string;
   carColor?: string;
   plateNumber?: string;
   saveCarInfo?: number;
   city?: string;
   createdAt: Date;
+}
+
+export interface IBranchOperationalSettings {
+  isEmergencyClosed?: boolean;
+  storeHours?: IStoreHours;
+  orderMethodsConfig?: {
+    enableDineIn?: boolean;
+    enableCarPickup?: boolean;
+    enableDelivery?: boolean;
+    enableScheduledPickup?: boolean;
+    enableTakeaway?: boolean;
+  };
+  deliveryPolicy?: {
+    radiusKm?: number;
+    feeSar?: number;
+  };
+  enabledPaymentMethodIds?: string[];
+  vatPercentage?: number;
+  serviceFeeEnabled?: boolean;
+  serviceFeeAmount?: number;
+  serviceFeeLowOrderThreshold?: number;
+  serviceFeeLowOrderAmount?: number;
 }
 
 const BranchSchema = new Schema<IBranch>({
@@ -1306,6 +1329,7 @@ const BranchSchema = new Schema<IBranch>({
   allowCarOrders: { type: Boolean, default: true },
   allowTableOrders: { type: Boolean, default: true },
   isOnline: { type: Boolean, default: true },
+  operationalSettings: { type: Schema.Types.Mixed, default: () => ({}) },
   createdAt: { type: Date, default: Date.now },
 }, { timestamps: false });
 
@@ -1437,6 +1461,8 @@ export interface IOrder extends Document {
   customerEmail?: string;
   subtotal?: number;
   tax?: number;
+  vatPercentage?: number;
+  serviceFee?: number;
   channel?: 'online' | 'web' | 'pos' | 'app' | 'whatsapp' | string;
   giftCardCode?: string;
   giftCardAmountUsed?: number;
@@ -1466,6 +1492,11 @@ const OrderSchema = new Schema<IOrder>({
   employeeId: { type: String },
   subtotal: { type: Number },
   tax: { type: Number },
+  vatPercentage: { type: Number, min: 0, max: 100 },
+  serviceFee: { type: Number, min: 0, default: 0 },
+  deliveryType: { type: String },
+  deliveryAddress: { type: Schema.Types.Mixed },
+  deliveryFee: { type: Number, min: 0, default: 0 },
   orderNumber: { type: String, required: true },
   orderType: { type: String, enum: ['dine-in', 'pickup', 'delivery', 'car-pickup', 'car_pickup', 'regular', 'table', 'dine_in', 'curbside', 'takeaway'], default: 'dine-in' },
   pickupType: { type: String, enum: ['inside', 'table', 'car'] },

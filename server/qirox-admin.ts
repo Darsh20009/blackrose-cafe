@@ -22,6 +22,7 @@ const QiroxAdminSchema = new Schema<IQiroxAdmin>({
 export const QiroxAdminModel = mongoose.models['QiroxAdmin'] || mongoose.model<IQiroxAdmin>("QiroxAdmin", QiroxAdminSchema);
 
 export type SubscriptionPlan = 'lite' | 'pro' | 'infinity';
+export const DEFAULT_SUBSCRIPTION_TERM_DAYS = 93;
 
 export interface ISubscriptionConfig extends Document {
   tenantId: string;

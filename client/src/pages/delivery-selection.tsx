@@ -35,6 +35,13 @@ interface Branch {
   mapsUrl?: string;
   allowOnlineOrders?: boolean;
   allowCarOrders?: boolean;
+  deliveryEnabled?: boolean;
+  operationalSettings?: {
+    isOpen?: boolean;
+    isEmergencyClosed?: boolean;
+    orderMethodsConfig?: Record<string, boolean>;
+    deliveryPolicy?: { radiusKm?: number; feeSar?: number };
+  };
 }
 
 function getBranchCoords(branch: Branch): { lat: number; lng: number } | null {
@@ -44,11 +51,6 @@ function getBranchCoords(branch: Branch): { lat: number; lng: number } | null {
   const lng = loc.lng ?? loc.longitude;
   if (lat == null || lng == null) return null;
   return { lat, lng };
-}
-
-function isAlMuroojBranch(branch: Branch): boolean {
-  return /المروج/.test(`${branch.nameAr || ""} ${branch.nameEn || ""}`) ||
-    /mur(?:u|oo?)j/i.test(branch.nameEn || "");
 }
 
 function normalizePhone(phone: string): string {
@@ -291,35 +293,40 @@ export default function DeliverySelectionPage() {
   }, []);
 
   const { data: branches = [], isLoading } = useQuery<Branch[]>({
-    queryKey: ["/api/branches"],
+    queryKey: ["/api/public/branches"],
   });
 
   const { data: businessConfig } = useQuery<any>({
     queryKey: ["/api/business-config"],
   });
   const configuredDeliveryBranchId = String(businessConfig?.deliveryPolicy?.branchId || "");
-  const deliveryBranch = configuredDeliveryBranchId
-    ? branches.find((branch: any) =>
-        String(branch.id || "") === configuredDeliveryBranchId ||
-        String(branch._id || "") === configuredDeliveryBranchId
-      )
-    : branches.find(isAlMuroojBranch);
+  const deliveryBranches = branches.filter((branch: any) =>
+    branch.deliveryEnabled === true && branch.allowOnlineOrders !== false
+  );
+  const deliveryBranch = deliveryBranches.find((branch: any) =>
+    String(branch.id || branch._id || "") === configuredDeliveryBranchId
+  ) || deliveryBranches[0];
+  const selectedBranch = branches.find((branch: any) =>
+    String(branch.id || branch._id || "") === selectedBranchId
+  );
   const displayedBranches = selectedMethod === "delivery"
-    ? (deliveryBranch ? [deliveryBranch] : [])
+    ? deliveryBranches
     : branches;
 
   // Auto-select first branch only when there is a single branch
   useEffect(() => {
     if (branches.length === 1) {
-      setSelectedBranchId(branches[0].id);
+      setSelectedBranchId(String(branches[0].id || (branches[0] as any)._id || ""));
     }
   }, [branches]);
 
   useEffect(() => {
-    if (selectedMethod === "delivery" && deliveryBranch && selectedBranchId !== deliveryBranch.id) {
-      setSelectedBranchId(deliveryBranch.id);
+    if (selectedMethod === "delivery" && deliveryBranch && !deliveryBranches.some((branch: any) =>
+      String(branch.id || branch._id || "") === selectedBranchId
+    )) {
+      setSelectedBranchId(String(deliveryBranch.id || (deliveryBranch as any)._id || ""));
     }
-  }, [selectedMethod, deliveryBranch, selectedBranchId]);
+  }, [selectedMethod, deliveryBranches, deliveryBranch, selectedBranchId]);
 
   useEffect(() => {
     if (selectedMethod !== 'delivery' || !selectedBranchId || !deliveryLocation) {
@@ -355,7 +362,7 @@ export default function DeliverySelectionPage() {
             distanceKm: null,
             messageAr: error.message || 'تعذر التحقق من نطاق التوصيل، حاول مرة أخرى.',
             deliveryFee: 0,
-            deliveryRadiusKm: Number(businessConfig?.deliveryPolicy?.radiusKm ?? DELIVERY_RADIUS_KM),
+            deliveryRadiusKm: Number(selectedBranch?.operationalSettings?.deliveryPolicy?.radiusKm ?? businessConfig?.deliveryPolicy?.radiusKm ?? DELIVERY_RADIUS_KM),
           });
         }
       })
@@ -367,6 +374,8 @@ export default function DeliverySelectionPage() {
   }, [
     selectedMethod,
     selectedBranchId,
+    selectedBranch?.operationalSettings?.deliveryPolicy?.radiusKm,
+    selectedBranch?.operationalSettings?.deliveryPolicy?.feeSar,
     deliveryLocation,
     businessConfig?.deliveryPolicy?.branchId,
     businessConfig?.deliveryPolicy?.radiusKm,
@@ -503,16 +512,19 @@ export default function DeliverySelectionPage() {
   };
 
 
-  const orderMethods = businessConfig?.orderMethodsConfig || {};
+  const orderMethods = selectedBranch?.operationalSettings?.orderMethodsConfig || businessConfig?.orderMethodsConfig || {};
   const enableDineIn = orderMethods.enableDineIn !== false;
   const enableCarPickup = orderMethods.enableCarPickup !== false;
   const enableTakeaway = orderMethods.enableTakeaway !== false;
-  const enableDelivery = orderMethods.enableDelivery !== false;
+  const enableDelivery = deliveryBranches.length > 0;
+  const effectiveDeliveryPolicy = selectedBranch?.deliveryEnabled
+    ? selectedBranch.operationalSettings?.deliveryPolicy
+    : deliveryBranch?.operationalSettings?.deliveryPolicy;
   const deliveryFeeAmount = deliveryAvailability?.canDeliver
     ? deliveryAvailability.deliveryFee
-    : Number(businessConfig?.deliveryPolicy?.feeSar ?? DELIVERY_FEE_SAR);
+    : Number(effectiveDeliveryPolicy?.feeSar ?? businessConfig?.deliveryPolicy?.feeSar ?? DELIVERY_FEE_SAR);
   const deliveryRadiusAmount = deliveryAvailability?.deliveryRadiusKm
-    ?? Number(businessConfig?.deliveryPolicy?.radiusKm ?? DELIVERY_RADIUS_KM);
+    ?? Number(effectiveDeliveryPolicy?.radiusKm ?? businessConfig?.deliveryPolicy?.radiusKm ?? DELIVERY_RADIUS_KM);
 
   const handleContinue = () => {
     if (!cartItems || cartItems.length === 0) {
@@ -526,6 +538,10 @@ export default function DeliverySelectionPage() {
     }
     const branch = branches.find(b => b.id === selectedBranchId);
     if (!branch) return;
+    if (selectedBranch?.operationalSettings?.isOpen === false && !isReservationCart) {
+      toast({ title: t("product.error"), description: "الفرع مغلق حاليًا حسب ساعات العمل المحددة.", variant: 'destructive' });
+      return;
+    }
 
     if (selectedMethod === 'car-pickup') {
       if (!carInfo.model || !carInfo.color || !carInfo.plateNumber) {
@@ -570,10 +586,12 @@ export default function DeliverySelectionPage() {
     }
 
     if (selectedMethod === 'delivery') {
-      if (!deliveryBranch || branch.id !== deliveryBranch.id) {
+      if (!deliveryBranches.some((candidate: any) =>
+        String(candidate.id || candidate._id || "") === String(branch.id || (branch as any)._id || "")
+      )) {
         toast({
           title: t("product.error"),
-          description: "التوصيل متاح من فرع المروج فقط.",
+          description: "فرع التوصيل المحدد غير متاح حاليًا.",
           variant: 'destructive',
         });
         return;
@@ -593,7 +611,7 @@ export default function DeliverySelectionPage() {
       if (!deliveryAvailability?.canDeliver) {
         toast({
           title: t("product.error"),
-          description: deliveryAvailability?.messageAr || "لا نوصل لهذه المنطقة؛ نطاق التوصيل يصل إلى ٣٠ كم من فرع المروج.",
+          description: deliveryAvailability?.messageAr || `لا نوصل لهذه المنطقة؛ الحد الأقصى ${deliveryRadiusAmount} كم من الفرع المختار.`,
           variant: 'destructive',
         });
         return;
@@ -641,8 +659,6 @@ export default function DeliverySelectionPage() {
 
     setLocation('/checkout');
   };
-
-  const selectedBranch = branches.find(b => b.id === selectedBranchId);
 
   // Per-branch overrides: respect allowOnlineOrders/allowCarOrders flags set in admin
   const branchAllowsOnline = !selectedBranch || selectedBranch.allowOnlineOrders !== false;
@@ -702,7 +718,7 @@ export default function DeliverySelectionPage() {
       ring: 'ring-orange-500',
       bg: 'bg-orange-50 dark:bg-orange-950/20',
     },
-    (enableDelivery && deliveryBranch?.allowOnlineOrders !== false) && {
+    enableDelivery && {
       id: 'delivery' as OrderMethod,
       icon: Truck,
       label: 'توصيل للمنزل',
@@ -1304,7 +1320,9 @@ export default function DeliverySelectionPage() {
                       mode="pick"
                       center={selectedBranch && getBranchCoords(selectedBranch)
                         ? { ...getBranchCoords(selectedBranch)!, label: selectedBranch.nameAr }
-                        : { lat: 24.098191, lng: 38.014813, label: 'فرع المروج' }}
+                        : deliveryBranch && getBranchCoords(deliveryBranch)
+                          ? { ...getBranchCoords(deliveryBranch)!, label: deliveryBranch.nameAr }
+                          : { lat: 24.098191, lng: 38.014813, label: 'فرع المروج' }}
                       height="260px"
                       onLocationPick={(lat, lng) => setDeliveryLocation({ lat, lng })}
                     />
@@ -1377,7 +1395,7 @@ export default function DeliverySelectionPage() {
           onClick={handleContinue}
           className="w-full h-14 text-base font-bold rounded-2xl"
           size="lg"
-          disabled={!selectedBranchId || isLoading || isCheckingLocation}
+          disabled={!selectedBranchId || isLoading || isCheckingLocation || (selectedBranch?.operationalSettings?.isOpen === false && !isReservationCart)}
           data-testid="button-continue"
         >
           {isCheckingLocation ? (

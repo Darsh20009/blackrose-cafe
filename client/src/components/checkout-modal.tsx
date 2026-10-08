@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, memo } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,7 +12,7 @@ import PaymentMethods from "./payment-methods";
 import { generatePDF } from "@/lib/pdf-generator";
 import { saveOrderLocally } from "@/lib/local-orders";
 import { CreditCard, FileText, MessageCircle, Check, ArrowRight, Coffee, ShoppingCart, Wallet, Star, Phone, Truck, Store, MapPin, Upload, User, Loader2 } from "lucide-react";
-import type { PaymentMethodInfo, PaymentMethod, Branch } from "@shared/schema";
+import type { PaymentMethodInfo, PaymentMethod } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +31,7 @@ type DeliveryType = 'pickup' | 'delivery' | 'curbside' | null;
 
 const CheckoutModal = memo(() => {
  const [, navigate] = useLocation();
+ const queryClient = useQueryClient();
  const { t, i18n } = useTranslation();
  const dir = i18n.language === 'ar' ? 'rtl' : 'ltr';
  const {
@@ -61,6 +62,8 @@ const CheckoutModal = memo(() => {
  const [deliveryType, setDeliveryType] = useState<DeliveryType>(null);
  const [selectedBranch, setSelectedBranch] = useState<string>("");
  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryCoordinates, setDeliveryCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [isGettingDeliveryLocation, setIsGettingDeliveryLocation] = useState(false);
  const [deliveryNotes, setDeliveryNotes] = useState("");
  
  // Receipt upload state
@@ -70,15 +73,68 @@ const CheckoutModal = memo(() => {
  const [showPaymobWidget, setShowPaymobWidget] = useState(false);
  const [paymobCheckoutUrl, setPaymobCheckoutUrl] = useState("");
 
- const { data: paymentMethods = [] } = useQuery<PaymentMethodInfo[]>({
- queryKey: ["/api/payment-methods"],
- enabled: isCheckoutOpen,
- });
+  const { data: branches = [] } = useQuery<any[]>({
+    queryKey: ["/api/public/branches"],
+    enabled: isCheckoutOpen,
+  });
+  const deliveryBranches = branches.filter((branch) => branch.deliveryEnabled === true);
+  const selectedBranchRecord = branches.find((branch) => String(branch.id || branch._id) === selectedBranch);
+  const branchOperations = selectedBranchRecord?.operationalSettings || {};
+  const branchOrderMethods = branchOperations.orderMethodsConfig || {};
+  const branchServiceFeeEnabled = branchOperations.serviceFeeEnabled !== false;
+  const branchServiceFee = !branchServiceFeeEnabled
+    ? 0
+    : getTotalPrice() < Number(branchOperations.serviceFeeLowOrderThreshold ?? 5)
+      ? Number(branchOperations.serviceFeeLowOrderAmount ?? 0.35)
+      : Number(branchOperations.serviceFeeAmount ?? 0.7);
+  const branchDeliveryFee = Number(branchOperations.deliveryPolicy?.feeSar ?? 25);
+  const { data: paymentMethods = [] } = useQuery<PaymentMethodInfo[]>({
+    queryKey: ["/api/payment-methods", selectedBranch],
+    queryFn: async () => {
+      const response = await fetch(`/api/payment-methods?branchId=${encodeURIComponent(selectedBranch)}`);
+      if (!response.ok) throw new Error("تعذر تحميل طرق الدفع لهذا الفرع");
+      return response.json();
+    },
+    enabled: isCheckoutOpen && !!selectedBranch,
+  });
 
- const { data: branches = [] } = useQuery<Branch[]>({
- queryKey: ["/api/branches"],
- enabled: isCheckoutOpen && deliveryType === 'pickup',
- });
+  const captureDeliveryLocation = () => {
+    if (!navigator.geolocation) {
+      toast({ variant: "destructive", title: "المتصفح لا يدعم تحديد الموقع" });
+      return;
+    }
+    setIsGettingDeliveryLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setDeliveryCoordinates({ lat: position.coords.latitude, lng: position.coords.longitude });
+        setIsGettingDeliveryLocation(false);
+      },
+      () => {
+        setIsGettingDeliveryLocation(false);
+        toast({ variant: "destructive", title: "تعذر تحديد موقعك. تحقق من إذن الموقع وحاول مرة أخرى." });
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    );
+  };
+
+  useEffect(() => {
+    if (!deliveryType) return;
+    const candidates = deliveryType === "delivery" ? deliveryBranches : branches;
+    const hasSelected = candidates.some((branch) => String(branch.id || branch._id) === selectedBranch);
+    if (!hasSelected) setSelectedBranch(String(candidates[0]?.id || candidates[0]?._id || ""));
+  }, [branches, deliveryBranches, deliveryType, selectedBranch]);
+
+  useEffect(() => {
+    if (!selectedBranchRecord) return;
+    const methodEnabled = deliveryType === "delivery"
+      ? selectedBranchRecord.deliveryEnabled === true && branchOrderMethods.enableDelivery !== false
+      : deliveryType === "curbside"
+        ? branchOrderMethods.enableCarPickup !== false && selectedBranchRecord.allowCarOrders !== false
+        : deliveryType === "pickup"
+          ? branchOrderMethods.enableTakeaway !== false
+          : true;
+    if (deliveryType && !methodEnabled) setDeliveryType(null);
+  }, [branchOrderMethods, deliveryType, selectedBranchRecord]);
 
  const createOrderMutation = useMutation({
  mutationFn: async (orderData: any) => {
@@ -87,6 +143,7 @@ const CheckoutModal = memo(() => {
  },
  onSuccess: async (order) => {
  setOrderDetails(order);
+ queryClient.invalidateQueries({ queryKey: ["/api/orders/customer"] });
  if (!customer) saveOrderLocally(order.orderNumber);
  if (selectedPaymentMethod === 'cash') {
    handlePaymentConfirmed(order);
@@ -153,12 +210,12 @@ const CheckoutModal = memo(() => {
  }
  };
 
- const handleProceedDelivery = () => {
+  const handleProceedDelivery = async () => {
  if (!deliveryType) {
  toast({ variant: "destructive", title: t("delivery.select_branch_error") });
  return;
  }
- if (deliveryType === 'pickup' && !selectedBranch) {
+  if (!selectedBranch) {
  toast({ variant: "destructive", title: t("delivery.select_branch_error") });
  return;
  }
@@ -166,6 +223,31 @@ const CheckoutModal = memo(() => {
  toast({ variant: "destructive", title: t("delivery.select_arrival_error") });
  return;
  }
+  if (deliveryType === 'delivery' && !deliveryCoordinates) {
+    toast({ variant: "destructive", title: "حدد موقع التوصيل قبل المتابعة" });
+    return;
+  }
+  if (deliveryType === "delivery") {
+    try {
+      const response = await fetch("/api/delivery/check-availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          latitude: deliveryCoordinates!.lat,
+          longitude: deliveryCoordinates!.lng,
+          branchId: selectedBranch,
+        }),
+      });
+      const availability = await response.json();
+      if (!response.ok || !availability.canDeliver) {
+        toast({ variant: "destructive", title: availability.messageAr || availability.error || "لا يتوفر التوصيل لهذا الموقع" });
+        return;
+      }
+    } catch {
+      toast({ variant: "destructive", title: "تعذر التحقق من نطاق التوصيل، حاول مرة أخرى" });
+      return;
+    }
+  }
  if (deliveryType === 'curbside' && (!carType.trim() || !carColor.trim() || !carPlate.trim())) {
    toast({ variant: "destructive", title: t("delivery.select_arrival_error") });
    return;
@@ -200,7 +282,13 @@ const CheckoutModal = memo(() => {
           customization: inlineAddons.length > 0 ? { selectedItemAddons: inlineAddons } : undefined,
         };
       }),
-      totalAmount: getTotalPrice().toString(),
+       totalAmount: (
+         getTotalPrice() +
+         branchServiceFee +
+         (deliveryType === "delivery" ? branchDeliveryFee : 0)
+       ).toString(),
+       serviceFee: branchServiceFee,
+       vatPercentage: branchOperations.vatPercentage,
       paymentMethod: selectedPaymentMethod,
       status: "pending",
       customerId: customer?.id || null,
@@ -216,8 +304,14 @@ const CheckoutModal = memo(() => {
       carColor: deliveryType === 'curbside' ? carColor : null,
       carPlate: deliveryType === 'curbside' ? carPlate : null,
       plateNumber: deliveryType === 'curbside' ? carPlate : null,
-      branchId: (deliveryType === 'pickup' || deliveryType === 'curbside') ? selectedBranch : null,
-      deliveryAddress: deliveryType === 'delivery' ? deliveryAddress : null,
+      branchId: selectedBranch,
+      deliveryAddress: deliveryType === 'delivery' ? {
+        fullAddress: deliveryAddress,
+        lat: deliveryCoordinates?.lat,
+        lng: deliveryCoordinates?.lng,
+        zone: "configured-branch-radius",
+      } : null,
+      deliveryFee: deliveryType === "delivery" ? branchDeliveryFee : 0,
       deliveryNotes: deliveryNotes || null,
       paymentReceiptUrl: receiptPreview || null,
       customerPhone: customerPhone,
@@ -369,24 +463,30 @@ const CheckoutModal = memo(() => {
  <div className="bg-card/50 rounded-xl p-6 border border-primary/20">
  <RadioGroup value={deliveryType || ""} onValueChange={(v) => setDeliveryType(v as DeliveryType)}>
  <div className="space-y-4">
- <div className={`p-4 rounded-lg border-2 ${deliveryType === 'pickup' ? 'border-primary bg-primary/10' : 'border-border'}`} onClick={() => setDeliveryType('pickup')}>
- <div className="flex items-center space-x-3 space-x-reverse"><RadioGroupItem value="pickup" id="pickup" /><Label htmlFor="pickup" className="font-semibold">{t('checkout.branch_pickup')}</Label></div>
- {deliveryType === 'pickup' && (
- <select value={selectedBranch} onChange={(e) => setSelectedBranch(e.target.value)} className="w-full mt-2 p-2 rounded border bg-background">
- <option value="">{t('checkout.select_branch_placeholder')}</option>
- {branches.map((b) => <option key={b.id} value={b.id}>{i18n.language === 'ar' ? b.nameAr : (b.nameEn || b.nameAr)}</option>)}
- </select>
- )}
- </div>
- <div className={`p-4 rounded-lg border-2 ${deliveryType === 'delivery' ? 'border-primary bg-primary/10' : 'border-border'}`} onClick={() => setDeliveryType('delivery')}>
- <div className="flex items-center space-x-3 space-x-reverse"><RadioGroupItem value="delivery" id="delivery" /><Label htmlFor="delivery" className="font-semibold">{t('checkout.home_delivery_price')}</Label></div>
- {deliveryType === 'delivery' && (
- <div className="mt-2 space-y-2">
- <Textarea value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder={t('checkout.delivery_address_placeholder')} dir={dir} />
- <Input value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} placeholder={t('checkout.notes_placeholder')} dir={dir} />
- </div>
- )}
- </div>
+  <div className={`p-4 rounded-lg border-2 ${deliveryType === 'pickup' ? 'border-primary bg-primary/10' : 'border-border'}`} onClick={() => setDeliveryType('pickup')}>
+  <div className="flex items-center space-x-3 space-x-reverse"><RadioGroupItem value="pickup" id="pickup" /><Label htmlFor="pickup" className="font-semibold">{t('checkout.branch_pickup')}</Label></div>
+  </div>
+  {deliveryBranches.length > 0 && (
+    <div className={`p-4 rounded-lg border-2 ${deliveryType === 'delivery' ? 'border-primary bg-primary/10' : 'border-border'}`} onClick={() => setDeliveryType('delivery')}>
+      <div className="flex items-center space-x-3 space-x-reverse">
+        <RadioGroupItem value="delivery" id="delivery" />
+        <Label htmlFor="delivery" className="font-semibold">{t('checkout.home_delivery_price')}</Label>
+      </div>
+      {deliveryType === 'delivery' && (
+        <div className="mt-3 space-y-3">
+          <Textarea value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder={t('checkout.delivery_address_placeholder')} dir={dir} />
+          <Input value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} placeholder={t('checkout.notes_placeholder')} dir={dir} />
+          <Button type="button" variant="outline" onClick={captureDeliveryLocation} disabled={isGettingDeliveryLocation}>
+            <MapPin className="me-2 h-4 w-4" />
+            {isGettingDeliveryLocation ? "جارٍ تحديد الموقع…" : deliveryCoordinates ? "تم تحديد موقعك" : "حدد موقعي للتوصيل"}
+          </Button>
+          {deliveryCoordinates && (
+            <p className="text-xs text-muted-foreground" dir="ltr">{deliveryCoordinates.lat.toFixed(6)}, {deliveryCoordinates.lng.toFixed(6)}</p>
+          )}
+        </div>
+      )}
+    </div>
+  )}
                    <div className={`p-4 rounded-lg border-2 ${deliveryType === 'curbside' ? 'border-primary bg-primary/10' : 'border-border'}`} onClick={() => setDeliveryType('curbside')}>
                     <div className="flex items-center space-x-3 space-x-reverse">
                       <RadioGroupItem value="curbside" id="curbside" />
@@ -431,6 +531,31 @@ const CheckoutModal = memo(() => {
                   </div>
                 </div>
               </RadioGroup>
+              {deliveryType && (
+                <div className="space-y-2">
+                  <Label htmlFor="checkout-branch-select">{t('checkout.select_branch_placeholder')}</Label>
+                  <select
+                    id="checkout-branch-select"
+                    value={selectedBranch}
+                    onChange={(event) => setSelectedBranch(event.target.value)}
+                    className="w-full rounded border bg-background p-2"
+                  >
+                    <option value="">{t('checkout.select_branch_placeholder')}</option>
+                    {(deliveryType === "delivery" ? deliveryBranches : branches).map((branch) => (
+                      <option key={branch.id || branch._id} value={branch.id || branch._id}>
+                        {i18n.language === "ar" ? branch.nameAr : (branch.nameEn || branch.nameAr)}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedBranchRecord && (
+                    <div className="rounded-lg border p-3 text-sm">
+                      <p>{t("checkout.total")}: {(getTotalPrice() + branchServiceFee + (deliveryType === "delivery" ? branchDeliveryFee : 0)).toFixed(2)} <SarIcon /></p>
+                      {branchServiceFee > 0 && <p className="text-muted-foreground">رسوم الخدمة: {branchServiceFee.toFixed(2)} <SarIcon /></p>}
+                      {deliveryType === "delivery" && <p className="text-muted-foreground">رسوم التوصيل: {branchDeliveryFee.toFixed(2)} <SarIcon /></p>}
+                    </div>
+                  )}
+                </div>
+              )}
  </div>
  <div className="flex gap-3"><Button variant="outline" onClick={() => setCurrentStep('review')} className="flex-1">{t('checkout.back')}</Button><Button onClick={handleProceedDelivery} className="flex-1">{t('checkout.continue')}</Button></div>
  </div>

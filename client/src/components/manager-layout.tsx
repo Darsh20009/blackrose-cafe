@@ -8,6 +8,7 @@ import { ManagerNotificationCenter } from "./manager-notification-center";
 import { brand } from "@/lib/brand";
 import { useTranslation } from "react-i18next";
 import { StaffShortcuts } from "./staff-shortcuts";
+import { SubscriptionCountdown } from "./subscription-countdown";
 
 interface ManagerLayoutProps {
   children: ReactNode;
@@ -77,7 +78,8 @@ export function ManagerLayout({ children }: ManagerLayoutProps) {
           </div>
 
           <div className="flex-1 text-center text-sm font-semibold text-gray-700">
-            {managerPageTitles[location]?.[isAr ? 0 : 1] || (isAr ? 'لوحة المدير' : 'Manager workspace')}
+            <div>{managerPageTitles[location]?.[isAr ? 0 : 1] || (isAr ? 'لوحة المدير' : 'Manager workspace')}</div>
+            <SubscriptionCountdown />
           </div>
 
           <div className="flex items-center gap-1 shrink-0">

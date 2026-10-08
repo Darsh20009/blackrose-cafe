@@ -5,6 +5,11 @@ import {
   DELIVERY_RADIUS_KM,
   type DeliveryCoordinates,
 } from "@shared/delivery-policy";
+import {
+  isBranchOpenNow,
+  isPrimaryDeliveryBranch,
+  resolveBranchOperationalSettings,
+} from "./branch-operational-settings";
 
 type BranchLike = {
   id?: string;
@@ -15,6 +20,7 @@ type BranchLike = {
   isActive?: boolean | number;
   allowOnlineOrders?: boolean;
   isOnline?: boolean;
+  operationalSettings?: any;
   location?: { lat?: number; lng?: number };
 };
 
@@ -45,11 +51,6 @@ function branchMatchesId(branch: BranchLike, id: string): boolean {
   return String(branch.id || "") === id || String(branch._id || "") === id;
 }
 
-function isAlMuroojBranch(branch: BranchLike): boolean {
-  return /المروج/.test(`${branch.nameAr || ""} ${branch.nameEn || ""}`) ||
-    /mur(?:u|oo?)j/i.test(branch.nameEn || "");
-}
-
 export async function checkDeliveryLocation(
   tenantId: string,
   customerLocation: DeliveryCoordinates,
@@ -57,38 +58,33 @@ export async function checkDeliveryLocation(
 ): Promise<DeliveryAvailability> {
   const [branches, config] = await Promise.all([
     BranchModel.find({ tenantId }).lean() as unknown as Promise<BranchLike[]>,
-    BusinessConfigModel.findOne({ tenantId }, { orderMethodsConfig: 1, deliveryPolicy: 1 }).lean(),
+    BusinessConfigModel.findOne({ tenantId }).lean(),
   ]);
 
-  const policy = (config as any)?.deliveryPolicy || {};
-  const configuredRadius = Number(policy.radiusKm);
-  const radiusKm = Number.isFinite(configuredRadius) && configuredRadius >= 1 && configuredRadius <= 200
-    ? configuredRadius
-    : DELIVERY_RADIUS_KM;
-  const configuredFee = Number(policy.feeSar);
-  const deliveryFee = Number.isFinite(configuredFee) && configuredFee >= 0 && configuredFee <= 1000
-    ? configuredFee
-    : DELIVERY_FEE_SAR;
-  const configuredBranchId = String(policy.branchId || "").trim();
-
-  if ((config as any)?.orderMethodsConfig?.enableDelivery === false) {
-    return {
-      canDeliver: false,
-      branch: null,
-      distanceKm: null,
-      distanceMeters: null,
-      radiusKm,
-      deliveryFee: 0,
-      messageAr: "خدمة التوصيل متوقفة حاليًا. يمكن للإدارة تفعيلها من إعدادات طرق الطلب.",
-    };
-  }
-
-  let eligibleBranches = branches.filter((branch) =>
-    (configuredBranchId ? branchMatchesId(branch, configuredBranchId) : isAlMuroojBranch(branch)) &&
-    isAvailableOnlineBranch(branch) &&
-    validCoordinate(branch.location?.lat, -90, 90) !== null &&
-    validCoordinate(branch.location?.lng, -180, 180) !== null
-  );
+  const primaryDeliveryBranch = branches.find((branch) => isPrimaryDeliveryBranch(branch, config));
+  const defaults = resolveBranchOperationalSettings(config, primaryDeliveryBranch);
+  const radiusKm = defaults.deliveryPolicy.radiusKm || DELIVERY_RADIUS_KM;
+  const deliveryFee = defaults.deliveryPolicy.feeSar ?? DELIVERY_FEE_SAR;
+  let eligibleBranches = branches.flatMap((branch) => {
+    const operational = resolveBranchOperationalSettings(config, branch);
+    const id = String(branch.id || branch._id || "");
+    const isConfiguredBranch = isPrimaryDeliveryBranch(branch, config);
+    const explicitlyEnabled = branch.operationalSettings?.orderMethodsConfig?.enableDelivery === true;
+    const isDeliveryBranch = isConfiguredBranch || explicitlyEnabled;
+    if (
+      !isDeliveryBranch ||
+      !isAvailableOnlineBranch(branch) ||
+      !operational.orderMethodsConfig.enableDelivery ||
+      validCoordinate(branch.location?.lat, -90, 90) === null ||
+      validCoordinate(branch.location?.lng, -180, 180) === null
+    ) return [];
+    return [{
+      ...branch,
+      id: branch.id || id,
+      _effectiveDeliveryRadiusKm: operational.deliveryPolicy.radiusKm,
+      _effectiveDeliveryFee: operational.deliveryPolicy.feeSar,
+    }];
+  });
 
   if (requestedBranchId) {
     eligibleBranches = eligibleBranches.filter((branch) => branchMatchesId(branch, requestedBranchId));
@@ -116,21 +112,25 @@ export async function checkDeliveryLocation(
     return {
       branch,
       distanceKm: calculateDistanceKm(customerLocation, branchPoint),
+      radiusKm: Number((branch as any)._effectiveDeliveryRadiusKm) || radiusKm,
+      deliveryFee: Number((branch as any)._effectiveDeliveryFee) ?? deliveryFee,
     };
   }).sort((a, b) => a.distanceKm - b.distanceKm);
 
-  const nearest = distances[0];
-  const canDeliver = nearest.distanceKm <= radiusKm;
+  const nearest = distances.find((candidate) => candidate.distanceKm <= candidate.radiusKm) || distances[0];
+  const canDeliver = nearest.distanceKm <= nearest.radiusKm;
+  const selectedRadius = nearest.radiusKm;
+  const selectedDeliveryFee = nearest.deliveryFee;
   return {
     canDeliver,
     branch: nearest.branch,
     distanceKm: Math.round(nearest.distanceKm * 100) / 100,
     distanceMeters: Math.round(nearest.distanceKm * 1000),
-    radiusKm,
-    deliveryFee: canDeliver ? deliveryFee : 0,
+    radiusKm: selectedRadius,
+    deliveryFee: canDeliver ? selectedDeliveryFee : 0,
     messageAr: canDeliver
-      ? `التوصيل متاح من ${nearest.branch.nameAr || nearest.branch.nameEn || "الفرع"} برسوم ${deliveryFee} ريال.`
-      : `لا نوصل لهذه المنطقة؛ الحد الأقصى ${radiusKm} كم من فرع التوصيل.`,
+      ? `التوصيل متاح من ${nearest.branch.nameAr || nearest.branch.nameEn || "الفرع"} برسوم ${selectedDeliveryFee} ريال.`
+      : `لا نوصل لهذه المنطقة؛ الحد الأقصى ${selectedRadius} كم من الفرع المختار.`,
   };
 }
 
@@ -190,6 +190,7 @@ export async function applyDeliveryPolicyToOrderData(
     deliveryRadiusKm: availability.radiusKm,
     isInDeliveryZone: true,
   };
+  orderData.branchId = String(availability.branch.id || availability.branch._id || orderData.branchId || "");
 
   return { ok: true, distanceKm: availability.distanceKm || 0 };
 }

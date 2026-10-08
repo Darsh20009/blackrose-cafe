@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Shield, Bell, Palette, Database, Plus, Store, Utensils, Coffee, AlertTriangle, Layout, ShieldAlert, Users, Loader2, Trash2, FolderTree, Flame, Snowflake, Star, Cake, Sparkles, GripVertical, Pencil, CreditCard, Wifi, WifiOff, Eye, EyeOff, ExternalLink, CheckCircle, XCircle, Banknote, Smartphone, Gift, Percent, Tag, Ticket, Download, Globe, Package, ChevronDown, ChevronUp, MonitorSmartphone, MapPin, Navigation, FlaskConical, ShoppingBag, Truck, Timer, Car, Clock, Zap, Volume2, Settings, Plug, Construction, Code2 } from 'lucide-react';
+import { Save, Shield, Bell, Palette, Database, Plus, Store, Utensils, Coffee, AlertTriangle, Layout, ShieldAlert, Users, Loader2, Trash2, FolderTree, Flame, Snowflake, Star, Cake, Sparkles, GripVertical, Pencil, CreditCard, Wifi, WifiOff, Eye, EyeOff, ExternalLink, CheckCircle, XCircle, Banknote, Smartphone, Gift, Percent, Tag, Ticket, Download, Globe, Package, ChevronDown, ChevronUp, MonitorSmartphone, MapPin, Navigation, FlaskConical, ShoppingBag, Truck, Timer, Car, Clock, Zap, Volume2, Settings, Plug, Construction, Code2, GitBranch } from 'lucide-react';
+import { BranchOperationalSettings } from "@/components/branch-operational-settings";
 import { PAYMENT_DRIVERS } from "@/lib/payment-terminal/registry";
 import type { DriverStatus } from "@/lib/payment-terminal/types";
 import { SoundSettingsPanel } from "@/components/sound-settings-panel";
@@ -844,6 +845,7 @@ export default function AdminSettings() {
   const settingsTabs = [
     { key: 'store',      labelAr: 'المتجر',     labelEn: 'Store',      icon: Store },
     { key: 'operations', labelAr: 'التشغيل',    labelEn: 'Operations', icon: Truck },
+    { key: 'branches',   labelAr: 'إعدادات الفروع', labelEn: 'Branches', icon: GitBranch },
     { key: 'menu',       labelAr: 'القائمة',    labelEn: 'Menu',       icon: Utensils },
     { key: 'payments',   labelAr: 'الدفع',      labelEn: 'Payments',   icon: CreditCard },
     { key: 'loyalty',    labelAr: 'الولاء',     labelEn: 'Loyalty',    icon: Gift },
@@ -1039,6 +1041,8 @@ export default function AdminSettings() {
       </div>
 
       {/* ── Tab: Store ── */}
+      {activeTab === 'branches' && <BranchOperationalSettings />}
+
       {activeTab === 'store' && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
         {/* Store Hours & Social Links */}

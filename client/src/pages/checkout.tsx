@@ -250,9 +250,18 @@ export default function CheckoutPage() {
   });
 
   const { data: publicSettings } = useQuery<any>({
-    queryKey: ["/api/public/settings"],
+    queryKey: ["/api/public/settings", deliveryInfo?.branchId || "default"],
+    queryFn: async () => {
+      const query = deliveryInfo?.branchId
+        ? `?branchId=${encodeURIComponent(deliveryInfo.branchId)}`
+        : "";
+      const response = await fetch(`/api/public/settings${query}`);
+      if (!response.ok) throw new Error("تعذر تحميل إعدادات الفرع");
+      return response.json();
+    },
     staleTime: 120000,
   });
+  const effectiveOperationalSettings = publicSettings?.operationalSettings || businessConfig;
 
   const pointsPerSar: number = loyaltySettings?.pointsPerSar ?? 50;
   const minPointsForRedemption: number = loyaltySettings?.minPointsForRedemption ?? 100;
@@ -274,11 +283,11 @@ export default function CheckoutPage() {
   const orderDeliveryFee = deliveryInfo?.type === 'delivery' ? (deliveryInfo?.deliveryFee || 0) : 0;
 
   const getServiceFee = () => {
-    if (!businessConfig?.serviceFeeEnabled) return 0;
+    if (effectiveOperationalSettings?.serviceFeeEnabled === false) return 0;
     const subtotal = getTotalPrice();
-    const threshold = businessConfig?.serviceFeeLowOrderThreshold ?? 5;
-    const lowFee = businessConfig?.serviceFeeLowOrderAmount ?? 0.35;
-    const normalFee = businessConfig?.serviceFeeAmount ?? 0.70;
+    const threshold = effectiveOperationalSettings?.serviceFeeLowOrderThreshold ?? 5;
+    const lowFee = effectiveOperationalSettings?.serviceFeeLowOrderAmount ?? 0.35;
+    const normalFee = effectiveOperationalSettings?.serviceFeeAmount ?? 0.70;
     return subtotal < threshold ? lowFee : normalFee;
   };
 
@@ -639,9 +648,13 @@ export default function CheckoutPage() {
   }, []);
 
   const { data: paymentMethods = [] } = useQuery<PaymentMethodInfo[]>({
-    queryKey: ["/api/payment-methods"],
+    queryKey: ["/api/payment-methods", deliveryInfo?.branchId || ""],
+    enabled: !!deliveryInfo?.branchId,
     queryFn: async () => {
-      const res = await fetch(`/api/payment-methods`);
+      const query = deliveryInfo?.branchId
+        ? `?branchId=${encodeURIComponent(deliveryInfo.branchId)}`
+        : "";
+      const res = await fetch(`/api/payment-methods${query}`);
       return res.json();
     }
   });
@@ -714,6 +727,7 @@ export default function CheckoutPage() {
       setAppliedGiftCard(null);
       setGiftCardCode("");
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/customer"] });
       queryClient.invalidateQueries({ queryKey: ["/api/loyalty/cards/phone"] });
       refetchLoyaltyCard();
       const displayNum = data.orderNumber;
@@ -886,6 +900,8 @@ export default function CheckoutPage() {
       paymentMethod: selectedPaymentMethod as PaymentMethod,
       status: "pending",
       branchId: deliveryInfo?.branchId || "",
+      vatPercentage: publicSettings?.operationalSettings?.vatPercentage ?? publicSettings?.vatPercentage,
+      serviceFee,
       deliveryFee: deliveryInfo?.type === 'delivery' ? (deliveryInfo.deliveryFee ?? 0) : 0,
       orderType: deliveryInfo?.type === 'car-pickup' ? 'car_pickup'
               : deliveryInfo?.type === 'scheduled-pickup' ? 'pickup'
@@ -1059,6 +1075,8 @@ export default function CheckoutPage() {
       paymentMethod: selectedPaymentMethod as PaymentMethod,
       status: "pending",
       branchId: deliveryInfo?.branchId || "",
+      vatPercentage: publicSettings?.operationalSettings?.vatPercentage ?? publicSettings?.vatPercentage,
+      serviceFee,
       deliveryFee: deliveryInfo?.type === 'delivery' ? (deliveryInfo.deliveryFee ?? 0) : 0,
       orderType: deliveryInfo?.type === 'car-pickup' ? 'car_pickup'
               : deliveryInfo?.type === 'scheduled-pickup' ? 'pickup'
@@ -2083,6 +2101,7 @@ export default function CheckoutPage() {
                         setGiftCardCode("");
                         localStorage.setItem("br-active-order", String(orderNumber));
                         queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+                        queryClient.invalidateQueries({ queryKey: ["/api/orders/customer"] });
                         queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
                         queryClient.invalidateQueries({ queryKey: ["/api/loyalty/cards/phone"] });
                         paymobPaymentToken.current = "";

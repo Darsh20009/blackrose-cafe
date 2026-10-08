@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { brand } from '@/lib/brand';
 import { useLocation } from 'wouter';
 import { StaffShortcuts } from './staff-shortcuts';
+import { SubscriptionCountdown } from './subscription-countdown';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -68,7 +69,8 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
           </div>
 
           <div className="flex-1 text-center text-sm font-semibold text-gray-700">
-            {title || adminPageTitles[location]?.[isAr ? 0 : 1] || (isAr ? 'لوحة الإدارة' : 'Admin workspace')}
+            <div>{title || adminPageTitles[location]?.[isAr ? 0 : 1] || (isAr ? 'لوحة الإدارة' : 'Admin workspace')}</div>
+            <SubscriptionCountdown />
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
