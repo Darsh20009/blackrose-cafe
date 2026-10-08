@@ -461,22 +461,21 @@ function AppContent() {
   const [currentPath] = useLocation();
   const isCartOpen = cartStore?.isCartOpen;
   const isCheckoutOpen = cartStore?.isCheckoutOpen;
+  const usesCustomerLayoutNav = ["/my-orders", "/my-offers", "/my-card", "/referrals"].includes(currentPath);
   const showCustomerNav =
-    currentPath === "/menu" ||
-    currentPath === "/menu-view" ||
-    currentPath === "/my-orders" ||
-    currentPath === "/my-offers" ||
-    currentPath === "/my-card" ||
-    currentPath === "/profile" ||
-    currentPath === "/referrals" ||
-    currentPath === "/my-reservations" ||
-    currentPath === "/cart" ||
-    currentPath === "/delivery" ||
-    currentPath === "/delivery/map" ||
-    currentPath === "/checkout" ||
-    currentPath.startsWith("/product/") ||
-    currentPath.startsWith("/track/") ||
-    currentPath.startsWith("/delivery/track/");
+    !usesCustomerLayoutNav && (
+      currentPath === "/menu" ||
+      currentPath === "/menu-view" ||
+      currentPath === "/profile" ||
+      currentPath === "/my-reservations" ||
+      currentPath === "/cart" ||
+      currentPath === "/delivery" ||
+      currentPath === "/delivery/map" ||
+      currentPath === "/checkout" ||
+      currentPath.startsWith("/product/") ||
+      currentPath.startsWith("/track/") ||
+      currentPath.startsWith("/delivery/track/")
+    );
 
   // Proximity-based push notification (fires when customer is within 100 m of a branch)
   useProximityNotify();
