@@ -875,6 +875,11 @@ export interface IBusinessConfig extends Document {
     enableScheduledPickup?: boolean;
     enableTakeaway?: boolean;
   };
+  deliveryPolicy?: {
+    branchId?: string;
+    radiusKm?: number;
+    feeSar?: number;
+  };
   serviceFeeEnabled?: boolean;
   serviceFeeAmount?: number;
   serviceFeeLowOrderThreshold?: number;
@@ -937,6 +942,12 @@ const PaymentGatewayConfigSchema = new Schema({
     enabledForCustomer: { type: Boolean, default: true },
     enabledForPos: { type: Boolean, default: true },
   }],
+}, { _id: false });
+
+const DeliveryPolicySchema = new Schema({
+  branchId: { type: String, default: "" },
+  radiusKm: { type: Number, min: 1, max: 200 },
+  feeSar: { type: Number, min: 0, max: 1000 },
 }, { _id: false });
 
 const BusinessConfigSchema = new Schema<IBusinessConfig>({
@@ -1010,6 +1021,7 @@ const BusinessConfigSchema = new Schema<IBusinessConfig>({
       enableTakeaway: true,
     })
   },
+  deliveryPolicy: { type: DeliveryPolicySchema, default: () => ({}) },
   serviceFeeEnabled: { type: Boolean, default: true },
   serviceFeeAmount: { type: Number, default: 0.70 },
   serviceFeeLowOrderThreshold: { type: Number, default: 5.00 },

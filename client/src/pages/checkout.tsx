@@ -9,7 +9,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useCartStore } from "@/lib/cart-store";
-import { DELIVERY_FEE_SAR } from "@shared/delivery-policy";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import PaymentMethods from "@/components/payment-methods";
@@ -887,7 +886,7 @@ export default function CheckoutPage() {
       paymentMethod: selectedPaymentMethod as PaymentMethod,
       status: "pending",
       branchId: deliveryInfo?.branchId || "",
-      deliveryFee: deliveryInfo?.type === 'delivery' ? DELIVERY_FEE_SAR : 0,
+      deliveryFee: deliveryInfo?.type === 'delivery' ? (deliveryInfo.deliveryFee ?? 0) : 0,
       orderType: deliveryInfo?.type === 'car-pickup' ? 'car_pickup'
               : deliveryInfo?.type === 'scheduled-pickup' ? 'pickup'
               : deliveryInfo?.type === 'delivery' ? 'delivery'
@@ -915,7 +914,7 @@ export default function CheckoutPage() {
           fullAddress: deliveryInfo.deliveryAddress,
           lat: deliveryInfo.address?.lat ?? 0,
           lng: deliveryInfo.address?.lng ?? 0,
-          zone: deliveryInfo.address?.zone || 'murooj-30km',
+          zone: deliveryInfo.address?.zone || 'configured-branch-radius',
           isInDeliveryZone: true,
         },
       } : {}),
@@ -1060,7 +1059,7 @@ export default function CheckoutPage() {
       paymentMethod: selectedPaymentMethod as PaymentMethod,
       status: "pending",
       branchId: deliveryInfo?.branchId || "",
-      deliveryFee: deliveryInfo?.type === 'delivery' ? DELIVERY_FEE_SAR : 0,
+      deliveryFee: deliveryInfo?.type === 'delivery' ? (deliveryInfo.deliveryFee ?? 0) : 0,
       orderType: deliveryInfo?.type === 'car-pickup' ? 'car_pickup'
               : deliveryInfo?.type === 'scheduled-pickup' ? 'pickup'
               : deliveryInfo?.type === 'delivery' ? 'delivery'
@@ -1092,7 +1091,7 @@ export default function CheckoutPage() {
           fullAddress: deliveryInfo.deliveryAddress,
           lat: deliveryInfo.address?.lat ?? 0,
           lng: deliveryInfo.address?.lng ?? 0,
-          zone: deliveryInfo.address?.zone || 'murooj-30km',
+          zone: deliveryInfo.address?.zone || 'configured-branch-radius',
           isInDeliveryZone: true,
         },
       } : {}),

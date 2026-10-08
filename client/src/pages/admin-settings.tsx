@@ -381,6 +381,21 @@ export default function AdminSettings() {
   const { data: config, isLoading } = useQuery<any>({
     queryKey: ["/api/business-config"],
   });
+  const { data: branchOptions = [] } = useQuery<any[]>({
+    queryKey: ["/api/branches"],
+  });
+  const deliveryBranchOptions = branchOptions.filter((branch: any) =>
+    branch.isActive !== false &&
+    branch.isActive !== 0 &&
+    branch.allowOnlineOrders !== false &&
+    branch.isOnline !== false &&
+    branch.location?.lat !== null &&
+    branch.location?.lat !== undefined &&
+    branch.location?.lng !== null &&
+    branch.location?.lng !== undefined &&
+    Number.isFinite(Number(branch.location.lat)) &&
+    Number.isFinite(Number(branch.location.lng))
+  );
 
   const { data: menuCategories = [], isLoading: categoriesLoading } = useQuery<MenuCategory[]>({
     queryKey: ["/api/menu-categories"],
@@ -567,6 +582,9 @@ export default function AdminSettings() {
   const [storeHours, setStoreHours] = useState<any>(null);
   const [systemCountry, setSystemCountry] = useState("SA");
   const [systemTimezone, setSystemTimezone] = useState("Asia/Riyadh");
+  const [deliveryPolicyBranchId, setDeliveryPolicyBranchId] = useState("");
+  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState(String(DELIVERY_RADIUS_KM));
+  const [deliveryFeeSar, setDeliveryFeeSar] = useState(String(DELIVERY_FEE_SAR));
   const [socialLinks, setSocialLinks] = useState({
     instagram: '',
     twitter: '',
@@ -599,12 +617,35 @@ export default function AdminSettings() {
     },
   });
 
+  const deliveryPolicyMutation = useMutation({
+    mutationFn: async (deliveryPolicy: { branchId: string; radiusKm: number; feeSar: number }) => {
+      const res = await apiRequest("PATCH", "/api/business-config/delivery", deliveryPolicy);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/business-config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/public/settings"] });
+      toast({
+        title: tc("تم الحفظ", "Saved"),
+        description: tc("تم تحديث إعدادات التوصيل", "Delivery settings updated"),
+      });
+    },
+    onError: (error: Error) => toast({
+      title: tc("خطأ", "Error"),
+      description: error.message,
+      variant: "destructive",
+    }),
+  });
+
   useEffect(() => {
     if (config) {
       setIsEmergencyClosed(config.isEmergencyClosed || false);
       setStoreHours(config.storeHours || null);
       setSystemCountry(config.country || 'SA');
       setSystemTimezone(config.timezone || 'Asia/Riyadh');
+      setDeliveryPolicyBranchId(config.deliveryPolicy?.branchId || "");
+      setDeliveryRadiusKm(String(config.deliveryPolicy?.radiusKm ?? DELIVERY_RADIUS_KM));
+      setDeliveryFeeSar(String(config.deliveryPolicy?.feeSar ?? DELIVERY_FEE_SAR));
       setSocialLinks(config.socialLinks || {
         instagram: '',
         twitter: '',
@@ -760,6 +801,32 @@ export default function AdminSettings() {
     }
 
     mutation.mutate(payload);
+  };
+
+  const handleSaveDeliveryPolicy = () => {
+    const radiusKm = Number(deliveryRadiusKm);
+    const feeSar = Number(deliveryFeeSar);
+    if (!Number.isFinite(radiusKm) || radiusKm < 1 || radiusKm > 200) {
+      toast({
+        title: tc("تحقق من نطاق التوصيل", "Check delivery radius"),
+        description: tc("أدخل نطاقًا بين ١ و٢٠٠ كم.", "Enter a radius between 1 and 200 km."),
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!Number.isFinite(feeSar) || feeSar < 0 || feeSar > 1000) {
+      toast({
+        title: tc("تحقق من رسوم التوصيل", "Check delivery fee"),
+        description: tc("أدخل رسومًا بين ٠ و١٠٠٠ ريال.", "Enter a fee between SAR 0 and 1,000."),
+        variant: "destructive",
+      });
+      return;
+    }
+    deliveryPolicyMutation.mutate({
+      branchId: deliveryPolicyBranchId,
+      radiusKm,
+      feeSar,
+    });
   };
 
   const daysAr: Record<string, string> = {
@@ -1498,34 +1565,91 @@ export default function AdminSettings() {
               </div>
             ))}
 
-            {/* Delivery Fee Field */}
-            {config?.orderMethodsConfig?.enableDelivery !== false && (
-              <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-green-200 dark:border-green-800">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="p-1.5 rounded-lg bg-green-100 dark:bg-green-900/20">
-                      <Truck className="w-4 h-4 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">{tc('رسوم التوصيل الثابتة','Fixed Delivery Fee')}</p>
-                      <p className="text-xs text-muted-foreground">{tc(`ثابتة عند ${DELIVERY_FEE_SAR} ريال ضمن ${DELIVERY_RADIUS_KM} كم من المروج`,`Fixed at SAR ${DELIVERY_FEE_SAR} within ${DELIVERY_RADIUS_KM} km of Al-Muruj`)}</p>
-                    </div>
+            {/* Delivery Policy Settings */}
+            <>
+              {config?.orderMethodsConfig?.enableDelivery === false && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+                  {tc("التوصيل متوقف حاليًا. يمكنك ضبط الفرع والرسوم والنطاق الآن، ثم تفعيله من زر «توصيل للمنزل» أعلاه.","Delivery is currently off. Configure the branch, fee, and radius now, then turn it on with the Home Delivery switch above.")}
+                </p>
+              )}
+              <div className="space-y-4 rounded-lg border border-green-200 bg-white p-4 dark:border-green-800 dark:bg-gray-800">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-lg bg-green-100 p-1.5 dark:bg-green-900/20">
+                    <Truck className="h-4 w-4 text-green-600" />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      className="w-24 text-center h-9"
-                      value={DELIVERY_FEE_SAR}
-                      disabled
-                      data-testid="input-delivery-fee"
-                    />
-                    <span className="text-sm text-muted-foreground"><SarIcon size={13} /></span>
+                  <div>
+                    <p className="text-sm font-semibold">{tc("سياسة التوصيل","Delivery Policy")}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {tc("تُستخدم هذه القيم لفحص الموقع، حساب السلة، وتثبيت رسوم الطلب من الخادم.","These values control location checks, cart totals, and the final server-side order fee.")}
+                    </p>
                   </div>
                 </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>{tc("فرع انطلاق التوصيل","Delivery branch")}</Label>
+                    <Select
+                      value={deliveryPolicyBranchId || "auto"}
+                      onValueChange={(value) => setDeliveryPolicyBranchId(value === "auto" ? "" : value)}
+                    >
+                      <SelectTrigger data-testid="select-delivery-policy-branch">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">{tc("تلقائي: فرع المروج","Automatic: Al-Murooj branch")}</SelectItem>
+                        {deliveryBranchOptions.map((branch: any) => (
+                          <SelectItem key={String(branch.id || branch._id)} value={String(branch.id || branch._id)}>
+                            {branch.nameAr || branch.nameEn || tc("فرع بدون اسم","Unnamed branch")}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="delivery-radius-km">{tc("أقصى مسافة (كم)","Maximum distance (km)")}</Label>
+                    <Input
+                      id="delivery-radius-km"
+                      data-testid="input-delivery-radius"
+                      type="number"
+                      min="1"
+                      max="200"
+                      step="1"
+                      value={deliveryRadiusKm}
+                      onChange={(event) => setDeliveryRadiusKm(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="delivery-fee-sar">{tc("رسوم التوصيل","Delivery fee")}</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="delivery-fee-sar"
+                        data-testid="input-delivery-fee"
+                        type="number"
+                        min="0"
+                        max="1000"
+                        step="0.5"
+                        value={deliveryFeeSar}
+                        onChange={(event) => setDeliveryFeeSar(event.target.value)}
+                      />
+                      <span className="shrink-0 text-sm text-muted-foreground"><SarIcon size={13} /></span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleSaveDeliveryPolicy}
+                    disabled={deliveryPolicyMutation.isPending}
+                    data-testid="button-save-delivery-policy"
+                  >
+                    {deliveryPolicyMutation.isPending
+                      ? <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                      : <Save className="me-2 h-4 w-4" />}
+                    {tc("حفظ سياسة التوصيل","Save delivery policy")}
+                  </Button>
+                </div>
               </div>
-            )}
+            </>
           </CardContent>
         </Card>
 

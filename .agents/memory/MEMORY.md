@@ -4,6 +4,7 @@
 - [Employee session security](employee-session-restoration.md) — مفتاح استعادة الجلسة اعتماد حامل؛ تسجيل الخروج يجب أن يبطله على الخادم، لا أن يمسحه من المتصفح فقط.
 - [Customer auth entry](customer-auth-entry.md) — واتساب هو دخول العملاء الافتراضي؛ الحساب الجديد يطلب الاسم والبريد الاختياري بعد التحقق.
 - [Yanbu delivery area](yanbu-delivery.md) — التوصيل داخل ينبع فقط؛ ٢٥ ريال حتى ٣٠ كم من فرع المروج، دون اختيار دولة أو منطقة.
+- [Self-service operations](self-service-operations.md) — الإدارة التشغيلية ثم الخدمات التقنية على مراحل؛ قواعد العمل تُضبط من الواجهة وتُطبق من مصدر محفوظ واحد.
 - [External Render npm installs](render-package-lock.md) — Before deploying outside Replit, scan lockfiles for all Replit package-firewall hosts, not just one hostname variant.
 - [Flutter App Full Plan](flutter-app-plan.md) — خطة شاملة دائمة بدون اختصارات (14 قسم): هيكل المجلدات الكامل، كل المكتبات مشروحة، BLoC مثال كامل، Dio+Interceptors، Theme light+dark، GoRouter، Codemagic YAML، FCM، نشر App Store+Play، وخطوات تحويل أي ويب لـ Flutter. تحديث: يوليو 2026.
 - [Face-api model serving](face-api-setup.md) — copy @vladmandic/face-api models to public/face-models; CDN fails in Replit; local static serving is the only reliable approach.

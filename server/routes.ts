@@ -1933,7 +1933,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maintenanceMode: (config as any).maintenanceMode || false,
         allowGuestCheckout: (config as any).allowGuestCheckout ?? true,
         minimumOrderAmount: (config as any).minimumOrderAmount || 0,
-        deliveryFee: (config as any).orderMethodsConfig?.deliveryFeeAmount ?? (config as any).deliveryFee ?? 0,
+        deliveryFee: (config as any).deliveryPolicy?.feeSar ?? DELIVERY_FEE_SAR,
+        deliveryRadiusKm: (config as any).deliveryPolicy?.radiusKm ?? DELIVERY_RADIUS_KM,
+        deliveryBranchId: (config as any).deliveryPolicy?.branchId || "",
         timezone: (config as any).timezone || 'Asia/Riyadh',
       });
     } catch (error) {
@@ -1964,6 +1966,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("[CONFIG] Error updating brand color:", error);
       res.status(500).json({ error: "Failed to update brand color" });
+    }
+  });
+
+  app.patch("/api/business-config/delivery", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const tenantId = req.employee?.tenantId;
+      if (!tenantId) return res.status(400).json({ error: "Tenant ID is required" });
+
+      const radiusKm = Number(req.body?.radiusKm);
+      const feeSar = Number(req.body?.feeSar);
+      const requestedBranchId = String(req.body?.branchId || "").trim();
+      if (!Number.isFinite(radiusKm) || radiusKm < 1 || radiusKm > 200) {
+        return res.status(400).json({ error: "نطاق التوصيل يجب أن يكون بين ١ و٢٠٠ كم." });
+      }
+      if (!Number.isFinite(feeSar) || feeSar < 0 || feeSar > 1000) {
+        return res.status(400).json({ error: "رسوم التوصيل يجب أن تكون بين ٠ و١٠٠٠ ريال." });
+      }
+      if (requestedBranchId.length > 128) {
+        return res.status(400).json({ error: "معرّف الفرع غير صالح." });
+      }
+
+      let branchId = requestedBranchId === "auto" ? "" : requestedBranchId;
+      if (branchId) {
+        const branches = await BranchModel.find({ tenantId }).lean() as any[];
+        const branch = branches.find((item) =>
+          String(item.id || "") === branchId || String(item._id || "") === branchId
+        );
+        const lat = Number(branch?.location?.lat);
+        const lng = Number(branch?.location?.lng);
+        const hasLocation = Number.isFinite(lat) && lat >= -90 && lat <= 90 &&
+          Number.isFinite(lng) && lng >= -180 && lng <= 180;
+        if (
+          !branch ||
+          branch.isActive === false ||
+          branch.isActive === 0 ||
+          branch.allowOnlineOrders === false ||
+          branch.isOnline === false ||
+          !hasLocation
+        ) {
+          return res.status(400).json({ error: "اختر فرعًا نشطًا للطلبات الإلكترونية وله موقع محدد." });
+        }
+        branchId = String(branch.id || branch._id);
+      }
+
+      const config = await BusinessConfigModel.findOneAndUpdate(
+        { tenantId },
+        { $set: { deliveryPolicy: { branchId, radiusKm, feeSar }, updatedAt: new Date() } },
+        { new: true, runValidators: true }
+      );
+      if (!config) return res.status(404).json({ error: "إعدادات المنشأة غير موجودة." });
+
+      cache.invalidateKey(cacheKey("biz-config", tenantId));
+      res.json({ deliveryPolicy: serializeDoc(config).deliveryPolicy });
+    } catch (error) {
+      console.error("[CONFIG] Error updating delivery policy:", error);
+      res.status(500).json({ error: "تعذر حفظ إعدادات التوصيل." });
     }
   });
 
@@ -18240,8 +18298,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         distanceMeters: result.distanceMeters,
         distanceKm: result.distanceKm,
         messageAr: result.messageAr,
-        deliveryRadiusMeters: DELIVERY_RADIUS_KM * 1000,
-        deliveryRadiusKm: DELIVERY_RADIUS_KM,
+        deliveryRadiusMeters: result.radiusKm * 1000,
+        deliveryRadiusKm: result.radiusKm,
         deliveryFee: result.deliveryFee,
       });
     } catch (error) {
@@ -20274,8 +20332,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true,
         canDeliver: result.canDeliver,
         distanceKm: result.distanceKm,
-        deliveryRadiusKm: DELIVERY_RADIUS_KM,
-        deliveryFee: result.canDeliver ? DELIVERY_FEE_SAR : 0,
+        deliveryRadiusKm: result.radiusKm,
+        deliveryFee: result.deliveryFee,
         branch: result.branch ? serializeDoc(result.branch) : null,
         messageAr: result.messageAr,
         orderAmount: Number(orderAmount) || 0,

@@ -23,6 +23,7 @@ type DeliveryAvailability = {
   branch: BranchLike | null;
   distanceKm: number | null;
   distanceMeters: number | null;
+  radiusKm: number;
   deliveryFee: number;
   messageAr: string;
 };
@@ -56,8 +57,19 @@ export async function checkDeliveryLocation(
 ): Promise<DeliveryAvailability> {
   const [branches, config] = await Promise.all([
     BranchModel.find({ tenantId }).lean() as unknown as Promise<BranchLike[]>,
-    BusinessConfigModel.findOne({ tenantId }, { orderMethodsConfig: 1 }).lean(),
+    BusinessConfigModel.findOne({ tenantId }, { orderMethodsConfig: 1, deliveryPolicy: 1 }).lean(),
   ]);
+
+  const policy = (config as any)?.deliveryPolicy || {};
+  const configuredRadius = Number(policy.radiusKm);
+  const radiusKm = Number.isFinite(configuredRadius) && configuredRadius >= 1 && configuredRadius <= 200
+    ? configuredRadius
+    : DELIVERY_RADIUS_KM;
+  const configuredFee = Number(policy.feeSar);
+  const deliveryFee = Number.isFinite(configuredFee) && configuredFee >= 0 && configuredFee <= 1000
+    ? configuredFee
+    : DELIVERY_FEE_SAR;
+  const configuredBranchId = String(policy.branchId || "").trim();
 
   if ((config as any)?.orderMethodsConfig?.enableDelivery === false) {
     return {
@@ -65,13 +77,14 @@ export async function checkDeliveryLocation(
       branch: null,
       distanceKm: null,
       distanceMeters: null,
+      radiusKm,
       deliveryFee: 0,
       messageAr: "خدمة التوصيل متوقفة حاليًا. يمكن للإدارة تفعيلها من إعدادات طرق الطلب.",
     };
   }
 
   let eligibleBranches = branches.filter((branch) =>
-    isAlMuroojBranch(branch) &&
+    (configuredBranchId ? branchMatchesId(branch, configuredBranchId) : isAlMuroojBranch(branch)) &&
     isAvailableOnlineBranch(branch) &&
     validCoordinate(branch.location?.lat, -90, 90) !== null &&
     validCoordinate(branch.location?.lng, -180, 180) !== null
@@ -87,10 +100,11 @@ export async function checkDeliveryLocation(
       branch: null,
       distanceKm: null,
       distanceMeters: null,
+      radiusKm,
       deliveryFee: 0,
       messageAr: requestedBranchId
-        ? "التوصيل متاح من فرع المروج فقط، والفرع المختار غير متاح حاليًا."
-        : "فرع المروج غير متاح حاليًا لاستقبال طلبات التوصيل.",
+        ? "فرع التوصيل المحدد غير متاح حاليًا أو لا يطابق الفرع المختار."
+        : "فرع التوصيل المحدد غير متاح حاليًا لاستقبال الطلبات.",
     };
   }
 
@@ -106,16 +120,17 @@ export async function checkDeliveryLocation(
   }).sort((a, b) => a.distanceKm - b.distanceKm);
 
   const nearest = distances[0];
-  const canDeliver = nearest.distanceKm <= DELIVERY_RADIUS_KM;
+  const canDeliver = nearest.distanceKm <= radiusKm;
   return {
     canDeliver,
     branch: nearest.branch,
     distanceKm: Math.round(nearest.distanceKm * 100) / 100,
     distanceMeters: Math.round(nearest.distanceKm * 1000),
-    deliveryFee: canDeliver ? DELIVERY_FEE_SAR : 0,
+    radiusKm,
+    deliveryFee: canDeliver ? deliveryFee : 0,
     messageAr: canDeliver
-      ? `التوصيل متاح من ${nearest.branch.nameAr || nearest.branch.nameEn || "الفرع"} برسوم ${DELIVERY_FEE_SAR} ريال.`
-      : "لا نوصل لهذه المنطقة؛ نطاق التوصيل يصل إلى ٣٠ كم من فرع المروج.",
+      ? `التوصيل متاح من ${nearest.branch.nameAr || nearest.branch.nameEn || "الفرع"} برسوم ${deliveryFee} ريال.`
+      : `لا نوصل لهذه المنطقة؛ الحد الأقصى ${radiusKm} كم من فرع التوصيل.`,
   };
 }
 
@@ -159,10 +174,10 @@ export async function applyDeliveryPolicyToOrderData(
 
   const previousFee = Number(orderData.deliveryFee);
   const total = Number(orderData.totalAmount);
-  orderData.deliveryFee = DELIVERY_FEE_SAR;
+  orderData.deliveryFee = availability.deliveryFee;
   if (Number.isFinite(total)) {
     orderData.totalAmount = Math.round(
-      (total - (Number.isFinite(previousFee) ? previousFee : 0) + DELIVERY_FEE_SAR) * 100
+      (total - (Number.isFinite(previousFee) ? previousFee : 0) + availability.deliveryFee) * 100
     ) / 100;
   }
   orderData.deliveryAddress = {
@@ -170,7 +185,9 @@ export async function applyDeliveryPolicyToOrderData(
     fullAddress: typeof address?.fullAddress === "string" ? address.fullAddress : "",
     lat: latitude,
     lng: longitude,
-    zone: "murooj-30km",
+    zone: "configured-branch-radius",
+    distanceKm: availability.distanceKm,
+    deliveryRadiusKm: availability.radiusKm,
     isInDeliveryZone: true,
   };
 

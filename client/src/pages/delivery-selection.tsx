@@ -266,6 +266,7 @@ export default function DeliverySelectionPage() {
     distanceKm: number | null;
     messageAr: string;
     deliveryFee: number;
+    deliveryRadiusKm: number;
   } | null>(null);
 
   useEffect(() => {
@@ -293,14 +294,19 @@ export default function DeliverySelectionPage() {
     queryKey: ["/api/branches"],
   });
 
-  const deliveryBranch = branches.find(isAlMuroojBranch);
-  const displayedBranches = selectedMethod === "delivery" && deliveryBranch
-    ? [deliveryBranch]
-    : branches;
-
   const { data: businessConfig } = useQuery<any>({
     queryKey: ["/api/business-config"],
   });
+  const configuredDeliveryBranchId = String(businessConfig?.deliveryPolicy?.branchId || "");
+  const deliveryBranch = configuredDeliveryBranchId
+    ? branches.find((branch: any) =>
+        String(branch.id || "") === configuredDeliveryBranchId ||
+        String(branch._id || "") === configuredDeliveryBranchId
+      )
+    : branches.find(isAlMuroojBranch);
+  const displayedBranches = selectedMethod === "delivery"
+    ? (deliveryBranch ? [deliveryBranch] : [])
+    : branches;
 
   // Auto-select first branch only when there is a single branch
   useEffect(() => {
@@ -349,6 +355,7 @@ export default function DeliverySelectionPage() {
             distanceKm: null,
             messageAr: error.message || 'تعذر التحقق من نطاق التوصيل، حاول مرة أخرى.',
             deliveryFee: 0,
+            deliveryRadiusKm: Number(businessConfig?.deliveryPolicy?.radiusKm ?? DELIVERY_RADIUS_KM),
           });
         }
       })
@@ -357,7 +364,14 @@ export default function DeliverySelectionPage() {
       });
 
     return () => { cancelled = true; };
-  }, [selectedMethod, selectedBranchId, deliveryLocation]);
+  }, [
+    selectedMethod,
+    selectedBranchId,
+    deliveryLocation,
+    businessConfig?.deliveryPolicy?.branchId,
+    businessConfig?.deliveryPolicy?.radiusKm,
+    businessConfig?.deliveryPolicy?.feeSar,
+  ]);
 
   useEffect(() => {
     if (selectedBranchId && userLocation) {
@@ -494,7 +508,11 @@ export default function DeliverySelectionPage() {
   const enableCarPickup = orderMethods.enableCarPickup !== false;
   const enableTakeaway = orderMethods.enableTakeaway !== false;
   const enableDelivery = orderMethods.enableDelivery !== false;
-  const deliveryFeeAmount = DELIVERY_FEE_SAR;
+  const deliveryFeeAmount = deliveryAvailability?.canDeliver
+    ? deliveryAvailability.deliveryFee
+    : Number(businessConfig?.deliveryPolicy?.feeSar ?? DELIVERY_FEE_SAR);
+  const deliveryRadiusAmount = deliveryAvailability?.deliveryRadiusKm
+    ?? Number(businessConfig?.deliveryPolicy?.radiusKm ?? DELIVERY_RADIUS_KM);
 
   const handleContinue = () => {
     if (!cartItems || cartItems.length === 0) {
@@ -610,10 +628,12 @@ export default function DeliverySelectionPage() {
             fullAddress: fullDeliveryAddress,
             lat: deliveryLocation.lat,
             lng: deliveryLocation.lng,
-            zone: 'murooj-30km',
+            zone: 'configured-branch-radius',
           }
         : undefined,
-      deliveryFee: selectedMethod === 'delivery' ? deliveryFeeAmount : 0,
+      deliveryFee: selectedMethod === 'delivery'
+        ? (deliveryAvailability?.deliveryFee ?? deliveryFeeAmount)
+        : 0,
       productReservationDate: isReservationCart ? reservationDate : undefined,
       productReservationFromTime: isReservationCart ? reservationFromTime : undefined,
       productReservationToTime: isReservationCart ? reservationToTime : undefined,
@@ -1328,7 +1348,7 @@ export default function DeliverySelectionPage() {
                   <div className="flex items-start gap-2 p-3 bg-muted/30 rounded-lg">
                     <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                     <p className="text-xs text-muted-foreground">
-                      رسوم التوصيل ٢٥ ريالًا للمواقع التي تبعد حتى {DELIVERY_RADIUS_KM} كم عن المروج. خارج النطاق لا تتوفر الخدمة.
+                      رسوم التوصيل {deliveryFeeAmount} ريال للمواقع التي تبعد حتى {deliveryRadiusAmount} كم عن فرع التوصيل المحدد. خارج النطاق لا تتوفر الخدمة.
                     </p>
                   </div>
                 </CardContent>
