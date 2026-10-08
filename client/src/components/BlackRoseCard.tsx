@@ -7,6 +7,7 @@ interface BlackRoseCardProps {
   sarValue?: number | string;
   customerName?: string;
   className?: string;
+  compact?: boolean;
 }
 
 export default function BlackRoseCard({
@@ -15,6 +16,7 @@ export default function BlackRoseCard({
   sarValue,
   customerName,
   className = "",
+  compact = false,
 }: BlackRoseCardProps) {
   const displayPhone = phone
     ? phone.replace(/^\+?966|^00966/, "966").replace(/^0(\d{9})$/, "966$1")
@@ -42,8 +44,9 @@ export default function BlackRoseCard({
         backgroundImage: `url(${cardFrame})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
-        boxShadow:
-          "0 32px 80px rgba(0,0,0,0.85), 0 0 0 1px rgba(200,165,58,0.18), inset 0 1px 0 rgba(200,165,58,0.08)",
+        boxShadow: compact
+          ? "0 4px 14px rgba(0,0,0,0.22), 0 0 0 1px rgba(200,165,58,0.18)"
+          : "0 32px 80px rgba(0,0,0,0.85), 0 0 0 1px rgba(200,165,58,0.18), inset 0 1px 0 rgba(200,165,58,0.08)",
       }}
       data-testid="loyalty-card"
     >

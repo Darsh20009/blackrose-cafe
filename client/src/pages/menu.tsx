@@ -42,6 +42,7 @@ import banner1 from "@assets/blackrose-banner-1.png";
 import banner2 from "@assets/blackrose-banner-2.png";
 import type { CoffeeItem, IProductAddon, IPromoOffer } from "@shared/schema";
 import { AddToCartModal } from "@/components/add-to-cart-modal";
+import { CustomerLoyaltyShortcut } from "@/components/customer-loyalty-shortcut";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { ClassicMenuLayout, CardsMenuLayout, ListMenuLayout } from "@/components/menu-layouts";
@@ -644,7 +645,7 @@ export default function MenuPage() {
             <Button 
               variant="ghost" 
               size="icon" 
-              onClick={() => setLocation("/profile")}
+              onClick={() => setLocation("/my-card")}
               className="h-9 w-9 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10"
               title={t("menu.loyalty_card") || "بطاقتي"}
             >
@@ -899,6 +900,8 @@ export default function MenuPage() {
               </div>
             )}
           </div>
+
+          <CustomerLoyaltyShortcut />
 
           {isAuthenticated && (
             <button

@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import blackroseLogo from "@assets/blackrose-logo.png";
-import { isCapacitorNative, getServerUrl } from "@/lib/server-url";
+import { isAppleMobileDevice, openLoyaltyCardInAppleWallet } from "@/lib/apple-wallet";
 
 export default function MyCardPage() {
   const { customer } = useCustomer();
@@ -30,7 +30,7 @@ export default function MyCardPage() {
   const [transferPin, setTransferPin] = useState("");
   const tc = useTranslate();
   const { i18n } = useTranslation();
-  const dir = i18n.language === "en" ? "ltr" : "rtl";
+  const dir = i18n.language.startsWith("en") ? "ltr" : "rtl";
 
   const { data: loyaltyCards = [], isLoading: loadingCards } = useQuery<any[]>({
     queryKey: ["/api/customer/loyalty-cards"],
@@ -92,56 +92,16 @@ export default function MyCardPage() {
     transferMutation.mutate({ recipientPhone: transferPhone, points: pts, pin: transferPin || undefined });
   };
 
-  const isIOS =
-    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isIOS = isAppleMobileDevice();
 
   const handleAddToAppleWallet = async () => {
     setAddingToWallet(true);
     try {
-      // On Capacitor (native iOS app): open pass URL in SFSafariViewController.
-      // Safari handles .pkpass natively and shows "Add to Apple Wallet" automatically.
-      if (isCapacitorNative()) {
-        const { Browser } = await import(/* @vite-ignore */ "@capacitor/browser");
-        const passUrl = `${getServerUrl()}/api/wallet/apple-pass`;
-        toast({
-          title: tc("⏳ جارٍ الفتح...", "⏳ Opening…"),
-          description: tc("سيظهر زر 'إضافة إلى Apple Wallet' بعد لحظة", "The 'Add to Apple Wallet' button will appear shortly"),
-        });
-        await Browser.open({ url: passUrl, presentationStyle: "popover", toolbarColor: "#0d0d0d" });
-        return;
-      }
-
-      // On regular iOS Safari: direct navigation is enough — Safari handles .pkpass
-      if (isIOS) {
-        toast({
-          title: tc("⏳ جارٍ التحضير...", "⏳ Preparing…"),
-          description: tc("سيفتح Apple Wallet خلال ثوانٍ", "Opening Apple Wallet shortly…"),
-        });
-        await new Promise((r) => setTimeout(r, 350));
-        window.location.href = "/api/wallet/apple-pass";
-        return;
-      }
-
-      // On Android / desktop: download .pkpass file
-      const resp = await fetch("/api/wallet/apple-pass", { method: "GET", credentials: "include" });
-      const contentType = resp.headers.get("content-type") || "";
-      if (!resp.ok || !contentType.includes("pkpass")) {
-        let errMsg = tc("فشل إنشاء البطاقة", "Failed to generate pass");
-        try { const err = await resp.json(); errMsg = err?.error || errMsg; } catch (_) {}
-        toast({ title: tc("خطأ", "Error"), description: errMsg, variant: "destructive" });
-        return;
-      }
-      const blob = await resp.blob();
-      const blobUrl = URL.createObjectURL(new Blob([blob], { type: "application/vnd.apple.pkpass" }));
-      const a = document.createElement("a");
-      a.href = blobUrl; a.download = "blackrose-loyalty.pkpass"; a.style.display = "none";
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 8000);
       toast({
-        title: tc("✅ تم التحميل", "✅ Downloaded"),
-        description: tc("افتح ملف .pkpass لإضافته لـ Apple Wallet", "Open .pkpass to add to Apple Wallet"),
+        title: tc("جارٍ التحضير...", "Preparing…"),
+        description: tc("سيفتح Apple Wallet لإضافة بطاقة الولاء", "Apple Wallet will open to add your loyalty card"),
       });
+      await openLoyaltyCardInAppleWallet();
     } catch (e: any) {
       toast({
         title: tc("خطأ", "Error"),
@@ -157,15 +117,15 @@ export default function MyCardPage() {
   if (!customer) {
     return (
       <CustomerLayout>
-        <div className="flex flex-col items-center justify-center min-h-screen gap-5 p-8" style={{ background: "#0a0a0a" }} dir={dir}>
-          <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(200,165,58,0.1)", border: "1px solid rgba(200,165,58,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Star style={{ color: "#C8A53A", width: 32, height: 32 }} />
+        <div className="flex min-h-[70vh] flex-col items-center justify-center gap-5 bg-background p-6 text-center text-foreground" dir={dir}>
+          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-primary/20 bg-primary/5">
+            <Star className="h-8 w-8 text-primary" />
           </div>
           <div className="text-center">
-            <p className="text-white font-bold text-lg mb-1">{tc("بطاقة الولاء", "Loyalty Card")}</p>
-            <p className="text-white/40 text-sm">{tc("سجّل دخولك للوصول إلى بطاقتك", "Log in to access your card")}</p>
+            <p className="mb-1 text-lg font-bold">{tc("بطاقة الولاء", "Loyalty Card")}</p>
+            <p className="text-sm text-muted-foreground">{tc("سجّل دخولك للوصول إلى بطاقتك", "Log in to access your card")}</p>
           </div>
-          <Button onClick={() => setLocation("/auth")} data-testid="button-login" style={{ background: "#C8A53A", color: "#111", fontWeight: 700, height: 48, paddingInline: 32 }}>
+          <Button onClick={() => setLocation("/auth")} data-testid="button-login" className="h-11 px-6 font-bold">
             {tc("تسجيل الدخول", "Log In")}
           </Button>
         </div>
@@ -177,8 +137,8 @@ export default function MyCardPage() {
   if (loadingCards) {
     return (
       <CustomerLayout>
-        <div className="flex items-center justify-center min-h-screen" style={{ background: "#0a0a0a" }}>
-          <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#C8A53A", borderTopColor: "transparent" }} />
+        <div className="flex min-h-[60vh] items-center justify-center bg-background">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
       </CustomerLayout>
     );
@@ -187,14 +147,14 @@ export default function MyCardPage() {
   /* ── Main card view ── */
   return (
     <CustomerLayout>
-      <div className="min-h-screen flex flex-col pb-28" style={{ background: "#0a0a0a" }} dir={dir}>
+      <div className="min-h-screen flex flex-col bg-background pb-28 text-foreground" dir={dir}>
 
         {/* ── Top bar ── */}
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
-          <Button variant="ghost" size="icon" onClick={() => setLocation("/")} data-testid="button-back" style={{ color: "rgba(255,255,255,0.4)" }}>
+          <Button variant="ghost" size="icon" onClick={() => setLocation("/menu")} data-testid="button-back" className="text-muted-foreground">
             <ChevronRight className="w-5 h-5" />
           </Button>
-          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 13, fontWeight: 600, letterSpacing: "0.08em" }}>
+          <p className="text-sm font-semibold text-muted-foreground">
             {tc("بطاقة الولاء", "Loyalty Card")}
           </p>
           <img src={blackroseLogo} alt="Black Rose" style={{ width: 36, height: 36, borderRadius: 10, objectFit: "cover" }} />
@@ -203,30 +163,30 @@ export default function MyCardPage() {
         {/* ── Hero: greeting + points ── */}
         <div className="px-5 pt-4 pb-6">
           {/* Customer name */}
-          <p style={{ color: "rgba(200,165,58,0.6)", fontSize: 11, fontWeight: 600, letterSpacing: "0.15em", margin: "0 0 4px", textTransform: "uppercase" }}>
+          <p className="mb-1 text-xs font-semibold text-primary">
             {tc("مرحباً،", "Welcome,")}
           </p>
-          <p style={{ color: "#fff", fontSize: 26, fontWeight: 800, margin: "0 0 20px", lineHeight: 1.1 }} data-testid="text-customer-name">
+          <p className="mb-5 text-2xl font-extrabold leading-tight text-foreground" data-testid="text-customer-name">
             {customer?.name || tc("عزيزي العميل", "Valued Customer")}
           </p>
 
           {/* Points stat cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div style={{ background: "rgba(200,165,58,0.07)", border: "1px solid rgba(200,165,58,0.15)", borderRadius: 16, padding: "14px 16px" }}>
-              <p style={{ color: "rgba(200,165,58,0.55)", fontSize: 10, letterSpacing: "0.2em", margin: "0 0 6px", textTransform: "uppercase" }}>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3">
+              <p className="mb-1.5 text-[10px] font-medium text-primary/80">
                 {tc("نقاطي", "My Points")}
               </p>
-              <p style={{ color: "#C8A53A", fontSize: 30, fontWeight: 900, margin: 0, lineHeight: 1, textShadow: "0 0 20px rgba(200,165,58,0.4)" }} data-testid="text-hero-points">
+              <p className="text-3xl font-black leading-none text-primary" data-testid="text-hero-points">
                 {points.toLocaleString()}
               </p>
             </div>
-            <div style={{ background: "rgba(190,24,69,0.07)", border: "1px solid rgba(190,24,69,0.15)", borderRadius: 16, padding: "14px 16px" }}>
-              <p style={{ color: "rgba(190,24,69,0.6)", fontSize: 10, letterSpacing: "0.2em", margin: "0 0 6px", textTransform: "uppercase" }}>
+            <div className="rounded-2xl border border-border bg-card p-3">
+              <p className="mb-1.5 text-[10px] font-medium text-muted-foreground">
                 {tc("القيمة", "Value")}
               </p>
-              <p style={{ color: "#fff", fontSize: 22, fontWeight: 800, margin: 0, lineHeight: 1 }}>
+              <p className="flex items-center gap-1 text-2xl font-extrabold leading-none text-foreground">
                 {sarValueNum.toFixed(2)}
-                <SarIcon size={12} className="opacity-45 invert" />
+                <SarIcon size={12} className="opacity-70" />
               </p>
             </div>
           </div>
@@ -245,16 +205,16 @@ export default function MyCardPage() {
         {/* ── QR Code ── */}
         {qrCodeUrl ? (
           <div className="flex flex-col items-center mb-6 px-4" data-testid="barcode-section">
-            <div style={{ background: "#fff", borderRadius: 20, padding: 16, boxShadow: "0 10px 50px rgba(0,0,0,0.6)", display: "inline-block" }}>
+            <div className="inline-block rounded-2xl border bg-white p-3 shadow-sm">
               <img src={qrCodeUrl} alt="QR Code" style={{ width: 180, height: 180, display: "block" }} data-testid="img-qr-code" />
             </div>
-            <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginTop: 10, letterSpacing: "0.1em" }}>
+            <p className="mt-2 text-xs text-muted-foreground">
               {tc("امسح لتسجيل نقاطك", "Scan to collect points")}
             </p>
           </div>
         ) : card ? (
           <div className="flex justify-center mb-6">
-            <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#C8A53A", borderTopColor: "transparent" }} />
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
         ) : null}
 
@@ -304,26 +264,16 @@ export default function MyCardPage() {
               </div>
             </button>
           ) : (
-            /* ── Android / non-iOS: download .pkpass note ── */
-            <div style={{
-              background: "rgba(45,155,110,0.06)",
-              border: "1px solid rgba(45,155,110,0.18)",
-              borderRadius: 16, padding: "14px 16px",
-              display: "flex", alignItems: "center", gap: 14,
-            }}>
-              <div style={{
-                width: 42, height: 42, borderRadius: 12, flexShrink: 0,
-                background: "rgba(45,155,110,0.12)",
-                border: "1px solid rgba(45,155,110,0.2)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
+            /* ── Non-iOS: digital loyalty card details ── */
+            <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900">
                 <Wallet size={20} color="#2D9B6E" />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ color: "#2D9B6E", fontWeight: 700, fontSize: 13, margin: "0 0 2px" }}>
+                <p className="mb-0.5 text-sm font-bold text-emerald-700 dark:text-emerald-300">
                   {tc("بطاقة الولاء الرقمية", "Digital Loyalty Card")}
                 </p>
-                <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, margin: 0, lineHeight: 1.5 }}>
+                <p className="text-xs leading-relaxed text-muted-foreground">
                   {tc(
                     "استخدم رمز QR أعلاه لتسجيل نقاطك في الفرع مباشرةً",
                     "Use the QR code above to collect points at any branch"
@@ -340,43 +290,37 @@ export default function MyCardPage() {
                 <button
                   onClick={() => setShowTransfer(true)}
                   data-testid="button-open-transfer"
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                    width: "100%", height: 52, borderRadius: 14, background: "none",
-                    border: "1px solid rgba(200,165,58,0.2)", color: "rgba(200,165,58,0.7)",
-                    cursor: "pointer", fontSize: 14, fontWeight: 600,
-                    transition: "all 0.2s",
-                  }}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-primary/30 text-sm font-semibold text-primary transition-colors hover:bg-primary/5"
                 >
                   <ArrowLeftRight className="w-4 h-4" />
                   {tc("تحويل نقاط لصديق", "Transfer points to friend")}
                 </button>
               ) : (
-                <div style={{ background: "rgba(200,165,58,0.05)", border: "1px solid rgba(200,165,58,0.15)", borderRadius: 16, padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
-                  <p style={{ color: "#C8A53A", fontSize: 13, fontWeight: 700, margin: 0, letterSpacing: "0.05em" }}>
+                <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
+                  <p className="text-sm font-bold text-primary">
                     {tc("تحويل النقاط", "Transfer Points")}
                   </p>
                   <div className="space-y-1">
-                    <Label className="text-white/50 text-xs">{tc("رقم جوال المستلم", "Recipient Phone")}</Label>
+                    <Label className="text-xs text-muted-foreground">{tc("رقم جوال المستلم", "Recipient Phone")}</Label>
                     <Input placeholder="05xxxxxxxx" value={transferPhone} onChange={(e) => setTransferPhone(e.target.value)} dir="ltr"
-                      className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-11 rounded-xl" data-testid="input-transfer-phone" />
+                      className="h-11 rounded-xl bg-background text-foreground placeholder:text-muted-foreground" data-testid="input-transfer-phone" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-white/50 text-xs">{tc("عدد النقاط", "Points")}</Label>
+                    <Label className="text-xs text-muted-foreground">{tc("عدد النقاط", "Points")}</Label>
                     <Input type="number" placeholder={tc("أدخل عدد النقاط", "Enter points")} value={transferPoints} onChange={(e) => setTransferPoints(e.target.value)}
-                      min={1} max={points} className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-11 rounded-xl" data-testid="input-transfer-points" />
+                      min={1} max={points} className="h-11 rounded-xl bg-background text-foreground placeholder:text-muted-foreground" data-testid="input-transfer-points" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-white/50 text-xs">{tc("كلمة المرور", "Password")}</Label>
+                    <Label className="text-xs text-muted-foreground">{tc("كلمة المرور", "Password")}</Label>
                     <Input type="password" placeholder={tc("كلمة المرور", "Password")} value={transferPin} onChange={(e) => setTransferPin(e.target.value)}
-                      className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-11 rounded-xl" data-testid="input-transfer-pin" />
+                      className="h-11 rounded-xl bg-background text-foreground placeholder:text-muted-foreground" data-testid="input-transfer-pin" />
                   </div>
                   <div className="flex gap-2">
-                    <Button className="flex-1 h-11 rounded-xl font-bold" style={{ background: "#C8A53A", color: "#111" }}
+                    <Button className="h-11 flex-1 rounded-xl font-bold"
                       onClick={handleTransfer} disabled={transferMutation.isPending || !transferPhone || !transferPoints} data-testid="button-confirm-transfer">
                       {transferMutation.isPending ? tc("جاري...", "Sending...") : tc("تأكيد التحويل", "Confirm")}
                     </Button>
-                    <Button variant="outline" className="h-11 rounded-xl border-white/10 text-white/50 hover:bg-white/5"
+                    <Button variant="outline" className="h-11 rounded-xl border-border text-muted-foreground hover:bg-muted"
                       onClick={() => setShowTransfer(false)} data-testid="button-cancel-transfer">
                       {tc("إلغاء", "Cancel")}
                     </Button>
