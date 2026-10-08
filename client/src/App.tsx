@@ -467,8 +467,6 @@ function AppContent() {
   const isCartOpen = cartStore?.isCartOpen;
   const isCheckoutOpen = cartStore?.isCheckoutOpen;
   const showCustomerNav =
-    currentPath === "/" ||
-    currentPath === "/welcome" ||
     currentPath === "/menu" ||
     currentPath === "/menu-view" ||
     currentPath === "/my-orders" ||

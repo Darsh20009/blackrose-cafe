@@ -245,7 +245,12 @@ export default function CartPage() {
         </div>
 
         {/* Fixed Bottom Summary for Mobile */}
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-xl border-t border-border shadow-2xl p-4 pb-safe z-50" style={{paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 16px)'}}>
+        <div
+          className="lg:hidden fixed left-0 right-0 bg-card/95 backdrop-blur-xl border-t border-border shadow-2xl p-4 z-50"
+          style={{
+            bottom: "calc(4.25rem + max(env(safe-area-inset-bottom, 0px), 4px) + 8px)",
+          }}
+        >
           <div className="flex items-center justify-between gap-4">
             <div className="flex flex-col text-start">
               <span className="text-xs text-muted-foreground">{t("cart.total")} ({t("cart.items_pcs", { count: cartItems.reduce((sum, item) => sum + item.quantity, 0) })})</span>
