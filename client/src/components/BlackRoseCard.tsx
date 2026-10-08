@@ -40,7 +40,7 @@ export default function BlackRoseCard({
       style={{
         width: "100%",
         aspectRatio: "85.6 / 53.98",
-        borderRadius: 22,
+        borderRadius: compact ? 12 : 22,
         backgroundImage: `url(${cardFrame})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
@@ -65,11 +65,14 @@ export default function BlackRoseCard({
           style={{
             color: "#E5C461",
             fontWeight: 700,
-            fontSize: "clamp(11px, 3vw, 18px)",
-            letterSpacing: "0.18em",
+            fontSize: compact ? 8 : "clamp(11px, 3vw, 18px)",
+            letterSpacing: compact ? "0.04em" : "0.18em",
             margin: 0,
             fontFamily: "'Courier New', 'Trebuchet MS', monospace",
             textShadow: "0 1px 10px rgba(0,0,0,0.85)",
+            overflow: compact ? "hidden" : undefined,
+            textOverflow: compact ? "ellipsis" : undefined,
+            whiteSpace: compact ? "nowrap" : undefined,
           }}
           data-testid="text-phone-display"
         >
@@ -79,11 +82,14 @@ export default function BlackRoseCard({
           <p
             style={{
               color: "rgba(229,196,97,0.85)",
-              fontSize: "clamp(7px, 1.6vw, 11px)",
-              margin: "5px 0 0",
-              letterSpacing: "0.12em",
+              fontSize: compact ? 7 : "clamp(7px, 1.6vw, 11px)",
+              margin: compact ? "2px 0 0" : "5px 0 0",
+              letterSpacing: compact ? 0 : "0.12em",
               textShadow: "0 1px 6px rgba(0,0,0,0.8)",
               textTransform: "uppercase",
+              overflow: compact ? "hidden" : undefined,
+              textOverflow: compact ? "ellipsis" : undefined,
+              whiteSpace: compact ? "nowrap" : undefined,
             }}
           >
             {customerName}
@@ -95,20 +101,21 @@ export default function BlackRoseCard({
       <div
         style={{
           position: "absolute",
-          bottom: "10%",
+          bottom: compact ? "9%" : "10%",
           left: "7%",
           right: "7%",
           display: "flex",
           alignItems: "flex-end",
           justifyContent: "space-between",
+          gap: compact ? 4 : undefined,
         }}
       >
-        <div>
+        <div style={{ minWidth: 0, maxWidth: compact ? "52%" : undefined }}>
           <p
             style={{
               color: "rgba(229,196,97,0.7)",
-              fontSize: "clamp(5px, 1.3vw, 8px)",
-              letterSpacing: "0.35em",
+              fontSize: compact ? 5 : "clamp(5px, 1.3vw, 8px)",
+              letterSpacing: compact ? "0.08em" : "0.35em",
               margin: 0,
               textTransform: "uppercase",
               textShadow: "0 1px 4px rgba(0,0,0,0.9)",
@@ -120,10 +127,13 @@ export default function BlackRoseCard({
             style={{
               color: "#E5C461",
               fontWeight: 900,
-              fontSize: "clamp(20px, 5.2vw, 32px)",
+              fontSize: compact ? 12 : "clamp(20px, 5.2vw, 32px)",
               margin: 0,
               lineHeight: 1,
               textShadow: "0 2px 14px rgba(0,0,0,0.9)",
+              overflow: compact ? "hidden" : undefined,
+              textOverflow: compact ? "ellipsis" : undefined,
+              whiteSpace: compact ? "nowrap" : undefined,
             }}
             data-testid="text-points"
           >
@@ -131,12 +141,12 @@ export default function BlackRoseCard({
           </p>
         </div>
 
-        <div style={{ textAlign: "right" }}>
+        <div style={{ minWidth: 0, maxWidth: compact ? "48%" : undefined, textAlign: "right" }}>
           <p
             style={{
               color: "rgba(229,196,97,0.65)",
-              fontSize: "clamp(5px, 1.3vw, 8px)",
-              letterSpacing: "0.25em",
+              fontSize: compact ? 5 : "clamp(5px, 1.3vw, 8px)",
+              letterSpacing: compact ? "0.06em" : "0.25em",
               margin: 0,
               textTransform: "uppercase",
               textShadow: "0 1px 4px rgba(0,0,0,0.9)",
@@ -147,15 +157,18 @@ export default function BlackRoseCard({
           <p
             style={{
               color: "#E5C461",
-              fontSize: "clamp(10px, 2.4vw, 14px)",
+              fontSize: compact ? 8 : "clamp(10px, 2.4vw, 14px)",
               margin: 0,
               fontFamily: "monospace",
-              letterSpacing: "0.04em",
+              letterSpacing: compact ? 0 : "0.04em",
               textShadow: "0 1px 6px rgba(0,0,0,0.9)",
+              overflow: compact ? "hidden" : undefined,
+              textOverflow: compact ? "ellipsis" : undefined,
+              whiteSpace: compact ? "nowrap" : undefined,
             }}
             data-testid="text-sar-value"
           >
-            {displaySar} <SarIcon size={13} className="inline-block align-middle opacity-90" />
+            {displaySar} <SarIcon size={compact ? 8 : 13} className="inline-block align-middle opacity-90" />
           </p>
         </div>
       </div>
