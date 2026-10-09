@@ -11753,7 +11753,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         teamIdentifier: teamId,
         organizationName: "BLACK ROSE CAFE",
         description: `بطاقة ولاء BLACK ROSE`,
-        logoText: "",
+        logoText: "BLACK ROSE",
         backgroundColor: "rgb(13, 13, 13)",
         foregroundColor: "rgb(245, 245, 245)",
         labelColor: "rgb(45, 155, 110)",
@@ -11817,12 +11817,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             altText: cardNumber
           }
         ],
-        barcode: {
-          message: qrValue,
-          format: "PKBarcodeFormatQR",
-          messageEncoding: "iso-8859-1",
-          altText: cardNumber
-        }
       };
 
       // Build pass images using sharp for proper QIROX branding
