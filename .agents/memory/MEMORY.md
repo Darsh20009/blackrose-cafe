@@ -15,3 +15,4 @@
 - [iOS shortcuts deep-link pattern](ios-shortcuts.md) — UIApplicationShortcutItems injected via codemagic.yaml PlistBuddy; AppDelegate.swift injected via python3 to open blackrose://shortcut/<type>; handled by @capacitor/app appUrlOpen in ios-shortcuts.ts.
 - [Codemagic publish fix](codemagic-publish-fix.md) — Root cause: missing aps-environment entitlement + no explicit export method. Fixed by creating App.entitlements with aps-environment:production, registering in pbxproj, and adding --export-xcargs method=app-store to build-ipa.
 - [flutter_app missing native scaffold](flutter-app-missing-native-scaffold.md) — flutter_app/ios & /android only had customization files in git, no real Xcode/Gradle project ever existed; this was the real cause of the App Store black screen.
+- [GitHub publishing](github-publishing.md) — The user has repeatedly requested that project updates be pushed to the connected GitHub repository.

@@ -25,8 +25,8 @@ bash apple-wallet/convert_cert.sh
 
 | الاسم | القيمة |
 |-------|--------|
-| APPLE_PASS_TYPE_ID | pass.sa.blackrose.loyalty |
-| APPLE_TEAM_ID | (رقم Team ID من Apple Developer) |
+| APPLE_PASS_TYPE_ID | pass.blackrose.com.sa |
+| APPLE_TEAM_ID | V4K6RM59LS |
 | APPLE_WWDR_PEM | محتوى wwdr.pem |
 | APPLE_SIGNER_CERT_PEM | محتوى signer_cert.pem (بعد التحويل) |
 | APPLE_SIGNER_KEY_PEM | محتوى signer_key.pem |

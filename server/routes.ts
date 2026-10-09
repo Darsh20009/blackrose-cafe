@@ -58,6 +58,7 @@ import { InventoryEngine } from "./inventory-engine";
 import { AccountingEngine } from "./accounting-engine";
 import { ErpAccountingService } from "./erp-accounting-service";
 import { deliveryService } from "./delivery-service";
+import { createAppleWalletTicket, readAppleWalletTicket } from "./apple-wallet-ticket";
 import { applyDeliveryPolicyToOrderData, checkDeliveryLocation } from "./delivery-policy";
 import {
   getBranchOperationalSettings,
@@ -11642,9 +11643,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ── Apple Wallet PKPass generator for loyalty card ─────────────────────────
-  app.get("/api/wallet/apple-pass", requireCustomerAuth, async (req: CustomerAuthRequest, res) => {
+  // Mint a short-lived encrypted URL ticket so the iOS browser can fetch a pass
+  // even when Safari does not share the Capacitor WebView's session cookie.
+  app.post("/api/wallet/apple-pass-ticket", requireCustomerAuth, (req: CustomerAuthRequest, res) => {
+    const customerPhone = req.customer?.phone;
+    if (!customerPhone) return res.status(401).json({ error: "يرجى تسجيل الدخول" });
+
     try {
+      const ticket = createAppleWalletTicket(customerPhone);
+      res.set("Cache-Control", "no-store, private");
+      return res.json({
+        url: `/api/wallet/apple-pass?ticket=${encodeURIComponent(ticket)}`,
+      });
+    } catch (error: any) {
+      console.error("[APPLE WALLET] Could not create pass ticket:", error?.message || "unknown error");
+      return res.status(503).json({ error: "تعذر تجهيز رابط بطاقة Apple Wallet" });
+    }
+  });
+
+  // ── Apple Wallet PKPass generator for loyalty card ─────────────────────────
+  app.get("/api/wallet/apple-pass", async (req: CustomerAuthRequest, res) => {
+    try {
+      const sessionCustomer = req.session?.customer;
+      const walletCustomer = sessionCustomer || readAppleWalletTicket(req.query.ticket);
+      if (!walletCustomer?.phone) return res.status(401).json({ error: "يرجى تسجيل الدخول" });
+
       const fs   = await import('fs');
       const path = await import('path');
 
@@ -11681,8 +11704,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const customerPhone = req.customer?.phone;
-      if (!customerPhone) return res.status(401).json({ error: "يرجى تسجيل الدخول" });
+      const customerPhone = walletCustomer.phone;
 
       // Try multiple phone formats to find the loyalty card
       const rawDigits  = customerPhone.replace(/\D/g, '');
@@ -11711,7 +11733,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tierLabels: Record<string, string> = {
         bronze: "برونزي", silver: "فضي", gold: "ذهبي", platinum: "بلاتيني"
       };
-      const customerName = req.customer?.name || loyaltyCard.customerName || "عميل";
+      const customerName = sessionCustomer?.name || loyaltyCard.customerName || "عميل";
       const qrValue      = loyaltyCard.qrToken || loyaltyCard.cardNumber || rawDigits.slice(-9);
 
       const cardNumber = loyaltyCard.cardNumber || rawDigits.slice(-9);
@@ -11875,7 +11897,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         res.set({
           "Content-Type":        "application/vnd.apple.pkpass",
-          "Content-Disposition": `inline; filename="qirox-loyalty-${safeName}.pkpass"`,
+          "Content-Disposition": `attachment; filename="qirox-loyalty-${safeName}.pkpass"`,
           "Cache-Control":       "no-store",
           "Content-Length":      String(passBuffer.length),
         });
