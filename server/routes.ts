@@ -869,7 +869,7 @@ const PaymentSessionTokenModel = (mongoose.models['PaymentSessionToken']
 // ─── Payment Logger Helper ───────────────────────────────────────────────────
 async function logPayment(data: {
   tenantId?: string;
-  event: 'init' | 'verify' | 'callback' | 'webhook' | 'failed';
+  event: 'init' | 'verify' | 'callback' | 'webhook' | 'refund' | 'failed';
   provider: string;
   amount?: number;
   currency?: string;
@@ -1915,6 +1915,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             plan: sub.plan,
             isActive: sub.isActive,
             expiresAt: sub.expiresAt || null,
+            features: sub.features || {},
             maxBranches: sub.maxBranches,
             maxEmployees: sub.maxEmployees,
             maxProducts: sub.maxProducts,
@@ -4104,7 +4105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (hasSACredentials) {
           // ── PayMob Saudi Arabia — Unified Checkout (Intention API) ──
-          const baseUrl = pg.paymob?.baseUrl || 'https://ksa.paymob.com';
+          const baseUrl = String(pg.paymob?.baseUrl || 'https://ksa.paymob.com').replace(/\/+$/, '');
           const cardIntegrationIds: number[] = pg.paymob?.integrationIds?.length
             ? pg.paymob.integrationIds.map(Number).filter((id: number) => Number.isSafeInteger(id) && id > 0)
             : [];
@@ -4147,7 +4148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               },
               extras: { order_ref: orderId || internalSessionId },
               special_reference: orderId || internalSessionId,
-              notification_url: `${getAppBaseUrl(req)}/api/payments/paymob/webhook`,
+              notification_url: `${getAppBaseUrl(req)}/api/payments/paymob/webhook?tenantId=${encodeURIComponent(tenantId)}`,
               redirection_url: returnUrl
                 ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}session=${internalSessionId}`
                 : `${getAppBaseUrl(req)}/payment-return-iframe?session=${internalSessionId}&orderRef=${encodeURIComponent(orderId || internalSessionId)}`,
@@ -4157,7 +4158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${secretKey}`,
+                'Authorization': `Token ${secretKey}`,
               },
               body: JSON.stringify(intentBody),
             });
@@ -4173,12 +4174,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             const clientSecret = intentData.client_secret;
             const intentionId = intentData.id;
-            const checkoutUrl = `${baseUrl}/unifiedcheckout/?publicKey=${publicKey}&clientSecret=${clientSecret}`;
+            const checkoutUrl = new URL("https://ksa.checkout.paymob.com/");
+            checkoutUrl.searchParams.set("publicKey", publicKey);
+            checkoutUrl.searchParams.set("clientSecret", clientSecret);
 
             // Store clientSecret + intentionId on the order for later server-side verification
             if (orderId) {
               await OrderModel.findOneAndUpdate(
-                { $or: [{ orderNumber: orderId }, { _id: orderId }], tenantId: 'demo-tenant' },
+                { $or: [{ orderNumber: orderId }, { _id: isValidObjectId(orderId) ? orderId : null }], tenantId },
                 { $set: { paymobClientSecret: clientSecret, paymobIntentionId: String(intentionId || '') } }
               ).catch(() => {});
             }
@@ -4202,8 +4205,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.json({
               success: true,
               sessionId: internalSessionId,
-              redirectUrl: checkoutUrl,
-              paymentUrl: checkoutUrl,
+              redirectUrl: checkoutUrl.toString(),
+              paymentUrl: checkoutUrl.toString(),
               publicKey,
               clientSecret,
               provider: 'paymob',
@@ -4319,7 +4322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ verified: false, error: "معرّف الجلسة مطلوب" });
       }
 
-      const tenantId = getTenantIdFromRequest(req) || await getDefaultTenantId();
+      const tenantId = String(req.query.tenantId || getTenantIdFromRequest(req) || await getDefaultTenantId());
       const config = await BusinessConfigModel.findOne({ tenantId });
       const pg = config?.paymentGateway;
       const provider = reqProvider || pg?.provider;
@@ -4559,12 +4562,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Method 2: No callback params — try PayMob SA Intention API to check status
         const secretKey = pg?.paymob?.secretKey || process.env.PAYMOB_SECRET_KEY;
-        const baseUrl = pg?.paymob?.baseUrl || 'https://ksa.paymob.com';
+        const baseUrl = String(pg?.paymob?.baseUrl || 'https://ksa.paymob.com').replace(/\/+$/, '');
         if (secretKey && sessionId) {
           try {
             // Look up intention by special_reference (which is the orderId/sessionId we stored)
             const intentLookupRes = await fetch(`${baseUrl}/v1/intention/?special_reference=${encodeURIComponent(sessionId)}`, {
-              headers: { 'Authorization': `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
+              headers: { 'Authorization': `Token ${secretKey}`, 'Content-Type': 'application/json' },
             });
             if (intentLookupRes.ok) {
               const intentList = await intentLookupRes.json() as any;
@@ -5078,7 +5081,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const config = await BusinessConfigModel.findOne({ tenantId }).lean() as any;
           const pg = config?.paymentGateway;
           const secretKey = pg?.paymob?.secretKey || process.env.PAYMOB_SECRET_KEY;
-          const baseUrl = pg?.paymob?.baseUrl || 'https://ksa.paymob.com';
+          const baseUrl = String(pg?.paymob?.baseUrl || 'https://ksa.paymob.com').replace(/\/+$/, '');
 
           if (secretKey) {
             let intentStatus: string | null = null;
@@ -5086,7 +5089,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Try by transaction ID first
             if (paymobTxId) {
               const r = await fetch(`${baseUrl}/v1/transaction/${paymobTxId}/`, {
-                headers: { 'Authorization': `Bearer ${secretKey}` },
+                headers: { 'Authorization': `Token ${secretKey}` },
               });
               if (r.ok) {
                 const txData = await r.json() as any;
@@ -5100,7 +5103,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (!intentStatus) {
               const ref = internalSession || token.slice(0, 16);
               const r = await fetch(`${baseUrl}/v1/intention/?special_reference=${encodeURIComponent(ref)}`, {
-                headers: { 'Authorization': `Bearer ${secretKey}` },
+                headers: { 'Authorization': `Token ${secretKey}` },
               });
               if (r.ok) {
                 const list = await r.json() as any;
@@ -5248,7 +5251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const config = await BusinessConfigModel.findOne({ tenantId });
           const pg = config?.paymentGateway;
           const secretKey = pg?.paymob?.secretKey;
-          const baseUrl = pg?.paymob?.baseUrl || 'https://ksa.paymob.com';
+          const baseUrl = String(pg?.paymob?.baseUrl || 'https://ksa.paymob.com').replace(/\/+$/, '');
 
           if (secretKey) {
             const intentionId = order.paymobIntentionId;
@@ -5257,7 +5260,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             let intentData: any = null;
             if (intentionId) {
               const r = await fetch(`${baseUrl}/v1/intention/${intentionId}/`, {
-                headers: { 'Authorization': `Bearer ${secretKey}` },
+                headers: { 'Authorization': `Token ${secretKey}` },
               });
               if (r.ok) intentData = await r.json();
             }
@@ -5265,7 +5268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Fallback: search transactions by special_reference (orderNumber)
             if (!intentData) {
               const r = await fetch(`${baseUrl}/v1/intention/?special_reference=${encodeURIComponent(orderNumber)}`, {
-                headers: { 'Authorization': `Bearer ${secretKey}` },
+                headers: { 'Authorization': `Token ${secretKey}` },
               });
               if (r.ok) {
                 const list = await r.json() as any;
@@ -5315,7 +5318,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Paymob transaction callback (browser redirect after payment)
   app.get("/api/payments/paymob/callback", async (req, res) => {
     const params = req.query;
-    console.log('[Paymob Callback]', params);
     const qs = new URLSearchParams(params as Record<string, string>).toString();
     res.redirect(`/checkout?payment=callback&provider=paymob&${qs}`);
   });
@@ -5324,7 +5326,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/payments/paymob/webhook", async (req, res) => {
     try {
       const body = req.body;
-      console.log('[Paymob Webhook]', JSON.stringify(body));
 
       const tenantId = getTenantIdFromRequest(req) || await getDefaultTenantId();
       const config = await BusinessConfigModel.findOne({ tenantId });
@@ -5332,27 +5333,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (hmacSecret) {
         const crypto = await import('crypto');
-        const receivedHmac = req.query.hmac as string || req.headers['x-hmac'] as string;
-        if (receivedHmac) {
-          const obj = body?.obj || {};
-          const fields = [
-            obj.amount_cents, obj.created_at, obj.currency, obj.error_occured,
-            obj.has_parent_transaction, obj.id, obj.integration_id, obj.is_3d_secure,
-            obj.is_auth, obj.is_capture, obj.is_refunded, obj.is_standalone_payment,
-            obj.is_voided, obj.order?.id, obj.owner, obj.pending,
-            obj.source_data?.pan, obj.source_data?.sub_type, obj.source_data?.type,
-            obj.success,
-          ];
-          const dataString = fields.map(v => String(v ?? '')).join('');
-          const calculatedHmac = crypto.createHmac('sha512', hmacSecret).update(dataString).digest('hex');
-          if (calculatedHmac !== receivedHmac) {
-            console.warn('[Paymob Webhook] HMAC mismatch — rejected');
-            return res.status(400).json({ error: 'Invalid signature' });
-          }
+        const receivedHmac = String(req.query.hmac || req.headers['x-hmac'] || body?.hmac || '').toLowerCase();
+        if (!receivedHmac) {
+          return res.status(401).json({ error: 'Missing Paymob signature' });
+        }
+        const obj = body?.obj || {};
+        const fields = [
+          obj.amount_cents, obj.created_at, obj.currency, obj.error_occured,
+          obj.has_parent_transaction, obj.id, obj.integration_id, obj.is_3d_secure,
+          obj.is_auth, obj.is_capture, obj.is_refunded, obj.is_standalone_payment,
+          obj.is_voided, obj.order?.id, obj.owner, obj.pending,
+          obj.source_data?.pan, obj.source_data?.sub_type, obj.source_data?.type,
+          obj.success,
+        ];
+        const dataString = fields.map(v => String(v ?? '')).join('');
+        const calculatedHmac = crypto.createHmac('sha512', hmacSecret).update(dataString).digest('hex');
+        const expectedBytes = Buffer.from(calculatedHmac, 'hex');
+        const receivedBytes = Buffer.from(receivedHmac, 'hex');
+        if (expectedBytes.length !== receivedBytes.length || !crypto.timingSafeEqual(expectedBytes, receivedBytes)) {
+          console.warn('[Paymob Webhook] HMAC mismatch — rejected');
+          return res.status(400).json({ error: 'Invalid signature' });
         }
       }
 
       const transaction = body?.obj;
+      if (transaction?.is_refunded === true) {
+        const { RefundOrderModel, CashierShiftModel } = await import('@shared/schema');
+        const refundTransactionId = String(transaction.id || '');
+        const parentTransactionId = String(
+          typeof transaction.parent_transaction === 'object'
+            ? transaction.parent_transaction?.id || ''
+            : transaction.parent_transaction || transaction.id || '',
+        );
+        const refundMatches = [
+          ...(refundTransactionId ? [{ providerRefundId: refundTransactionId }] : []),
+          ...(parentTransactionId ? [{ providerTransactionId: parentTransactionId }] : []),
+        ];
+        const completedRefund: any = refundMatches.length
+          ? await RefundOrderModel.findOneAndUpdate(
+              { provider: 'paymob', status: 'pending', $or: refundMatches },
+              { $set: { status: 'completed', updatedAt: new Date() } },
+              { new: true },
+            ).lean().catch(() => null)
+          : null;
+
+        if (completedRefund) {
+          const refundOrderId = String(completedRefund.originalOrderId || '');
+          const refundOrderLookup: any[] = [{ id: refundOrderId }];
+          if (isValidObjectId(refundOrderId)) refundOrderLookup.push({ _id: refundOrderId });
+          const originalOrder = await OrderModel.findOne({
+            tenantId: completedRefund.tenantId,
+            $or: refundOrderLookup,
+          }).lean().catch(() => null);
+          if (originalOrder) {
+            const newRefunded = (Number(originalOrder.refundedAmount) || 0) + Number(completedRefund.refundAmount || 0);
+            const isFullyRefunded = newRefunded >= (Number(originalOrder.totalAmount) || 0) - 0.01;
+            await OrderModel.updateOne(
+              { _id: originalOrder._id },
+              {
+                $set: {
+                  refundedAmount: newRefunded,
+                  refundedAt: new Date(),
+                  isFullyRefunded,
+                  ...(isFullyRefunded ? { status: 'refunded', paymentStatus: 'refunded' } : {}),
+                  updatedAt: new Date(),
+                },
+              },
+            );
+          }
+          if (completedRefund.employeeId) {
+            await CashierShiftModel.updateOne(
+              { employeeId: completedRefund.employeeId, status: 'open' },
+              { $inc: { totalRefunds: Number(completedRefund.refundAmount || 0) }, $set: { updatedAt: new Date() } },
+            ).catch(() => {});
+          }
+        }
+
+        await logPayment({
+          tenantId,
+          event: 'refund',
+          provider: 'paymob',
+          amount: transaction.amount_cents ? transaction.amount_cents / 100 : undefined,
+          currency: transaction.currency || 'SAR',
+          status: 'success',
+          externalId: refundTransactionId || parentTransactionId,
+          rawData: { isRefunded: true, parentTransactionId },
+          ipAddress: req.ip,
+        });
+        return res.json({ received: true, refundProcessed: Boolean(completedRefund) });
+      }
+
       if (transaction?.success === true) {
         const merchantOrderId = transaction?.order?.merchant_order_id
           || transaction?.special_reference
@@ -10346,7 +10416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const {
         originalOrderId, originalOrderNumber, branchId, employeeId, employeeName,
         items, refundAmount, paymentMethod, cashAmount, cardAmount,
-        reason, notes, status,
+        reason, notes,
       } = req.body;
 
       if (!items || !Array.isArray(items) || items.length === 0) {
@@ -10355,85 +10425,264 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!reason || !reason.trim()) {
         return res.status(400).json({ error: "سبب الاسترجاع مطلوب" });
       }
-      if (!refundAmount || refundAmount <= 0) {
+      const amountToRefund = Number(refundAmount);
+      if (!Number.isFinite(amountToRefund) || amountToRefund <= 0) {
         return res.status(400).json({ error: "مبلغ الاسترجاع يجب أن يكون أكبر من صفر" });
       }
       if (!['cash', 'card', 'split'].includes(paymentMethod)) {
         return res.status(400).json({ error: "طريقة الدفع غير صحيحة" });
       }
 
-      const refundDoc = new RefundOrderModel({
-        id: nanoid(),
-        tenantId,
-        originalOrderId: originalOrderId || undefined,
-        originalOrderNumber: originalOrderNumber || undefined,
-        branchId: branchId || undefined,
-        employeeId: employeeId || undefined,
-        employeeName: employeeName || undefined,
-        items: items.map((item: any) => ({
-          coffeeItemId: item.coffeeItemId || '',
-          nameAr: item.nameAr || 'صنف',
-          nameEn: item.nameEn,
-          quantity: Number(item.quantity) || 1,
-          unitPrice: Number(item.unitPrice) || 0,
-          subtotal: Number(item.subtotal) || 0,
-        })),
-        refundAmount: Number(refundAmount),
-        paymentMethod,
-        cashAmount: Number(cashAmount) || 0,
-        cardAmount: Number(cardAmount) || 0,
-        reason: reason.trim(),
-        notes: notes?.trim() || undefined,
-        status: status || 'completed',
-      });
+      const { OrderModel, BusinessConfigModel, PaymentLogModel } = await import('@shared/schema');
+      const orderLookup: any[] = [];
+      if (originalOrderId) {
+        orderLookup.push({ id: String(originalOrderId) });
+        if (isValidObjectId(String(originalOrderId))) orderLookup.push({ _id: String(originalOrderId) });
+      }
+      if (originalOrderNumber !== undefined && originalOrderNumber !== null) {
+        orderLookup.push({ orderNumber: String(originalOrderNumber) });
+      }
 
-      await refundDoc.save();
+      let originalOrder: any = null;
+      if (orderLookup.length) {
+        originalOrder = await OrderModel.findOne({ tenantId, $or: orderLookup }).lean().catch(() => null);
+        if (!originalOrder) {
+          return res.status(404).json({ error: "الطلب الأصلي غير موجود في هذا الفرع/المنشأة" });
+        }
+      }
+
+      const isPaymobOrder = Boolean(originalOrder && (
+        String(originalOrder.paymentMethod || '').startsWith('paymob-') ||
+        originalOrder.paymobIntentionId
+      ));
+      let refundStatus: 'pending' | 'completed' = 'completed';
+      let refundDoc: any;
+      let providerRefundId: string | undefined;
+      let providerTransactionId: string | undefined;
+
+      if (isPaymobOrder) {
+        const amountPaid = Number(originalOrder.totalAmount) || 0;
+        const alreadyRefunded = Number(originalOrder.refundedAmount) || 0;
+        const pendingRefund = await RefundOrderModel.exists({
+          tenantId,
+          originalOrderId: String(originalOrderId || originalOrder.id || originalOrder._id),
+          provider: 'paymob',
+          status: 'pending',
+        });
+        const cardRefundAmount = paymentMethod === 'card'
+          ? (Number(cardAmount) || amountToRefund)
+          : (paymentMethod === 'split' ? (Number(cardAmount) || 0) : 0);
+
+        if (!['paid', 'refunded'].includes(String(originalOrder.paymentStatus))) {
+          return res.status(409).json({ error: "لا يمكن استرداد طلب Paymob قبل تأكيد الدفع" });
+        }
+        if (paymentMethod !== 'card' || Math.abs(cardRefundAmount - amountToRefund) > 0.01) {
+          return res.status(400).json({ error: "استرداد طلب Paymob يجب أن يعود كاملًا إلى وسيلة الدفع الإلكترونية الأصلية" });
+        }
+        if (amountPaid <= 0 || amountToRefund > amountPaid - alreadyRefunded + 0.01) {
+          return res.status(400).json({ error: "مبلغ الاسترداد يتجاوز المبلغ المتبقي من الطلب" });
+        }
+        if (pendingRefund) {
+          return res.status(409).json({ error: "يوجد استرداد Paymob قيد المعالجة لهذا الطلب؛ تحقق من حالته قبل إعادة المحاولة" });
+        }
+
+        const transactionId = Number(originalOrder.paymentTransactionId);
+        if (!Number.isSafeInteger(transactionId) || transactionId <= 0) {
+          return res.status(409).json({ error: "معرّف معاملة Paymob غير متوفر لهذا الطلب؛ لم يتم تسجيل استرداد محلي" });
+        }
+
+        const config = await BusinessConfigModel.findOne({ tenantId }).lean() as any;
+        const paymob = config?.paymentGateway?.paymob;
+        const secretKey = paymob?.secretKey || process.env.PAYMOB_SECRET_KEY;
+        const baseUrl = String(paymob?.baseUrl || 'https://ksa.paymob.com').replace(/\/+$/, '');
+        if (!secretKey) {
+          return res.status(503).json({ error: "مفتاح Paymob السري غير مهيأ؛ لم يتم تسجيل الاسترداد" });
+        }
+
+        providerTransactionId = String(transactionId);
+        refundDoc = new RefundOrderModel({
+          id: nanoid(),
+          tenantId,
+          originalOrderId: String(originalOrderId || originalOrder.id || originalOrder._id),
+          originalOrderNumber: originalOrderNumber || originalOrder.orderNumber,
+          branchId: branchId || originalOrder.branchId || undefined,
+          employeeId: employeeId || undefined,
+          employeeName: employeeName || undefined,
+          items: items.map((item: any) => ({
+            coffeeItemId: item.coffeeItemId || '',
+            nameAr: item.nameAr || 'صنف',
+            nameEn: item.nameEn,
+            quantity: Number(item.quantity) || 1,
+            unitPrice: Number(item.unitPrice) || 0,
+            subtotal: Number(item.subtotal) || 0,
+          })),
+          refundAmount: amountToRefund,
+          paymentMethod,
+          cashAmount: 0,
+          cardAmount: amountToRefund,
+          reason: reason.trim(),
+          notes: notes?.trim() || undefined,
+          status: 'pending',
+          provider: 'paymob',
+          providerTransactionId,
+        });
+
+        // Reserve a local pending record before calling Paymob so a network timeout
+        // cannot make an operator unknowingly submit the same money movement twice.
+        await refundDoc.save();
+        let providerResponse: Awaited<ReturnType<typeof fetch>>;
+        let providerData: any;
+        try {
+          providerResponse = await fetch(`${baseUrl}/api/acceptance/void_refund/refund`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Token ${secretKey}`,
+            },
+            body: JSON.stringify({
+              transaction_id: transactionId,
+              amount_cents: Math.round(amountToRefund * 100),
+            }),
+          });
+          providerData = await providerResponse.json().catch(() => ({}));
+        } catch (providerError: any) {
+          await PaymentLogModel.create({
+            id: nanoid(),
+            tenantId,
+            event: 'refund',
+            provider: 'paymob',
+            amount: amountToRefund,
+            currency: 'SAR',
+            status: 'unknown',
+            externalId: providerTransactionId,
+            orderId: String(originalOrderId || ''),
+            orderNumber: String(originalOrderNumber || ''),
+            errorMessage: providerError?.message || 'Paymob refund response was not received',
+            createdAt: new Date(),
+          }).catch(() => {});
+          return res.status(202).json({
+            ...serializeDoc(refundDoc),
+            message: "تعذر تأكيد رد Paymob. بقي الطلب قيد المعالجة لمنع إرسال استرداد مكرر؛ تحقق من لوحة Paymob.",
+          });
+        }
+
+        if (!providerResponse.ok) {
+          const providerMessage = providerData?.message || providerData?.detail || `Paymob returned HTTP ${providerResponse.status}`;
+          await PaymentLogModel.create({
+            id: nanoid(),
+            tenantId,
+            event: 'refund',
+            provider: 'paymob',
+            amount: amountToRefund,
+            currency: 'SAR',
+            status: providerResponse.status >= 500 ? 'unknown' : 'failed',
+            externalId: providerTransactionId,
+            orderId: String(originalOrderId || ''),
+            orderNumber: String(originalOrderNumber || ''),
+            errorMessage: String(providerMessage).slice(0, 300),
+            rawData: { httpStatus: providerResponse.status },
+            createdAt: new Date(),
+          }).catch(() => {});
+
+          if (providerResponse.status < 500) {
+            refundDoc.status = 'cancelled';
+            await refundDoc.save();
+          }
+          return res.status(providerResponse.status >= 500 ? 202 : 502).json({
+            error: providerResponse.status >= 500
+              ? "Paymob لم يؤكد نتيجة الاسترداد؛ بقي الطلب قيد المعالجة. تحقق من لوحة Paymob قبل إعادة المحاولة."
+              : "رفض Paymob طلب الاسترداد",
+            details: String(providerMessage).slice(0, 240),
+            refundId: refundDoc.id,
+            status: providerResponse.status >= 500 ? 'pending' : 'cancelled',
+          });
+        }
+
+        providerRefundId = providerData?.id === undefined ? undefined : String(providerData.id);
+        refundStatus = providerData?.pending === true ? 'pending' : 'completed';
+        refundDoc.providerRefundId = providerRefundId;
+        refundDoc.status = refundStatus;
+        await refundDoc.save();
+
+        await PaymentLogModel.create({
+          id: nanoid(),
+          tenantId,
+          event: 'refund',
+          provider: 'paymob',
+          amount: amountToRefund,
+          currency: 'SAR',
+          status: refundStatus === 'completed' ? 'success' : 'pending',
+          externalId: providerRefundId || providerTransactionId,
+          orderId: String(originalOrderId || ''),
+          orderNumber: String(originalOrderNumber || ''),
+          rawData: { httpStatus: providerResponse.status, refundPending: providerData?.pending === true },
+          createdAt: new Date(),
+        }).catch(() => {});
+      } else {
+        refundDoc = new RefundOrderModel({
+          id: nanoid(),
+          tenantId,
+          originalOrderId: originalOrderId || undefined,
+          originalOrderNumber: originalOrderNumber || undefined,
+          branchId: branchId || undefined,
+          employeeId: employeeId || undefined,
+          employeeName: employeeName || undefined,
+          items: items.map((item: any) => ({
+            coffeeItemId: item.coffeeItemId || '',
+            nameAr: item.nameAr || 'صنف',
+            nameEn: item.nameEn,
+            quantity: Number(item.quantity) || 1,
+            unitPrice: Number(item.unitPrice) || 0,
+            subtotal: Number(item.subtotal) || 0,
+          })),
+          refundAmount: amountToRefund,
+          paymentMethod,
+          cashAmount: Number(cashAmount) || 0,
+          cardAmount: Number(cardAmount) || 0,
+          reason: reason.trim(),
+          notes: notes?.trim() || undefined,
+          status: 'completed',
+        });
+        await refundDoc.save();
+      }
 
       // ── Update original order: mark as refunded ──────────────────────────────
-      if (originalOrderId) {
+      if (originalOrder && refundDoc.status === 'completed') {
         try {
-          const { OrderModel } = await import('@shared/schema');
-          const origOrder = await OrderModel.findOne({
-            $or: [{ id: originalOrderId }, { _id: originalOrderId.length === 24 ? originalOrderId : undefined }]
-          }).catch(() => null) || await OrderModel.findById(originalOrderId).catch(() => null);
-
-          if (origOrder) {
-            const prevRefunded = Number((origOrder as any).refundedAmount) || 0;
-            const newRefunded = prevRefunded + Number(refundAmount);
-            const orderTotal = Number((origOrder as any).totalAmount) || 0;
-            const isFullyRefunded = newRefunded >= orderTotal - 0.01;
-
-            const updateFields: any = {
-              refundedAmount: newRefunded,
-              refundedAt: new Date(),
-              isFullyRefunded,
-              updatedAt: new Date(),
-            };
-            if (isFullyRefunded) {
-              updateFields.status = 'refunded';
-              updateFields.paymentStatus = 'refunded';
-            }
-            await OrderModel.updateOne({ _id: (origOrder as any)._id }, { $set: updateFields });
+          const prevRefunded = Number(originalOrder.refundedAmount) || 0;
+          const newRefunded = prevRefunded + amountToRefund;
+          const orderTotal = Number(originalOrder.totalAmount) || 0;
+          const isFullyRefunded = newRefunded >= orderTotal - 0.01;
+          const updateFields: any = {
+            refundedAmount: newRefunded,
+            refundedAt: new Date(),
+            isFullyRefunded,
+            updatedAt: new Date(),
+          };
+          if (isFullyRefunded) {
+            updateFields.status = 'refunded';
+            updateFields.paymentStatus = 'refunded';
           }
+          await OrderModel.updateOne({ _id: originalOrder._id }, { $set: updateFields });
         } catch (err) {
           console.error('[Refund] Failed to update original order:', err);
         }
       }
 
       // ── Update active cashier shift totalRefunds ──────────────────────────────
-      if (employeeId) {
+      if (employeeId && refundDoc.status === 'completed') {
         try {
           const { CashierShiftModel } = await import('@shared/schema');
           await CashierShiftModel.updateOne(
             { employeeId, status: 'open' },
-            { $inc: { totalRefunds: Number(refundAmount) }, $set: { updatedAt: new Date() } }
+            { $inc: { totalRefunds: amountToRefund }, $set: { updatedAt: new Date() } }
           );
         } catch (err) {
           console.error('[Refund] Failed to update shift totalRefunds:', err);
         }
       }
 
-      res.status(201).json(serializeDoc(refundDoc));
+      res.status(refundDoc.status === 'pending' ? 202 : 201).json(serializeDoc(refundDoc));
     } catch (error) {
       console.error('[Create Refund]', error);
       res.status(500).json({ error: "فشل إنشاء الاسترجاع" });
@@ -10458,12 +10707,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { RefundOrderModel } = await import('@shared/schema');
       const { id } = req.params;
-      const refund = await RefundOrderModel.findOneAndUpdate(
-        { id },
-        { status: 'cancelled', updatedAt: new Date() },
-        { new: true }
-      );
+      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const refund = await RefundOrderModel.findOne({ id, tenantId });
       if (!refund) return res.status(404).json({ error: "الاسترجاع غير موجود" });
+      if (refund.provider === 'paymob') {
+        return res.status(409).json({ error: "لا يمكن إلغاء استرداد أُرسل إلى Paymob؛ تحقّق من حالته لدى مزود الدفع" });
+      }
+      if (refund.status !== 'completed') {
+        return res.status(409).json({ error: "لا يمكن إلغاء استرداد غير مكتمل" });
+      }
+      refund.status = 'cancelled';
+      refund.updatedAt = new Date();
+      await refund.save();
       res.json(serializeDoc(refund));
     } catch (error) {
       res.status(500).json({ error: "فشل إلغاء الاسترجاع" });

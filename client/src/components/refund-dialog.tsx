@@ -108,6 +108,10 @@ export default function RefundDialog({ open, onOpenChange, branchId, employeeId,
         const items = typeof order.items === "string" ? JSON.parse(order.items) : (order.items || []);
         order.items = items;
         setFoundOrder(order);
+        const isPaymobOrder = String(order.paymentMethod || "").startsWith("paymob-") || Boolean(order.paymobIntentionId);
+        setPayMethod(isPaymobOrder ? "card" : "cash");
+        setCashAmount("");
+        setCardAmount("");
         const initSel: Record<string, boolean> = {};
         const initQty: Record<string, number> = {};
         items.forEach((item: any, idx: number) => {
@@ -166,22 +170,30 @@ export default function RefundDialog({ open, onOpenChange, branchId, employeeId,
       return res.json();
     },
     onSuccess: (data) => {
-      toast({ title: tc("✅ تم الاسترجاع بنجاح", "✅ Refund successful"), description: `${tc("إجمالي المسترجع:", "Total refunded:")} ${data.refundAmount?.toFixed(2)} ${tc("ريال", "SAR")}` });
-      setTimeout(() => {
-        printRefundThermal({
-          refundId: data.id,
-          originalOrderNumber: foundOrder?.orderNumber || "—",
-          items: buildRefundItems(),
-          refundAmount: data.refundAmount,
-          paymentMethod: payMethod,
-          cashAmount: payMethod === "split" ? parseFloat(cashAmount) : undefined,
-          cardAmount: payMethod === "split" ? parseFloat(cardAmount) : undefined,
-          reason,
-          employeeName,
-          date: format(new Date(), "dd/MM/yyyy HH:mm", { locale: ar }),
-          originalPaymentMethod: foundOrder?.paymentMethod,
+      const pending = data.status === "pending";
+      toast({
+        title: pending
+          ? tc("طلب الاسترداد قيد المعالجة", "Refund request is processing")
+          : tc("✅ تم الاسترجاع بنجاح", "✅ Refund successful"),
+        description: `${tc("إجمالي المسترجع:", "Total refunded:")} ${data.refundAmount?.toFixed(2)} ${tc("ريال", "SAR")}`,
+      });
+      if (!pending) {
+        setTimeout(() => {
+          printRefundThermal({
+            refundId: data.id,
+            originalOrderNumber: foundOrder?.orderNumber || "—",
+            items: buildRefundItems(),
+            refundAmount: data.refundAmount,
+            paymentMethod: payMethod,
+            cashAmount: payMethod === "split" ? parseFloat(cashAmount) : undefined,
+            cardAmount: payMethod === "split" ? parseFloat(cardAmount) : undefined,
+            reason,
+            employeeName,
+            date: format(new Date(), "dd/MM/yyyy HH:mm", { locale: ar }),
+            originalPaymentMethod: foundOrder?.paymentMethod,
+          });
         });
-      }, 300);
+      }
       handleClose();
     },
     onError: (err: any) => {
@@ -231,6 +243,9 @@ export default function RefundDialog({ open, onOpenChange, branchId, employeeId,
 
   const refundTotal = calcRefundTotal();
   const orderItems = getOrderItems();
+  const isPaymobOrder = Boolean(foundOrder && (
+    String(foundOrder.paymentMethod || "").startsWith("paymob-") || foundOrder.paymobIntentionId
+  ));
   const payMethodLabel: Record<RefundPayMethod, string> = {
     cash: tc("نقدي", "Cash"),
     card: tc("شبكة / بطاقة", "Card"),
@@ -434,8 +449,13 @@ export default function RefundDialog({ open, onOpenChange, branchId, employeeId,
 
               <div className="space-y-2">
                 <Label className="text-sm font-bold">{tc("طريقة إعادة المبلغ", "Refund Method")}</Label>
+                {isPaymobOrder && (
+                  <p className="text-xs text-amber-700">
+                    {tc("سيُرسل الاسترداد عبر Paymob إلى وسيلة الدفع الأصلية.", "Paymob will return this refund to the original online payment method.")}
+                  </p>
+                )}
                 <div className="grid grid-cols-3 gap-2">
-                  {(["cash", "card", "split"] as RefundPayMethod[]).map((m) => {
+                  {(["cash", "card", "split"] as RefundPayMethod[]).filter((m) => !isPaymobOrder || m === "card").map((m) => {
                     const Icon = m === "cash" ? Banknote : m === "card" ? CreditCard : SplitSquareVertical;
                     return (
                       <button

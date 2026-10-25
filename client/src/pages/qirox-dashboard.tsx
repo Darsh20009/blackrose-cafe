@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useLocation } from "wouter";
 import { ALL_FEATURES, PLAN_INFO, isFeatureInPlan, type PlanName } from "@/lib/plan-features";
 
@@ -132,6 +132,7 @@ export default function QiroxDashboard() {
   const [selectedTenant, setSelectedTenant] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<string>("pro");
   const [actionLoading, setActionLoading] = useState(false);
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
 
   useEffect(() => {
     verifyAuth();
@@ -150,10 +151,10 @@ export default function QiroxDashboard() {
       const res = await fetch("/api/qirox/verify", { headers: apiHeaders() });
       if (!res.ok) {
         localStorage.removeItem("qirox_token");
-        setLocation("/qirox");
+        setLocation("/qiroxstudio");
       }
     } catch {
-      setLocation("/qirox");
+      setLocation("/qiroxstudio");
     }
   }
 
@@ -222,12 +223,60 @@ export default function QiroxDashboard() {
     }
   }
 
+  async function saveSubscription(tenant: Tenant, changes: Record<string, unknown>) {
+    const tenantId = tenant.tenantId || tenant._id;
+    setActionLoading(true);
+    try {
+      const hasSubscription = Boolean(tenant.subscription);
+      const res = await fetch(
+        hasSubscription
+          ? `/api/qirox/subscriptions/${encodeURIComponent(tenantId)}`
+          : "/api/qirox/subscriptions",
+        {
+          method: hasSubscription ? "PUT" : "POST",
+          headers: apiHeaders(),
+          body: JSON.stringify({ tenantId, ...changes }),
+        },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "تعذر حفظ الاشتراك");
+      setEditingTenant(null);
+      await loadTenants();
+      await loadDashboard();
+    } catch (error: any) {
+      window.alert(error.message || "تعذر حفظ الاشتراك");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function setAllSubscriptionsTo21Days() {
+    if (!window.confirm("سيتم ضبط جميع الاشتراكات الحالية على ٢١ يومًا من الآن. هل تريد المتابعة؟")) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/qirox/subscriptions/term-all", {
+        method: "PUT",
+        headers: apiHeaders(),
+        body: JSON.stringify({ termDays: 21 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "تعذر تحديث مدد الاشتراكات");
+      window.alert(`تم ضبط ${data.updated || 0} اشتراك على ٢١ يومًا.`);
+      await loadTenants();
+      await loadDashboard();
+    } catch (error: any) {
+      window.alert(error.message || "تعذر تحديث مدد الاشتراكات");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   async function handleLogout() {
     try {
       await fetch("/api/qirox/logout", { method: "POST", headers: apiHeaders() });
     } catch {}
     localStorage.removeItem("qirox_token");
-    setLocation("/qirox");
+    setLocation("/qiroxstudio");
   }
 
   if (loading) {
@@ -318,8 +367,19 @@ export default function QiroxDashboard() {
           <TenantsTab
             tenants={tenants}
             onAssignPlan={assignPlan}
+            onEdit={setEditingTenant}
+            onSetAllTo21Days={setAllSubscriptionsTo21Days}
             loading={actionLoading}
             onRefresh={loadTenants}
+          />
+        )}
+        {editingTenant && (
+          <TenantSubscriptionEditor
+            key={editingTenant.tenantId || editingTenant._id}
+            tenant={editingTenant}
+            saving={actionLoading}
+            onClose={() => setEditingTenant(null)}
+            onSave={(changes) => saveSubscription(editingTenant, changes)}
           />
         )}
         {tab === "subscriptions" && <SubscriptionsTab />}
@@ -422,9 +482,11 @@ function OverviewTab({ data }: { data: DashboardData }) {
   );
 }
 
-function TenantsTab({ tenants, onAssignPlan, loading, onRefresh }: {
+function TenantsTab({ tenants, onAssignPlan, onEdit, onSetAllTo21Days, loading, onRefresh }: {
   tenants: Tenant[];
   onAssignPlan: (tenantId: string, plan: string) => void;
+  onEdit: (tenant: Tenant) => void;
+  onSetAllTo21Days: () => void;
   loading: boolean;
   onRefresh: () => void;
 }) {
@@ -435,9 +497,14 @@ function TenantsTab({ tenants, onAssignPlan, loading, onRefresh }: {
           <h2 className="text-xl font-bold">Tenant Management</h2>
           <p className="text-[#666] text-sm">Manage all registered cafes and their subscriptions</p>
         </div>
-        <button onClick={onRefresh} className="px-4 py-2 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg text-sm hover:bg-[#222] transition-colors">
-          Refresh
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button disabled={loading || tenants.length === 0} onClick={onSetAllTo21Days} className="px-4 py-2 bg-[#2D9B6E]/15 border border-[#2D9B6E]/30 rounded-lg text-sm text-[#65d2a0] hover:bg-[#2D9B6E]/25 disabled:opacity-50 transition-colors">
+            ضبط الكل على ٢١ يومًا
+          </button>
+          <button onClick={onRefresh} className="px-4 py-2 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg text-sm hover:bg-[#222] transition-colors">
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-4">
@@ -462,15 +529,16 @@ function TenantsTab({ tenants, onAssignPlan, loading, onRefresh }: {
                   <p className="text-[#666] text-sm">
                     ID: {tid} • {tenant.branchCount} branches • {tenant.employeeCount} employees
                   </p>
+                  <SubscriptionExpiry subscription={tenant.subscription} />
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {(["lite", "pro", "infinity"] as const).map((plan) => (
                     <button
                       key={plan}
                       disabled={loading || currentPlan === plan}
                       onClick={() => onAssignPlan(tid, plan)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                         currentPlan === plan
                           ? "bg-[#2D9B6E]/15 text-[#2D9B6E] border border-[#2D9B6E]/30 cursor-default"
                           : "bg-[#1a1a1a] border border-[#2a2a2a] text-[#888] hover:text-white hover:border-[#444]"
@@ -479,6 +547,9 @@ function TenantsTab({ tenants, onAssignPlan, loading, onRefresh }: {
                       {PLAN_FEATURES[plan].icon} {PLAN_FEATURES[plan].name}
                     </button>
                   ))}
+                  <button onClick={() => onEdit(tenant)} disabled={loading} className="px-4 py-2 bg-[#262626] border border-[#3a3a3a] rounded-lg text-sm text-white hover:bg-[#333] disabled:opacity-50 transition-colors">
+                    إدارة المزايا والمدة
+                  </button>
                 </div>
               </div>
             </div>
@@ -491,6 +562,131 @@ function TenantsTab({ tenants, onAssignPlan, loading, onRefresh }: {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function SubscriptionExpiry({ subscription }: { subscription: any }) {
+  if (!subscription?.expiresAt) {
+    return <p className="text-amber-400 text-xs mt-1">لا يوجد تاريخ انتهاء مضبوط</p>;
+  }
+  const expiry = new Date(subscription.expiresAt);
+  const remainingDays = Math.max(0, Math.ceil((expiry.getTime() - Date.now()) / 86400000));
+  return (
+    <p className={`text-xs mt-1 ${remainingDays ? "text-[#888]" : "text-red-400"}`}>
+      متبقي {remainingDays} يوم · ينتهي {expiry.toLocaleDateString("ar-SA")}
+    </p>
+  );
+}
+
+function TenantSubscriptionEditor({ tenant, saving, onClose, onSave }: {
+  tenant: Tenant;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (changes: Record<string, unknown>) => void;
+}) {
+  const subscription = tenant.subscription || {};
+  const initialPlan = (["lite", "pro", "infinity"].includes(subscription.plan) ? subscription.plan : "pro") as PlanName;
+  const initialTermDays = subscription.expiresAt
+    ? Math.max(1, Math.ceil((new Date(subscription.expiresAt).getTime() - Date.now()) / 86400000))
+    : 21;
+  const [plan, setPlan] = useState<PlanName>(initialPlan);
+  const [termDays, setTermDays] = useState(initialTermDays);
+  const [isActive, setIsActive] = useState(subscription.isActive ?? true);
+  const [limits, setLimits] = useState({
+    maxBranches: subscription.maxBranches ?? 1,
+    maxEmployees: subscription.maxEmployees ?? 5,
+    maxProducts: subscription.maxProducts ?? 50,
+    maxOrders: subscription.maxOrders ?? 1000,
+  });
+  const [features, setFeatures] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(ALL_FEATURES.map((feature) => {
+      const configured = subscription.features?.[feature.key];
+      return [feature.key, typeof configured === "boolean" ? configured : isFeatureInPlan(feature.plan, initialPlan)];
+    })),
+  );
+
+  const save = (event: FormEvent) => {
+    event.preventDefault();
+    onSave({ plan, termDays, isActive, ...limits, features });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/75 flex items-center justify-center p-3 md:p-6" role="dialog" aria-modal="true" aria-labelledby="subscription-editor-title">
+      <form onSubmit={save} className="w-full max-w-4xl max-h-[92vh] overflow-hidden rounded-2xl border border-[#2a2a2a] bg-[#101010] shadow-2xl">
+        <div className="flex items-center justify-between gap-4 p-5 border-b border-[#242424]">
+          <div>
+            <h2 id="subscription-editor-title" className="text-lg font-bold">إدارة اشتراك {tenant.nameAr || tenant.name || tenant.tenantId}</h2>
+            <p className="text-xs text-[#777] mt-1">{tenant.tenantId || tenant._id}</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-[#999] hover:text-white px-3 py-2">إغلاق</button>
+        </div>
+
+        <div className="max-h-[calc(92vh-144px)] overflow-y-auto p-5 space-y-6">
+          <div className="grid md:grid-cols-3 gap-4">
+            <label className="space-y-2 text-sm text-[#bbb]">
+              <span>الباقة</span>
+              <select value={plan} onChange={(e) => setPlan(e.target.value as PlanName)} className="w-full rounded-lg border border-[#333] bg-[#191919] p-3 text-white">
+                <option value="lite">Lite</option>
+                <option value="pro">Pro</option>
+                <option value="infinity">Infinity</option>
+              </select>
+            </label>
+            <label className="space-y-2 text-sm text-[#bbb]">
+              <span>مدة الاشتراك من الآن (يوم)</span>
+              <input type="number" min={1} max={3650} required value={termDays} onChange={(e) => setTermDays(Number(e.target.value))} className="w-full rounded-lg border border-[#333] bg-[#191919] p-3 text-white" />
+            </label>
+            <label className="flex items-center gap-3 self-end rounded-lg border border-[#333] bg-[#191919] p-3 text-sm text-white">
+              <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="accent-[#2D9B6E]" />
+              الاشتراك مفعّل
+            </label>
+          </div>
+
+          <section>
+            <h3 className="text-sm font-semibold text-white mb-3">حدود الاستخدام</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {([
+                ["maxBranches", "الفروع"],
+                ["maxEmployees", "الموظفون"],
+                ["maxProducts", "المنتجات"],
+                ["maxOrders", "الطلبات"],
+              ] as const).map(([key, label]) => (
+                <label key={key} className="space-y-2 text-xs text-[#999]">
+                  <span>{label}</span>
+                  <input type="number" min={0} max={1000000} value={limits[key]} onChange={(e) => setLimits((current) => ({ ...current, [key]: Number(e.target.value) }))} className="w-full rounded-lg border border-[#333] bg-[#191919] p-2.5 text-white" />
+                </label>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-sm font-semibold text-white">الميزات والصلاحيات</h3>
+              <span className="text-xs text-[#666]">{ALL_FEATURES.length} ميزة</span>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {ALL_FEATURES.map((feature) => (
+                <label key={feature.key} className="flex items-center gap-3 rounded-lg border border-[#252525] bg-[#161616] p-3 text-sm text-[#ccc]">
+                  <input
+                    type="checkbox"
+                    checked={features[feature.key] ?? false}
+                    onChange={(e) => setFeatures((current) => ({ ...current, [feature.key]: e.target.checked }))}
+                    className="accent-[#2D9B6E]"
+                  />
+                  <span>{feature.nameAr}</span>
+                </label>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        <div className="flex justify-end gap-2 p-4 border-t border-[#242424]">
+          <button type="button" onClick={onClose} disabled={saving} className="px-4 py-2 rounded-lg border border-[#333] text-[#aaa] disabled:opacity-50">إلغاء</button>
+          <button type="submit" disabled={saving || !Number.isInteger(termDays) || termDays < 1} className="px-5 py-2 rounded-lg bg-[#2D9B6E] text-white font-medium disabled:opacity-50">
+            {saving ? "جارٍ الحفظ..." : "حفظ الاشتراك"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

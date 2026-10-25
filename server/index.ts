@@ -757,8 +757,8 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  registerQiroxRoutes(app);
   const server = await registerRoutes(app);
+  registerQiroxRoutes(app);
 
   // 404 guard for unknown /api/* paths — must come BEFORE Vite SPA fallback
   // so unmatched API routes return JSON 404 instead of being swallowed by index.html

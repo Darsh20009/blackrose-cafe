@@ -5953,7 +5953,10 @@ export interface IRefundOrder extends Document {
   cardAmount?: number;
   reason: string;
   notes?: string;
-  status: 'completed' | 'cancelled';
+  status: 'pending' | 'completed' | 'cancelled';
+  provider?: string;
+  providerTransactionId?: string;
+  providerRefundId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -5980,7 +5983,10 @@ const RefundOrderSchema = new Schema<IRefundOrder>({
   cardAmount: { type: Number, default: 0 },
   reason: { type: String, required: true },
   notes: { type: String },
-  status: { type: String, enum: ['completed', 'cancelled'], default: 'completed' },
+  status: { type: String, enum: ['pending', 'completed', 'cancelled'], default: 'completed' },
+  provider: { type: String },
+  providerTransactionId: { type: String },
+  providerRefundId: { type: String },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });
@@ -6013,7 +6019,7 @@ export const insertRefundOrderSchema = z.object({
   cardAmount: z.number().optional(),
   reason: z.string(),
   notes: z.string().optional(),
-  status: z.enum(['completed', 'cancelled']).optional(),
+  status: z.enum(['pending', 'completed', 'cancelled']).optional(),
 });
 
 // ─── AUDIT LOG ─────────────────────────────────────────────────────────────
@@ -6600,7 +6606,7 @@ export const EventLogModel = mongoose.models['EventLog'] || mongoose.model<IEven
 export interface IPaymentLog extends Document {
   id: string;
   tenantId?: string;
-  event: 'init' | 'verify' | 'callback' | 'webhook' | 'failed';
+  event: 'init' | 'verify' | 'callback' | 'webhook' | 'refund' | 'failed';
   provider: string;
   amount?: number;
   currency?: string;

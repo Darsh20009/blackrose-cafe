@@ -24,7 +24,7 @@ export default function QiroxLogin() {
       const data = await res.json();
       if (data.success) {
         localStorage.setItem("qirox_token", data.token);
-        setLocation("/qirox/dashboard");
+        setLocation("/qiroxstudio/dashboard");
       } else {
         setError(data.error || "Access denied");
       }

@@ -220,7 +220,9 @@ function AppRouter() {
   return (
     <Switch>
       {/* Super Admin */}
+      <Route path="/qiroxstudio/dashboard"><QiroxDashboard /></Route>
       <Route path="/qirox/dashboard"><QiroxDashboard /></Route>
+      <Route path="/qiroxstudio"><QiroxLogin /></Route>
       <Route path="/qirox"><QiroxLogin /></Route>
 
       {/* App-only onboarding (Capacitor native) */}

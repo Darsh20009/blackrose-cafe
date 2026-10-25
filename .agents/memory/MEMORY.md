@@ -17,3 +17,4 @@
 - [Codemagic publish fix](codemagic-publish-fix.md) — Root cause: missing aps-environment entitlement + no explicit export method. Fixed by creating App.entitlements with aps-environment:production, registering in pbxproj, and adding --export-xcargs method=app-store to build-ipa.
 - [flutter_app missing native scaffold](flutter-app-missing-native-scaffold.md) — flutter_app/ios & /android only had customization files in git, no real Xcode/Gradle project ever existed; this was the real cause of the App Store black screen.
 - [GitHub publishing](github-publishing.md) — The user has repeatedly requested that project updates be pushed to the connected GitHub repository.
+- [MongoDB startup bootstrap](mongodb-startup-bootstrap.md) — أجّل تهيئة الإدارة والهجرات إلى ما بعد تسجيل المسارات، وأعد المحاولة عند ازدحام الاتصال المؤقت.

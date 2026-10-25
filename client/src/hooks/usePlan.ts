@@ -11,6 +11,8 @@ import {
 interface Subscription {
   plan: PlanName;
   isActive: boolean;
+  expiresAt?: string | null;
+  features?: Record<string, boolean>;
   maxBranches: number;
   maxEmployees: number;
   maxProducts: number;
@@ -44,13 +46,17 @@ export function usePlan() {
 
   const subscription = config?.subscription;
   const plan: PlanName = subscription?.plan || "infinity";
-  const isActive = subscription?.isActive ?? true;
+  const isActive = (subscription?.isActive ?? true) &&
+    (!subscription?.expiresAt || new Date(subscription.expiresAt).getTime() > Date.now());
 
   function hasFeature(featureKey: FeatureKey | string): boolean {
     if (!isActive) return false;
 
     const featureDef = getFeatureByKey(featureKey);
     if (!featureDef) return true;
+
+    const configuredFeature = subscription?.features?.[featureKey];
+    if (typeof configuredFeature === "boolean") return configuredFeature;
 
     const directKey = featureKey as keyof Subscription;
     if (subscription && directKey in subscription && typeof (subscription as any)[directKey] === 'boolean') {

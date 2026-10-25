@@ -7,6 +7,8 @@ import { getDbStatus } from "./db-manager";
 
 export interface IQiroxAdmin extends Document {
   passwordHash: string;
+  passwordSeededAt?: Date;
+  subscriptionTerm21AppliedAt?: Date;
   sessionToken?: string;
   lastLogin?: Date;
   createdAt: Date;
@@ -14,6 +16,8 @@ export interface IQiroxAdmin extends Document {
 
 const QiroxAdminSchema = new Schema<IQiroxAdmin>({
   passwordHash: { type: String, required: true },
+  passwordSeededAt: { type: Date },
+  subscriptionTerm21AppliedAt: { type: Date },
   sessionToken: { type: String },
   lastLogin: { type: Date },
   createdAt: { type: Date, default: Date.now },
@@ -22,7 +26,7 @@ const QiroxAdminSchema = new Schema<IQiroxAdmin>({
 export const QiroxAdminModel = mongoose.models['QiroxAdmin'] || mongoose.model<IQiroxAdmin>("QiroxAdmin", QiroxAdminSchema);
 
 export type SubscriptionPlan = 'lite' | 'pro' | 'infinity';
-export const DEFAULT_SUBSCRIPTION_TERM_DAYS = 93;
+export const DEFAULT_SUBSCRIPTION_TERM_DAYS = 21;
 
 export interface ISubscriptionConfig extends Document {
   tenantId: string;
@@ -200,14 +204,100 @@ const PLAN_DEFAULTS: Record<SubscriptionPlan, Partial<ISubscriptionConfig>> = {
   },
 };
 
-const SUPER_ADMIN_PASSWORD = "11222333344444555555";
+const SUBSCRIPTION_FEATURE_KEYS = new Set([
+  'posSystem', 'kitchenDisplay', 'customerApp', 'menuManagement', 'orderManagement',
+  'employeeManagement', 'basicReports', 'tableManagement', 'inventoryManagement',
+  'recipeManagement', 'supplierManagement', 'loyaltyProgram', 'giftCards',
+  'deliveryManagement', 'payrollManagement', 'accountingModule', 'zatcaCompliance',
+  'advancedAnalytics', 'customBranding', 'reservations', 'promotionsManagement',
+  'multiBranch', 'warehouseManagement', 'erpIntegration', 'b2bMarketplace',
+  'partnerProgram', 'apiAccess', 'hardwareSupport', 'biAnalytics', 'offlineMode',
+  'unlimitedBranches', 'whiteLabel', 'dedicatedSupport',
+]);
+
+const SUBSCRIPTION_BOOLEAN_FIELDS = [
+  'customBranding', 'apiAccess', 'advancedAnalytics', 'multiLanguage',
+  'inventoryManagement', 'recipeManagement', 'accountingModule', 'erpIntegration',
+  'deliveryManagement', 'loyaltyProgram', 'giftCards', 'tableManagement',
+  'kitchenDisplay', 'customerApp', 'posSystem', 'payrollManagement',
+  'supplierManagement', 'warehouseManagement', 'zatcaCompliance',
+] as const;
+
+const SUBSCRIPTION_LIMIT_FIELDS = [
+  'maxBranches', 'maxEmployees', 'maxProducts', 'maxOrders',
+] as const;
+
+function parseTermDays(value: unknown): number | null {
+  const days = Number(value);
+  return Number.isInteger(days) && days >= 1 && days <= 3650 ? days : null;
+}
+
+function sanitizeFeatureFlags(value: unknown): Record<string, boolean> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const flags: Record<string, boolean> = {};
+  for (const [key, enabled] of Object.entries(value as Record<string, unknown>)) {
+    if (SUBSCRIPTION_FEATURE_KEYS.has(key) && typeof enabled === 'boolean') {
+      flags[key] = enabled;
+    }
+  }
+  return flags;
+}
 
 async function ensureSuperAdmin() {
-  const existing = await QiroxAdminModel.findOne();
-  if (!existing) {
-    const hash = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 12);
-    await QiroxAdminModel.create({ passwordHash: hash });
+  const configuredPassword = process.env.QIROX_STUDIO_ADMIN_PASSWORD?.trim();
+  let admin = await QiroxAdminModel.findOne();
+  if (!admin) {
+    if (!configuredPassword) {
+      console.error("[Qirox] QIROX_STUDIO_ADMIN_PASSWORD is required to initialize the super-admin account.");
+      return;
+    }
+    const hash = await bcrypt.hash(configuredPassword, 12);
+    admin = await QiroxAdminModel.create({ passwordHash: hash, passwordSeededAt: new Date() });
   }
+
+  if (configuredPassword && !admin.passwordSeededAt) {
+    admin.passwordHash = await bcrypt.hash(configuredPassword, 12);
+    admin.passwordSeededAt = new Date();
+    admin.sessionToken = undefined;
+    await admin.save();
+  }
+
+  if (!admin.subscriptionTerm21AppliedAt) {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + DEFAULT_SUBSCRIPTION_TERM_DAYS * 24 * 60 * 60 * 1000);
+    const result = await SubscriptionConfigModel.updateMany(
+      {},
+      { $set: { activatedAt: now, expiresAt, updatedAt: now } },
+    );
+    admin.subscriptionTerm21AppliedAt = now;
+    await admin.save();
+    await SystemLogModel.create({
+      action: 'subscription_term_21_day_initialization',
+      details: `Set 21 days for ${result.modifiedCount} existing subscriptions`,
+      performedBy: 'qirox-admin',
+    }).catch(() => {});
+    console.info(`[Qirox] Applied the initial 21-day term to ${result.modifiedCount} existing subscriptions.`);
+  }
+}
+
+async function initializeSuperAdminWithRetry() {
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  await wait(2000);
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      if (mongoose.connection.readyState !== 1) await wait(1500);
+      await ensureSuperAdmin();
+      return;
+    } catch (error: any) {
+      lastError = error;
+      console.warn(`[Qirox] Initialization attempt ${attempt + 1}/5 failed; will retry.`);
+      if (attempt < 4) await wait(Math.min(2000 * 2 ** attempt, 10000));
+    }
+  }
+
+  throw lastError || new Error("Qirox initialization failed");
 }
 
 interface QiroxAuthRequest extends Request {
@@ -229,7 +319,9 @@ function requireQiroxAuth(req: QiroxAuthRequest, res: Response, next: NextFuncti
 }
 
 export function registerQiroxRoutes(app: ReturnType<typeof Router> | any) {
-  ensureSuperAdmin();
+  const superAdminReady = initializeSuperAdminWithRetry().catch((error) => {
+    console.error("[Qirox] Failed to initialize super-admin account:", error?.message || "Unknown error");
+  });
 
   const qiroxLoginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -241,6 +333,7 @@ export function registerQiroxRoutes(app: ReturnType<typeof Router> | any) {
 
   app.post("/api/qirox/login", qiroxLoginLimiter, async (req: Request, res: Response) => {
     try {
+      await superAdminReady;
       const { password } = req.body;
       if (!password) {
         return res.status(400).json({ error: "Password required" });
@@ -366,9 +459,13 @@ export function registerQiroxRoutes(app: ReturnType<typeof Router> | any) {
   app.get("/api/qirox/tenants", requireQiroxAuth, async (req: QiroxAuthRequest, res: Response) => {
     try {
       const CafeCollection = mongoose.connection.collection('cafes');
-      const tenants = await CafeCollection.find().toArray();
+      const [cafeTenants, subscriptions] = await Promise.all([
+        CafeCollection.find().toArray(),
+        SubscriptionConfigModel.find().lean(),
+      ]);
+      const tenantIds = new Set(cafeTenants.map((tenant: any) => String(tenant.tenantId || tenant._id?.toString() || '')));
       
-      const tenantsWithSubs = await Promise.all(tenants.map(async (t: any) => {
+      const tenantsWithSubs = await Promise.all(cafeTenants.map(async (t: any) => {
         const sub = await SubscriptionConfigModel.findOne({ tenantId: t.tenantId || t._id?.toString() });
         const BranchCollection = mongoose.connection.collection('branches');
         const branchCount = await BranchCollection.countDocuments({ tenantId: t.tenantId || t._id?.toString() });
@@ -382,7 +479,19 @@ export function registerQiroxRoutes(app: ReturnType<typeof Router> | any) {
         };
       }));
 
-      res.json(tenantsWithSubs);
+      const subscriptionOnlyTenants = subscriptions
+        .filter((sub) => !tenantIds.has(String(sub.tenantId)))
+        .map((sub) => ({
+          _id: sub.tenantId,
+          tenantId: sub.tenantId,
+          name: sub.tenantId,
+          nameAr: sub.tenantId,
+          subscription: sub,
+          branchCount: 0,
+          employeeCount: 0,
+        }));
+
+      res.json([...tenantsWithSubs, ...subscriptionOnlyTenants]);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -392,6 +501,32 @@ export function registerQiroxRoutes(app: ReturnType<typeof Router> | any) {
     try {
       const subscriptions = await SubscriptionConfigModel.find().lean();
       res.json(subscriptions);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/qirox/subscriptions/term-all", requireQiroxAuth, async (req: QiroxAuthRequest, res: Response) => {
+    try {
+      const termDays = parseTermDays(req.body?.termDays);
+      if (termDays === null) {
+        return res.status(400).json({ error: "termDays must be an integer from 1 to 3650" });
+      }
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + termDays * 24 * 60 * 60 * 1000);
+      const result = await SubscriptionConfigModel.updateMany(
+        {},
+        { $set: { activatedAt: now, expiresAt, updatedAt: now } },
+      );
+
+      await SystemLogModel.create({
+        action: 'subscription_term_bulk_updated',
+        details: `Set ${termDays} days for ${result.modifiedCount} existing subscriptions`,
+        performedBy: 'qirox-admin',
+      });
+
+      res.json({ success: true, termDays, updated: result.modifiedCount, expiresAt });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -409,15 +544,37 @@ export function registerQiroxRoutes(app: ReturnType<typeof Router> | any) {
         return res.status(400).json({ error: "Invalid plan. Use: lite, pro, infinity" });
       }
 
+      const termDays = req.body.termDays === undefined
+        ? DEFAULT_SUBSCRIPTION_TERM_DAYS
+        : parseTermDays(req.body.termDays);
+      if (termDays === null) {
+        return res.status(400).json({ error: "termDays must be an integer from 1 to 3650" });
+      }
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + termDays * 24 * 60 * 60 * 1000);
+      const featureFlags = req.body.features === undefined ? {} : sanitizeFeatureFlags(req.body.features);
+      if (req.body.features !== undefined && featureFlags === null) {
+        return res.status(400).json({ error: "features must be an object of boolean feature flags" });
+      }
+
       let sub = await SubscriptionConfigModel.findOne({ tenantId });
       if (sub) {
-        Object.assign(sub, planDefaults, { plan, updatedAt: new Date() });
+        Object.assign(sub, planDefaults, {
+          plan,
+          activatedAt: now,
+          expiresAt,
+          ...(featureFlags ? { features: { ...(sub.features || {}), ...featureFlags } } : {}),
+          updatedAt: now,
+        });
         await sub.save();
       } else {
         sub = await SubscriptionConfigModel.create({
           tenantId,
           plan,
           ...planDefaults,
+          ...(featureFlags ? { features: featureFlags } : {}),
+          activatedAt: now,
+          expiresAt,
           activatedBy: 'qirox-admin',
         });
       }
@@ -437,14 +594,72 @@ export function registerQiroxRoutes(app: ReturnType<typeof Router> | any) {
   app.put("/api/qirox/subscriptions/:tenantId", requireQiroxAuth, async (req: QiroxAuthRequest, res: Response) => {
     try {
       const { tenantId } = req.params;
-      const updates = req.body;
+      const updates = req.body || {};
 
       let sub = await SubscriptionConfigModel.findOne({ tenantId });
       if (!sub) {
         return res.status(404).json({ error: "Subscription not found" });
       }
 
-      Object.assign(sub, updates, { updatedAt: new Date() });
+      const now = new Date();
+      if (updates.plan !== undefined) {
+        if (!Object.prototype.hasOwnProperty.call(PLAN_DEFAULTS, updates.plan)) {
+          return res.status(400).json({ error: "Invalid plan. Use: lite, pro, infinity" });
+        }
+        sub.plan = updates.plan;
+      }
+
+      const termDays = updates.termDays === undefined ? undefined : parseTermDays(updates.termDays);
+      if (updates.termDays !== undefined && termDays === null) {
+        return res.status(400).json({ error: "termDays must be an integer from 1 to 3650" });
+      }
+      if (termDays !== undefined && termDays !== null) {
+        sub.activatedAt = now;
+        sub.expiresAt = new Date(now.getTime() + termDays * 24 * 60 * 60 * 1000);
+      }
+
+      if (updates.isActive !== undefined) {
+        if (typeof updates.isActive !== 'boolean') {
+          return res.status(400).json({ error: "isActive must be a boolean" });
+        }
+        sub.isActive = updates.isActive;
+      }
+
+      for (const field of SUBSCRIPTION_BOOLEAN_FIELDS) {
+        if (updates[field] !== undefined) {
+          if (typeof updates[field] !== 'boolean') {
+            return res.status(400).json({ error: `${field} must be a boolean` });
+          }
+          (sub as any)[field] = updates[field];
+        }
+      }
+
+      for (const field of SUBSCRIPTION_LIMIT_FIELDS) {
+        if (updates[field] !== undefined) {
+          const value = Number(updates[field]);
+          if (!Number.isInteger(value) || value < 0 || value > 1000000) {
+            return res.status(400).json({ error: `${field} must be an integer from 0 to 1000000` });
+          }
+          (sub as any)[field] = value;
+        }
+      }
+
+      if (updates.supportPriority !== undefined) {
+        if (!['basic', 'priority', 'dedicated'].includes(updates.supportPriority)) {
+          return res.status(400).json({ error: "Invalid supportPriority" });
+        }
+        sub.supportPriority = updates.supportPriority;
+      }
+
+      if (updates.features !== undefined) {
+        const featureFlags = sanitizeFeatureFlags(updates.features);
+        if (!featureFlags) {
+          return res.status(400).json({ error: "features must be an object of boolean feature flags" });
+        }
+        sub.features = { ...(sub.features || {}), ...featureFlags };
+      }
+
+      sub.updatedAt = now;
       await sub.save();
 
       await SystemLogModel.create({
@@ -552,6 +767,7 @@ export function registerQiroxRoutes(app: ReturnType<typeof Router> | any) {
       if (!valid) return res.status(401).json({ error: "Current password incorrect" });
 
       admin.passwordHash = await bcrypt.hash(newPassword, 12);
+      admin.passwordSeededAt = admin.passwordSeededAt || new Date();
       admin.sessionToken = crypto.randomBytes(48).toString('hex');
       await admin.save();
 
