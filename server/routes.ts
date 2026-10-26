@@ -5638,7 +5638,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (pg.provider === 'paymob') {
         const secretKey = process.env.PAYMOB_SECRET_KEY || pg.paymob?.secretKey;
         const publicKey = process.env.PAYMOB_PUBLIC_KEY || pg.paymob?.publicKey;
-        const baseUrl = String(pg.paymob?.baseUrl || 'https://ksa.paymob.com').replace(/\/+$/, '');
 
         if (secretKey && publicKey) {
           const integrationIds = Array.isArray(pg.paymob?.integrationIds)
@@ -5648,41 +5647,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.json({ success: false, message: "مفتاحا Paymob موجودان لكن معرّف تكامل البطاقة غير مهيأ" });
           }
 
-          try {
-            const testResponse = await fetch(
-              `${baseUrl}/v1/intention/0/`,
-              {
-                method: 'GET',
-                headers: {
-                  'Authorization': `Token ${secretKey}`,
-                  'Accept': 'application/json',
-                },
-              },
-            );
-
-            if (testResponse.ok || testResponse.status === 404) {
-              return res.json({
-                success: true,
-                message: "اتصال Paymob السعودية ومصادقة المفتاح ناجحان. لم يتم إنشاء دفعة.",
-                provider: 'paymob',
-                flow: 'sa-unified',
-              });
-            }
-
-            const errorData = await testResponse.json().catch(() => ({})) as any;
-            const detail = String(errorData?.detail || errorData?.message || `HTTP ${testResponse.status}`).slice(0, 200);
-            return res.json({
-              success: false,
-              message: testResponse.status === 401 || testResponse.status === 403
-                ? "Paymob السعودية رفض بيانات المصادقة؛ راجع Secret Key لحساب الإنتاج."
-                : "تعذر التحقق من اتصال Paymob السعودية.",
-              details: detail,
-              provider: 'paymob',
-              httpStatus: testResponse.status,
-            });
-          } catch (err: any) {
-            return res.json({ success: false, message: `خطأ في الاتصال بـ Paymob السعودية: ${err.message}` });
-          }
+          return res.json({
+            success: false,
+            message: "Paymob السعودية لا يوفر فحص مصادقة للقراءة فقط؛ يلزم إنشاء جلسة دفع للتحقق. لم يتم إنشاء جلسة أو خصم مبلغ.",
+            provider: 'paymob',
+            flow: 'sa-unified',
+          });
         }
 
         const apiKey = pg.paymob?.apiKey;
