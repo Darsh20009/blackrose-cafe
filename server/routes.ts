@@ -3592,7 +3592,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           allMethods.push({ id: 'apple_pay', nameAr: 'Apple Pay', nameEn: 'Apple Pay', details: 'الدفع السريع عبر Apple Pay', icon: 'fas fa-mobile-alt', gateway: 'geidea' });
         }
       } else if (pg?.provider === 'paymob') {
-        const hasSACredentials = !!(pg.paymob?.secretKey && pg.paymob?.publicKey);
+        const hasSACredentials = !!(
+          (process.env.PAYMOB_SECRET_KEY || pg.paymob?.secretKey)
+          && (process.env.PAYMOB_PUBLIC_KEY || pg.paymob?.publicKey)
+        );
         const hasLegacyCredentials = !!(pg.paymob?.apiKey && pg.paymob?.integrationId && pg.paymob?.iframeId);
         const cardIntegrationIds = Array.isArray(pg.paymob?.integrationIds)
           ? pg.paymob.integrationIds.map((id: unknown) => Number(id)).filter((id: number) => Number.isSafeInteger(id) && id > 0)
@@ -3773,17 +3776,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           callbackUrl: pg.geidea?.callbackUrl || '',
         },
         paymob: {
-          configured: !!(pg.paymob?.secretKey || (pg.paymob?.apiKey && pg.paymob?.integrationId)),
+          configured: !!(
+            process.env.PAYMOB_SECRET_KEY
+            || pg.paymob?.secretKey
+            || (pg.paymob?.apiKey && pg.paymob?.integrationId)
+          ),
           apiKey: maskSecret(pg.paymob?.apiKey),
           integrationId: pg.paymob?.integrationId || '',
           iframeId: pg.paymob?.iframeId || '',
           integrationIds: pg.paymob?.integrationIds || [],
           applePayIntegrationId: pg.paymob?.applePayIntegrationId || '',
           walletIntegrationId: pg.paymob?.walletIntegrationId || '',
-          hmacSecret: maskSecret(pg.paymob?.hmacSecret),
+          hmacSecret: maskSecret(process.env.PAYMOB_HMAC_SECRET || pg.paymob?.hmacSecret),
           callbackUrl: pg.paymob?.callbackUrl || '',
-          secretKey: maskSecret(pg.paymob?.secretKey),
-          publicKey: pg.paymob?.publicKey || '',
+          secretKey: maskSecret(process.env.PAYMOB_SECRET_KEY || pg.paymob?.secretKey),
+          publicKey: process.env.PAYMOB_PUBLIC_KEY || pg.paymob?.publicKey || '',
           baseUrl: pg.paymob?.baseUrl || 'https://ksa.paymob.com',
         },
       });
@@ -4152,8 +4159,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (pg.provider === 'paymob') {
-        const secretKey = pg.paymob?.secretKey || process.env.PAYMOB_SECRET_KEY;
-        const publicKey = pg.paymob?.publicKey || process.env.PAYMOB_PUBLIC_KEY;
+        const secretKey = process.env.PAYMOB_SECRET_KEY || pg.paymob?.secretKey;
+        const publicKey = process.env.PAYMOB_PUBLIC_KEY || pg.paymob?.publicKey;
         const hasSACredentials = !!(secretKey && publicKey);
 
         if (hasSACredentials) {
@@ -4614,7 +4621,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Method 2: No callback params — try PayMob SA Intention API to check status
-        const secretKey = pg?.paymob?.secretKey || process.env.PAYMOB_SECRET_KEY;
+        const secretKey = process.env.PAYMOB_SECRET_KEY || pg?.paymob?.secretKey;
         const baseUrl = String(pg?.paymob?.baseUrl || 'https://ksa.paymob.com').replace(/\/+$/, '');
         if (secretKey && sessionId) {
           try {
@@ -5133,7 +5140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const tenantId = record.orderData?.tenantId || getTenantIdFromRequest(req) || await getDefaultTenantId();
           const config = await BusinessConfigModel.findOne({ tenantId }).lean() as any;
           const pg = config?.paymentGateway;
-          const secretKey = pg?.paymob?.secretKey || process.env.PAYMOB_SECRET_KEY;
+          const secretKey = process.env.PAYMOB_SECRET_KEY || pg?.paymob?.secretKey;
           const baseUrl = String(pg?.paymob?.baseUrl || 'https://ksa.paymob.com').replace(/\/+$/, '');
 
           if (secretKey) {
@@ -5303,7 +5310,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           const config = await BusinessConfigModel.findOne({ tenantId });
           const pg = config?.paymentGateway;
-          const secretKey = pg?.paymob?.secretKey;
+          const secretKey = process.env.PAYMOB_SECRET_KEY || pg?.paymob?.secretKey;
           const baseUrl = String(pg?.paymob?.baseUrl || 'https://ksa.paymob.com').replace(/\/+$/, '');
 
           if (secretKey) {
@@ -5382,7 +5389,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const tenantId = getTenantIdFromRequest(req) || await getDefaultTenantId();
       const config = await BusinessConfigModel.findOne({ tenantId });
-      const hmacSecret = config?.paymentGateway?.paymob?.hmacSecret;
+      const hmacSecret = process.env.PAYMOB_HMAC_SECRET || config?.paymentGateway?.paymob?.hmacSecret;
 
       if (hmacSecret) {
         const crypto = await import('crypto');
@@ -10546,7 +10553,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const config = await BusinessConfigModel.findOne({ tenantId }).lean() as any;
         const paymob = config?.paymentGateway?.paymob;
-        const secretKey = paymob?.secretKey || process.env.PAYMOB_SECRET_KEY;
+        const secretKey = process.env.PAYMOB_SECRET_KEY || paymob?.secretKey;
         const baseUrl = String(paymob?.baseUrl || 'https://ksa.paymob.com').replace(/\/+$/, '');
         if (!secretKey) {
           return res.status(503).json({ error: "مفتاح Paymob السري غير مهيأ؛ لم يتم تسجيل الاسترداد" });
