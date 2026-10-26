@@ -27,7 +27,8 @@ export default function MyCardPage() {
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferPhone, setTransferPhone] = useState("");
   const [transferPoints, setTransferPoints] = useState("");
-  const [transferPin, setTransferPin] = useState("");
+  const [transferCode, setTransferCode] = useState("");
+  const [transferOtpSent, setTransferOtpSent] = useState(false);
   const tc = useTranslate();
   const { i18n } = useTranslation();
   const dir = i18n.language.startsWith("en") ? "ltr" : "rtl";
@@ -58,8 +59,28 @@ export default function MyCardPage() {
       .catch(console.error);
   }, [card?.qrToken, card?.cardNumber]);
 
+  const transferOtpMutation = useMutation({
+    mutationFn: async (data: { recipientPhone: string; points: number }) =>
+      apiRequest("POST", "/api/customer/transfer-points/request-otp", data),
+    onSuccess: () => {
+      setTransferOtpSent(true);
+      setTransferCode("");
+      toast({
+        title: tc("تم إرسال رمز واتساب", "WhatsApp code sent"),
+        description: tc("أدخل الرمز المرسل إلى واتساب المسجل في حسابك", "Enter the code sent to the WhatsApp number registered to your account"),
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: tc("تعذر إرسال الرمز", "Could not send code"),
+        description: err?.message || tc("تحقق من اتصال واتساب وحاول مجدداً", "Check WhatsApp delivery and try again"),
+        variant: "destructive",
+      });
+    },
+  });
+
   const transferMutation = useMutation({
-    mutationFn: async (data: { recipientPhone: string; points: number; pin?: string }) =>
+    mutationFn: async (data: { recipientPhone: string; points: number; code: string }) =>
       apiRequest("POST", "/api/customer/transfer-points", data),
     onSuccess: () => {
       toast({
@@ -70,7 +91,8 @@ export default function MyCardPage() {
       qc.invalidateQueries({ queryKey: ["/api/customer/loyalty-transactions"] });
       setTransferPhone("");
       setTransferPoints("");
-      setTransferPin("");
+      setTransferCode("");
+      setTransferOtpSent(false);
       setShowTransfer(false);
     },
     onError: (err: any) => {
@@ -80,8 +102,8 @@ export default function MyCardPage() {
   });
 
   const handleTransfer = () => {
-    const pts = parseInt(transferPoints);
-    if (!transferPhone || !pts || pts <= 0) {
+    const pts = Number(transferPoints);
+    if (!transferPhone || !Number.isSafeInteger(pts) || pts <= 0) {
       toast({ title: tc("خطأ", "Error"), description: tc("أدخل رقم الجوال والنقاط", "Enter phone and points"), variant: "destructive" });
       return;
     }
@@ -89,7 +111,15 @@ export default function MyCardPage() {
       toast({ title: tc("خطأ", "Error"), description: tc("النقاط غير كافية", "Insufficient points"), variant: "destructive" });
       return;
     }
-    transferMutation.mutate({ recipientPhone: transferPhone, points: pts, pin: transferPin || undefined });
+    if (!transferOtpSent) {
+      transferOtpMutation.mutate({ recipientPhone: transferPhone, points: pts });
+      return;
+    }
+    if (!/^\d{6}$/.test(transferCode.trim())) {
+      toast({ title: tc("خطأ", "Error"), description: tc("أدخل رمز واتساب المكوّن من 6 أرقام", "Enter the 6-digit WhatsApp code"), variant: "destructive" });
+      return;
+    }
+    transferMutation.mutate({ recipientPhone: transferPhone, points: pts, code: transferCode.trim() });
   };
 
   const isIOS = isAppleMobileDevice();
@@ -288,7 +318,13 @@ export default function MyCardPage() {
             <div>
               {!showTransfer ? (
                 <button
-                  onClick={() => setShowTransfer(true)}
+                  onClick={() => {
+                    setTransferPhone("");
+                    setTransferPoints("");
+                    setTransferCode("");
+                    setTransferOtpSent(false);
+                    setShowTransfer(true);
+                  }}
                   data-testid="button-open-transfer"
                   className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-primary/30 text-sm font-semibold text-primary transition-colors hover:bg-primary/5"
                 >
@@ -302,26 +338,68 @@ export default function MyCardPage() {
                   </p>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">{tc("رقم جوال المستلم", "Recipient Phone")}</Label>
-                    <Input placeholder="05xxxxxxxx" value={transferPhone} onChange={(e) => setTransferPhone(e.target.value)} dir="ltr"
+                    <Input placeholder="05xxxxxxxx" value={transferPhone} disabled={transferOtpSent} onChange={(e) => setTransferPhone(e.target.value)} dir="ltr"
                       className="h-11 rounded-xl bg-background text-foreground placeholder:text-muted-foreground" data-testid="input-transfer-phone" />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">{tc("عدد النقاط", "Points")}</Label>
-                    <Input type="number" placeholder={tc("أدخل عدد النقاط", "Enter points")} value={transferPoints} onChange={(e) => setTransferPoints(e.target.value)}
+                    <Input type="number" placeholder={tc("أدخل عدد النقاط", "Enter points")} value={transferPoints} disabled={transferOtpSent} onChange={(e) => setTransferPoints(e.target.value)}
                       min={1} max={points} className="h-11 rounded-xl bg-background text-foreground placeholder:text-muted-foreground" data-testid="input-transfer-points" />
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">{tc("كلمة المرور", "Password")}</Label>
-                    <Input type="password" placeholder={tc("كلمة المرور", "Password")} value={transferPin} onChange={(e) => setTransferPin(e.target.value)}
-                      className="h-11 rounded-xl bg-background text-foreground placeholder:text-muted-foreground" data-testid="input-transfer-pin" />
-                  </div>
+                  {transferOtpSent && (
+                    <div className="space-y-2">
+                      <Label htmlFor="transfer-whatsapp-code" className="text-xs text-muted-foreground">
+                        {tc("رمز واتساب المرسل إلى رقمك المسجل", "WhatsApp code sent to your registered number")}
+                      </Label>
+                      <Input
+                        id="transfer-whatsapp-code"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        placeholder="••••••"
+                        value={transferCode}
+                        onChange={(e) => setTransferCode(e.target.value
+                          .replace(/[٠-٩]/g, digit => String(digit.charCodeAt(0) - 0x0660))
+                          .replace(/[۰-۹]/g, digit => String(digit.charCodeAt(0) - 0x06f0))
+                          .replace(/\D/g, "")
+                          .slice(0, 6))}
+                        dir="ltr"
+                        className="h-11 rounded-xl bg-background text-foreground placeholder:text-muted-foreground text-center tracking-[0.4em]"
+                        data-testid="input-transfer-whatsapp-code"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => transferOtpMutation.mutate({ recipientPhone: transferPhone, points: Number(transferPoints) })}
+                        disabled={transferOtpMutation.isPending}
+                        className="text-xs text-primary underline underline-offset-4 disabled:opacity-50"
+                        data-testid="button-resend-transfer-code"
+                      >
+                        {transferOtpMutation.isPending ? tc("جارٍ الإرسال...", "Sending...") : tc("إعادة إرسال رمز واتساب", "Resend WhatsApp code")}
+                      </button>
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <Button className="h-11 flex-1 rounded-xl font-bold"
-                      onClick={handleTransfer} disabled={transferMutation.isPending || !transferPhone || !transferPoints} data-testid="button-confirm-transfer">
-                      {transferMutation.isPending ? tc("جاري...", "Sending...") : tc("تأكيد التحويل", "Confirm")}
+                      onClick={handleTransfer}
+                      disabled={transferMutation.isPending || transferOtpMutation.isPending || !transferPhone || !transferPoints || (transferOtpSent && !/^\d{6}$/.test(transferCode.trim()))}
+                      data-testid="button-confirm-transfer">
+                      {transferMutation.isPending
+                        ? tc("جارٍ التحويل...", "Transferring...")
+                        : transferOtpMutation.isPending
+                          ? tc("جارٍ إرسال الرمز...", "Sending code...")
+                          : transferOtpSent
+                            ? tc("تأكيد التحويل", "Confirm transfer")
+                            : tc("إرسال رمز واتساب", "Send WhatsApp code")}
                     </Button>
                     <Button variant="outline" className="h-11 rounded-xl border-border text-muted-foreground hover:bg-muted"
-                      onClick={() => setShowTransfer(false)} data-testid="button-cancel-transfer">
+                      onClick={() => {
+                        setTransferPhone("");
+                        setTransferPoints("");
+                        setTransferCode("");
+                        setTransferOtpSent(false);
+                        setShowTransfer(false);
+                      }} data-testid="button-cancel-transfer">
                       {tc("إلغاء", "Cancel")}
                     </Button>
                   </div>

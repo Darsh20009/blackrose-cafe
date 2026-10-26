@@ -689,6 +689,38 @@ LoginOTPSchema.index({ phone: 1, userType: 1 }, { unique: true });
 
 export const LoginOTPModel = mongoose.model<ILoginOTP>("LoginOTP", LoginOTPSchema);
 
+export interface ICustomerTransferOTP extends Document {
+  customerId: string;
+  senderPhone: string;
+  recipientPhone: string;
+  points: number;
+  codeHash: string;
+  expiresAt: Date;
+  used: boolean;
+  attempts: number;
+  lastSentAt: Date;
+  createdAt: Date;
+}
+
+const CustomerTransferOTPSchema = new Schema<ICustomerTransferOTP>({
+  customerId: { type: String, required: true },
+  senderPhone: { type: String, required: true },
+  recipientPhone: { type: String, required: true },
+  points: { type: Number, required: true, min: 1 },
+  codeHash: { type: String, required: true },
+  expiresAt: { type: Date, required: true },
+  used: { type: Boolean, default: false, required: true },
+  attempts: { type: Number, default: 0, required: true },
+  lastSentAt: { type: Date, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+
+CustomerTransferOTPSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+CustomerTransferOTPSchema.index({ customerId: 1 }, { unique: true });
+
+export const CustomerTransferOTPModel = mongoose.models.CustomerTransferOTP
+  || mongoose.model<ICustomerTransferOTP>("CustomerTransferOTP", CustomerTransferOTPSchema);
+
 // Multi-Tenant: Cafe Management
 export interface ICafe extends Document {
   id: string;

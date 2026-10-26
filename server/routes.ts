@@ -23,6 +23,9 @@ import {
   ReferralModel, 
   NotificationModel, 
   CustomerModel, 
+  CustomerTransferOTPModel,
+  LoyaltyCardModel,
+  LoyaltyTransactionModel,
   TableModel, 
   CafeModel, 
   AccountingSnapshotModel, 
@@ -75,6 +78,8 @@ import { requireAuth, requireManager, requireAdmin, filterByBranch, requireKitch
 import { logFromRequest, logAudit } from "./audit-logger";
 import { PermissionsEngine, PERMISSIONS } from "./permissions-engine";
 import { registerPhoneOtpAuthRoutes } from "./phone-otp-auth";
+import { parsePhoneNumberFromString } from "libphonenumber-js";
+import { sendQiroxWhatsAppCode } from "./qirox-project-integrations";
 import { requireTenant, getTenantIdFromRequest } from "./middleware/tenant";
 import { TenantModel } from "@shared/tenant-schema";
 import { wsManager } from "./websocket";
@@ -86,6 +91,54 @@ import fs from "fs";
 import { Types } from "mongoose";
 import { nanoid } from "nanoid";
 const isValidObjectId = (id: string) => Types.ObjectId.isValid(id);
+
+function normalizeLoyaltyPhone(value: unknown) {
+  let input = String(value ?? "")
+    .replace(/[٠-٩]/g, digit => String(digit.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, digit => String(digit.charCodeAt(0) - 0x06f0))
+    .trim();
+
+  if (input.startsWith("00")) input = `+${input.slice(2).replace(/\D/g, "")}`;
+  const parsed = parsePhoneNumberFromString(input, "SA");
+  if (!parsed?.isValid()) return null;
+
+  const aliases = new Set([parsed.number, parsed.number.slice(1), `00${parsed.number.slice(1)}`]);
+  if (parsed.country === "SA") {
+    aliases.add(parsed.nationalNumber);
+    aliases.add(`0${parsed.nationalNumber}`);
+  }
+
+  return { e164: parsed.number, aliases: [...aliases] };
+}
+
+function hashLoyaltyTransferOtp(
+  customerId: string,
+  senderPhone: string,
+  recipientPhone: string,
+  points: number,
+  code: string,
+) {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret || secret === "dev-secret") throw new Error("OTP signing secret is unavailable");
+  return crypto
+    .createHmac("sha256", secret)
+    .update(`customer-transfer:${customerId}:${senderPhone}:${recipientPhone}:${points}:${code}`)
+    .digest("hex");
+}
+
+function safeHashEquals(left: string, right: string) {
+  const leftBuffer = Buffer.from(left, "hex");
+  const rightBuffer = Buffer.from(right, "hex");
+  return leftBuffer.length > 0 && leftBuffer.length === rightBuffer.length
+    && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function normalizeOtpDigits(value: unknown) {
+  return String(value ?? "")
+    .replace(/[٠-٩]/g, digit => String(digit.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, digit => String(digit.charCodeAt(0) - 0x06f0))
+    .replace(/\D/g, "");
+}
 
 // ─── Default Tenant Resolver ─────────────────────────────────────────────────
 // For unauthenticated requests (online customers, PayMob webhooks) there is no
@@ -12196,96 +12249,270 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Transfer points between customers
+  app.post("/api/customer/transfer-points/request-otp", requireCustomerAuth, async (req: CustomerAuthRequest, res) => {
+    try {
+      const points = Number(req.body?.points);
+      const recipientPhone = normalizeLoyaltyPhone(req.body?.recipientPhone);
+      const sessionPhone = normalizeLoyaltyPhone(req.customer?.phone);
+      const customer = req.customer?.id ? await storage.getCustomer(req.customer.id) : undefined;
+      const senderPhone = normalizeLoyaltyPhone(customer?.phone || req.customer?.phone);
+
+      if (!Number.isSafeInteger(points) || points <= 0 || !recipientPhone || !sessionPhone || !senderPhone) {
+        return res.status(400).json({ error: "تحقق من رقم المستلم وعدد النقاط" });
+      }
+      if (senderPhone.e164 !== sessionPhone.e164) {
+        return res.status(401).json({ error: "تغير رقم حسابك. سجّل الدخول مجدداً لإرسال الرمز." });
+      }
+      if (recipientPhone.e164 === senderPhone.e164) {
+        return res.status(400).json({ error: "لا يمكن تحويل النقاط إلى رقمك. أدخل رقم صديق آخر." });
+      }
+      if (!customer) return res.status(401).json({ error: "تعذر التحقق من حسابك، سجّل الدخول مجدداً" });
+
+      const customerId = String((customer as any).id || (customer as any)._id?.toString() || req.customer!.id);
+      const customerIds = [...new Set([req.customer!.id, (customer as any).id, (customer as any)._id?.toString()].filter(Boolean).map(String))];
+      const senderCard = await LoyaltyCardModel.findOne({
+        $or: [
+          { customerId: { $in: customerIds } },
+          { phoneNumber: { $in: senderPhone.aliases } },
+        ],
+      });
+      if (!senderCard) return res.status(404).json({ error: "بطاقة الولاء غير موجودة" });
+      if ((senderCard.points || 0) < points) return res.status(400).json({ error: "رصيد النقاط غير كافٍ" });
+
+      const recipientCustomer = await CustomerModel.findOne({ phone: { $in: recipientPhone.aliases } });
+      if (!recipientCustomer) return res.status(404).json({ error: "المستلم غير مسجل في النظام" });
+      const recipientCustomerId = String((recipientCustomer as any).id || (recipientCustomer as any)._id?.toString());
+      const senderObjectId = (customer as any)._id?.toString();
+      const recipientObjectId = (recipientCustomer as any)._id?.toString();
+      if (
+        recipientCustomerId === customerId
+        || (senderObjectId && senderObjectId === recipientObjectId)
+      ) {
+        return res.status(400).json({ error: "لا يمكن تحويل النقاط إلى حسابك" });
+      }
+
+      const code = String(crypto.randomInt(100000, 1_000_000));
+      const now = new Date();
+      const cooldownBefore = new Date(now.getTime() - 60_000);
+      let reservation: any;
+      try {
+        reservation = await CustomerTransferOTPModel.findOneAndUpdate(
+          {
+            customerId,
+            $or: [
+              { lastSentAt: { $exists: false } },
+              { lastSentAt: { $lte: cooldownBefore } },
+            ],
+          },
+          {
+            $set: {
+              senderPhone: senderPhone.e164,
+              recipientPhone: recipientPhone.e164,
+              points,
+              codeHash: hashLoyaltyTransferOtp(customerId, senderPhone.e164, recipientPhone.e164, points, code),
+              expiresAt: new Date(now.getTime() + 5 * 60_000),
+              used: false,
+              attempts: 0,
+              lastSentAt: now,
+            },
+            $setOnInsert: { customerId },
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true },
+        );
+      } catch (error: any) {
+        if (error?.code === 11000) {
+          return res.status(429).json({ error: "انتظر دقيقة قبل طلب رمز جديد" });
+        }
+        throw error;
+      }
+
+      if (!reservation) return res.status(429).json({ error: "انتظر دقيقة قبل طلب رمز جديد" });
+
+      try {
+        await sendQiroxWhatsAppCode(
+          { phone: senderPhone.e164, name: customer.name || req.customer?.name || "عميل" },
+          code,
+        );
+      } catch {
+        await CustomerTransferOTPModel.updateOne({ _id: reservation._id }, { $set: { used: true } });
+        console.error("[LOYALTY-TRANSFER] WhatsApp code delivery failed");
+        return res.status(503).json({ error: "تعذر إرسال رمز واتساب الآن. تحقق من إعداد خدمة الرسائل ثم حاول مجدداً." });
+      }
+
+      return res.json({
+        success: true,
+        message: "أرسلنا رمز التحقق إلى واتساب المسجل في حسابك. الرمز صالح لمدة خمس دقائق.",
+        expiresInSeconds: 300,
+      });
+    } catch (error: any) {
+      console.error("[LOYALTY-TRANSFER] OTP request failed:", error?.name || "Error");
+      return res.status(503).json({ error: "تعذر طلب رمز واتساب للتحويل. حاول مجدداً." });
+    }
+  });
+
   app.post("/api/customer/transfer-points", requireCustomerAuth, async (req: CustomerAuthRequest, res) => {
     try {
-      const { recipientPhone, points, pin } = req.body;
-      const senderPhone = req.customer?.phone;
-      
-      if (!senderPhone || !recipientPhone || !points || points <= 0) {
-        return res.status(400).json({ error: "بيانات غير صالحة" });
+      const points = Number(req.body?.points);
+      const code = normalizeOtpDigits(req.body?.code);
+      const recipientPhone = normalizeLoyaltyPhone(req.body?.recipientPhone);
+      const sessionPhone = normalizeLoyaltyPhone(req.customer?.phone);
+      const customer = req.customer?.id ? await storage.getCustomer(req.customer.id) : undefined;
+      const senderPhone = normalizeLoyaltyPhone(customer?.phone || req.customer?.phone);
+
+      if (!Number.isSafeInteger(points) || points <= 0 || !/^\d{6}$/.test(code) || !recipientPhone || !sessionPhone || !senderPhone) {
+        return res.status(400).json({ error: "تحقق من رقم المستلم وعدد النقاط ورمز واتساب المكوّن من 6 أرقام" });
+      }
+      if (senderPhone.e164 !== sessionPhone.e164) {
+        return res.status(401).json({ error: "تغير رقم حسابك. سجّل الدخول مجدداً لإرسال الرمز." });
+      }
+      if (recipientPhone.e164 === senderPhone.e164) {
+        return res.status(400).json({ error: "لا يمكن تحويل النقاط إلى رقمك. أدخل رقم صديق آخر." });
+      }
+      if (!customer) return res.status(401).json({ error: "تعذر التحقق من حسابك، سجّل الدخول مجدداً" });
+
+      const customerId = String((customer as any).id || (customer as any)._id?.toString() || req.customer!.id);
+      const customerIds = [...new Set([req.customer!.id, (customer as any).id, (customer as any)._id?.toString()].filter(Boolean).map(String))];
+      const recipientCustomer = await CustomerModel.findOne({ phone: { $in: recipientPhone.aliases } });
+      if (!recipientCustomer) return res.status(404).json({ error: "المستلم غير مسجل في النظام" });
+      const recipientCustomerId = String((recipientCustomer as any).id || (recipientCustomer as any)._id?.toString());
+      const senderObjectId = (customer as any)._id?.toString();
+      const recipientObjectId = (recipientCustomer as any)._id?.toString();
+      if (
+        recipientCustomerId === customerId
+        || (senderObjectId && senderObjectId === recipientObjectId)
+      ) {
+        return res.status(400).json({ error: "لا يمكن تحويل النقاط إلى حسابك" });
       }
 
-      const cleanSenderPhone = senderPhone.replace(/\D/g, '').slice(-9);
-      const cleanRecipientPhone = recipientPhone.replace(/\D/g, '').slice(-9);
-
-      // Get sender's card
-      const senderCard = await storage.getLoyaltyCardByPhone(cleanSenderPhone);
-      if (!senderCard) {
-        return res.status(404).json({ error: "بطاقتك غير موجودة" });
-      }
-
-      // Verify PIN
-      const customer = await storage.getCustomerByPhone(cleanSenderPhone);
-      if (customer?.password && pin && !(await bcrypt.compare(pin, customer.password))) {
-        return res.status(401).json({ error: "الرقم السري غير صحيح" });
-      }
-
-      // Check if sender has enough points
-      const currentPoints = senderCard.points || 0;
-      if (currentPoints < points) {
-        return res.status(400).json({ error: "رصيد النقاط غير كافي" });
-      }
-
-      // Transfer points
-      await storage.updateLoyaltyCard(senderCard.id, { points: currentPoints - points });
-      
-      // Get or create recipient's card
-      let recipientCard = await storage.getLoyaltyCardByPhone(cleanRecipientPhone);
-      const recipientCustomer = await storage.getCustomerByPhone(cleanRecipientPhone);
-      
-      if (!recipientCard && recipientCustomer) {
-        const recipientCustomerId = (recipientCustomer as any)._id?.toString() || (recipientCustomer as any).id;
-        const cardNumber = `BR-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-        const qrToken = `QR-${recipientCustomerId}-${Date.now()}`;
-        
-        recipientCard = await storage.createLoyaltyCard({
-          customerId: recipientCustomerId,
-          customerName: recipientCustomer.name,
-          phoneNumber: cleanRecipientPhone,
-          cardNumber: cardNumber,
-          qrToken: qrToken,
-          isActive: 1,
-          stamps: 0,
-          freeCupsEarned: 0,
-          totalSpent: 0,
-          points: 0,
-          pendingPoints: 0
-        } as any);
-      }
-
-      if (!recipientCard) {
-        return res.status(404).json({ error: "المستلم غير مسجل في النظام" });
-      }
-
-      // Transfer points
-      await storage.updateLoyaltyCard(recipientCard.id, {
-        points: (recipientCard.points || 0) + points
+      const now = new Date();
+      const otp = await CustomerTransferOTPModel.findOne({
+        customerId,
+        used: false,
+        attempts: { $lt: 5 },
+        expiresAt: { $gt: now },
       });
+      if (!otp) return res.status(400).json({ error: "اطلب رمز واتساب جديداً قبل تأكيد التحويل" });
+      if (otp.senderPhone !== senderPhone.e164 || otp.recipientPhone !== recipientPhone.e164 || otp.points !== points) {
+        return res.status(400).json({ error: "تغيرت تفاصيل التحويل. أرسل رمزاً جديداً." });
+      }
 
-      // Create transaction records
-      await storage.createLoyaltyTransaction({
-        cardId: senderCard.id,
-        type: 'transfer_out',
-        pointsChange: -points,
-        description: `تحويل نقاط إلى ${recipientCustomer?.name || recipientPhone}`,
-      } as any);
+      const suppliedHash = hashLoyaltyTransferOtp(customerId, senderPhone.e164, recipientPhone.e164, points, code);
+      if (!safeHashEquals(otp.codeHash, suppliedHash)) {
+        const updatedOtp = await CustomerTransferOTPModel.findOneAndUpdate(
+          { _id: otp._id, used: false, attempts: { $lt: 5 } },
+          { $inc: { attempts: 1 } },
+          { new: true },
+        );
+        if (updatedOtp && updatedOtp.attempts >= 5) {
+          await CustomerTransferOTPModel.updateOne({ _id: otp._id, attempts: { $gte: 5 } }, { $set: { used: true } });
+        }
+        return res.status(400).json({ error: "رمز واتساب غير صحيح" });
+      }
 
-      await storage.createLoyaltyTransaction({
-        cardId: recipientCard.id,
-        type: 'transfer_in',
-        pointsChange: points,
-        description: `استلام نقاط من ${req.customer?.name || senderPhone}`,
-      } as any);
+      const recipientCustomerIds = [...new Set([
+        (recipientCustomer as any).id,
+        (recipientCustomer as any)._id?.toString(),
+      ].filter(Boolean).map(String))];
+      const recipientName = recipientCustomer.name || req.body?.recipientPhone;
+      const senderName = customer.name || req.customer?.name || senderPhone.e164;
+      const transferSession = await mongoose.startSession();
+      try {
+        await transferSession.withTransaction(async () => {
+          const consumedOtp = await CustomerTransferOTPModel.findOneAndUpdate(
+            {
+              _id: otp._id,
+              customerId,
+              senderPhone: senderPhone.e164,
+              recipientPhone: recipientPhone.e164,
+              points,
+              codeHash: otp.codeHash,
+              used: false,
+              attempts: { $lt: 5 },
+              expiresAt: { $gt: new Date() },
+            },
+            { $set: { used: true } },
+            { new: true, session: transferSession },
+          );
+          if (!consumedOtp) throw new Error("TRANSFER_OTP_EXPIRED");
 
-      res.json({ 
-        success: true, 
+          const senderCard = await LoyaltyCardModel.findOne({
+            $or: [
+              { customerId: { $in: customerIds } },
+              { phoneNumber: { $in: senderPhone.aliases } },
+            ],
+          }).session(transferSession);
+          if (!senderCard) throw new Error("TRANSFER_SENDER_CARD_MISSING");
+
+          const debitedSender = await LoyaltyCardModel.findOneAndUpdate(
+            { _id: senderCard._id, points: { $gte: points } },
+            { $inc: { points: -points }, $set: { updatedAt: new Date() } },
+            { new: true, session: transferSession },
+          );
+          if (!debitedSender) throw new Error("TRANSFER_INSUFFICIENT_POINTS");
+
+          let recipientCard = await LoyaltyCardModel.findOne({
+            $or: [
+              { customerId: { $in: recipientCustomerIds } },
+              { phoneNumber: { $in: recipientPhone.aliases } },
+            ],
+          }).session(transferSession);
+          if (!recipientCard) {
+            const [createdCard] = await LoyaltyCardModel.create([{
+              customerId: recipientCustomerId,
+              customerName: recipientCustomer.name,
+              phoneNumber: recipientCustomer.phone || recipientPhone.e164,
+              qrToken: `QR-${crypto.randomUUID()}`,
+              cardNumber: `BR-${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`,
+              points: 0,
+              pendingPoints: 0,
+              isActive: true,
+            }], { session: transferSession });
+            recipientCard = createdCard;
+          }
+
+          const creditedRecipient = await LoyaltyCardModel.findByIdAndUpdate(
+            recipientCard._id,
+            { $inc: { points }, $set: { updatedAt: new Date() } },
+            { new: true, session: transferSession },
+          );
+          if (!creditedRecipient) throw new Error("TRANSFER_RECIPIENT_CARD_MISSING");
+
+          await LoyaltyTransactionModel.create([
+            {
+              cardId: String((debitedSender as any).id || debitedSender._id),
+              type: "transfer_out",
+              pointsChange: -points,
+              description: `تحويل نقاط إلى ${recipientName}`,
+            },
+            {
+              cardId: String((creditedRecipient as any).id || creditedRecipient._id),
+              type: "transfer_in",
+              pointsChange: points,
+              description: `استلام نقاط من ${senderName}`,
+            },
+          ], { session: transferSession });
+        });
+      } finally {
+        await transferSession.endSession();
+      }
+
+      return res.json({
+        success: true,
         message: "تم تحويل النقاط بنجاح",
-        recipientName: recipientCustomer?.name || recipientPhone
+        recipientName,
       });
-    } catch (error) {
-      console.error("[TRANSFER POINTS] Error:", error);
-      res.status(500).json({ error: "فشل في تحويل النقاط" });
+    } catch (error: any) {
+      if (error?.message === "TRANSFER_OTP_EXPIRED") {
+        return res.status(400).json({ error: "انتهت صلاحية الرمز أو استُخدم من قبل. أرسل رمزاً جديداً." });
+      }
+      if (error?.message === "TRANSFER_INSUFFICIENT_POINTS") {
+        return res.status(400).json({ error: "رصيد النقاط غير كافٍ" });
+      }
+      if (error?.message === "TRANSFER_SENDER_CARD_MISSING") {
+        return res.status(404).json({ error: "بطاقة الولاء غير موجودة" });
+      }
+      console.error("[TRANSFER POINTS] Transaction failed:", error?.name || "Error");
+      return res.status(500).json({ error: "فشل التحويل بأمان. لم يتغير رصيد النقاط؛ حاول مجدداً." });
     }
   });
 
