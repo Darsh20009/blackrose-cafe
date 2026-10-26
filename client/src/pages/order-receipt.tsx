@@ -155,6 +155,7 @@ export default function OrderReceiptPage() {
     try {
       await printTaxInvoice({
         orderNumber: String(num),
+        orderId: String(order.id || (order as any)._id || ""),
         customerName: order.customerName || "—",
         customerPhone: order.customerPhone || "",
         items: items.map(it => ({

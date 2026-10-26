@@ -57,7 +57,8 @@ export function ReceiptInvoice({ order, variant = "button", precomputedTrackingQ
     if (!order?.orderNumber) return;
     (async () => {
       try {
-        const url = `${window.location.origin}/track/${encodeURIComponent(String(order.orderNumber))}`;
+        const trackingId = (order as any).id || (order as any)._id || order.orderNumber;
+        const url = `${window.location.origin}/track/${encodeURIComponent(String(trackingId))}`;
         setTrackingQrUrl(await QRCode.toDataURL(url, { width: 200, margin: 1, errorCorrectionLevel: "M" }));
       } catch {}
       try {
@@ -65,7 +66,7 @@ export function ReceiptInvoice({ order, variant = "button", precomputedTrackingQ
         setZatcaQrUrl(await QRCode.toDataURL(payload, { width: 180, margin: 1, errorCorrectionLevel: "M" }));
       } catch {}
     })();
-  }, [order?.orderNumber]);
+  }, [order?.orderNumber, (order as any)?.id, (order as any)?._id]);
 
   if (!order?.orderNumber) return null;
 

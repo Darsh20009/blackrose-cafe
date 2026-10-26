@@ -5,6 +5,7 @@ import { ReceiptInvoice } from '@/components/receipt-invoice';
 
 export interface PreviewOrderInput {
   orderNumber: string;
+  orderId?: string;
   createdAt: string | Date;
   tableNumber?: string;
   totalAmount: number | string;
@@ -47,7 +48,7 @@ export async function renderReceiptPreviewToPng(input: PreviewOrderInput): Promi
   const [trackingQr, zatcaQr] = await Promise.all([
     (async () => {
       try {
-        const url = `${window.location.origin}/track/${encodeURIComponent(String(input.orderNumber))}`;
+        const url = `${window.location.origin}/track/${encodeURIComponent(String(input.orderId || input.orderNumber))}`;
         return await QRCode.toDataURL(url, { width: 200, margin: 1, errorCorrectionLevel: 'M' });
       } catch { return ''; }
     })(),

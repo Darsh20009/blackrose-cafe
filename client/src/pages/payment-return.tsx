@@ -126,7 +126,7 @@ export default function PaymentReturnPage() {
             const response = await fetch(`/api/payments/order-status/${encodeURIComponent(orderNumber)}`);
             const data = await response.json();
             if (response.ok && data.paid === true) {
-              localStorage.setItem("br-active-order", orderNumber);
+              localStorage.setItem("br-active-order", String(data.orderId || orderNumber));
               setDisplayOrderNumber(orderNumber);
               setStatus("success");
               setMessage(tc("تم تأكيد الدفع بنجاح.", "Payment confirmed successfully."));
@@ -176,7 +176,7 @@ export default function PaymentReturnPage() {
 
           if (confirmRes.ok && confirmData.success) {
             const orderNum = confirmData.orderNumber ?? null;
-            if (orderNum) localStorage.setItem("br-active-order", orderNum);
+            if (orderNum) localStorage.setItem("br-active-order", String(confirmData.orderId || orderNum));
 
             if (confirmData.customer) {
               setCustomer(confirmData.customer);
@@ -252,7 +252,7 @@ export default function PaymentReturnPage() {
           if (createRes.ok) {
             const created = await createRes.json();
             const orderNum = created.orderNumber ?? null;
-            if (orderNum) localStorage.setItem("br-active-order", orderNum);
+            if (orderNum) localStorage.setItem("br-active-order", String(created.id || created._id || orderNum));
             sessionStorage.removeItem("pendingOrderData");
             sessionStorage.removeItem("paymentProvider");
             sessionStorage.removeItem("paymentSessionToken");

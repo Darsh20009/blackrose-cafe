@@ -731,8 +731,9 @@ export default function CheckoutPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/loyalty/cards/phone"] });
       refetchLoyaltyCard();
       const displayNum = data.orderNumber;
-      if (displayNum) {
-        localStorage.setItem("br-active-order", String(displayNum));
+      const trackingId = data.id || data._id || displayNum;
+      if (trackingId) {
+        localStorage.setItem("br-active-order", String(trackingId));
       }
       // PayMob flow: skip the big success page — navigate straight to "My Orders"
       if (isPaymobFlow.current) {
@@ -1186,6 +1187,7 @@ export default function CheckoutPage() {
       }));
       return {
         orderNumber: orderNum,
+        orderId: orderDetails?.id || orderDetails?._id,
         items: mappedItems,
         subtotal: orderTotal.toFixed(2),
         total: orderTotal.toFixed(2),
@@ -2099,7 +2101,7 @@ export default function CheckoutPage() {
                         setPointsToRedeem(0);
                         setAppliedGiftCard(null);
                         setGiftCardCode("");
-                        localStorage.setItem("br-active-order", String(orderNumber));
+                        localStorage.setItem("br-active-order", String(od?.id || od?._id || orderNumber));
                         queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
                         queryClient.invalidateQueries({ queryKey: ["/api/orders/customer"] });
                         queryClient.invalidateQueries({ queryKey: ["/api/cart"] });

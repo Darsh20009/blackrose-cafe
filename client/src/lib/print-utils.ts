@@ -92,6 +92,7 @@ function getItemAddons(item: OrderItem): Array<{ nameAr: string }> {
 
 interface TaxInvoiceData {
   orderNumber: string;
+  orderId?: string;
   invoiceNumber?: string;
   customerName: string;
   customerPhone: string;
@@ -805,8 +806,7 @@ async function _buildFastCustomerEscPos(
   });
 
   // Generate both QR codes in parallel — ~50ms total
-  // Use plain daily-number in tracking URL so the QR has no %23 encoding issues
-  const trackingNum = String(data.orderNumber).replace(/\D/g, '') || String(data.orderNumber);
+  const trackingNum = data.orderId || String(data.orderNumber).replace(/\D/g, '') || String(data.orderNumber);
   const [trackingQr, zatcaQr] = await Promise.all([
     (async () => {
       try {
@@ -1538,7 +1538,7 @@ export async function printTaxInvoice(data: TaxInvoiceData, config: PrintConfig 
 }
 
 export async function printCustomerPickupReceipt(data: TaxInvoiceData & { deliveryType?: string; deliveryTypeAr?: string }): Promise<void> {
-  const _trackNum = String(data.orderNumber).replace(/\D/g, '') || String(data.orderNumber);
+  const _trackNum = data.orderId || String(data.orderNumber).replace(/\D/g, '') || String(data.orderNumber);
   const orderTrackingUrl = `${window.location.origin}/track/${_trackNum}`;
   
   let qrCodeSvg = "";

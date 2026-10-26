@@ -126,7 +126,8 @@ export default function PublicOrderTrackPage() {
         const msg = JSON.parse(e.data);
         if (['order_status_update', 'new_order', 'order_update'].includes(msg.type)) {
           const num = msg.orderNumber || msg.data?.orderNumber || msg.order?.orderNumber;
-          if (num === orderNumberRaw) refetch();
+          const id = msg.orderId || msg.id || msg.data?.orderId || msg.data?.id || msg.order?.id || msg.order?._id;
+          if (num === orderNumberRaw || String(id || "") === orderNumberRaw) refetch();
         }
       } catch {}
     };

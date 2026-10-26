@@ -948,6 +948,7 @@ const PaymentSessionTokenSchema = new mongoose.Schema({
   orderData:            { type: mongoose.Schema.Types.Mixed, required: true },
   used:                 { type: Boolean, default: false },
   confirmedOrderNumber: { type: String, default: null },
+  confirmedOrderId:     { type: String, default: null },
   expiresAt:            { type: Date,   required: true },
   createdAt:            { type: Date,   default: Date.now },
 });
@@ -5051,7 +5052,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const record = await PaymentSessionTokenModel.findOne({ token })
-        .select("confirmedOrderNumber expiresAt")
+        .select("confirmedOrderNumber confirmedOrderId expiresAt")
         .lean() as any;
       if (!record) return res.status(404).json({ error: "رمز الدفع غير موجود" });
 
@@ -5059,6 +5060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.json({
         confirmed: !!record.confirmedOrderNumber,
         orderNumber: record.confirmedOrderNumber || null,
+        orderId: record.confirmedOrderId || null,
         expired: record.expiresAt <= new Date(),
       });
     } catch (err: any) {
@@ -5151,6 +5153,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           success: true,
           alreadyConfirmed: true,
           orderNumber: record.confirmedOrderNumber,
+          orderId: record.confirmedOrderId || null,
           customer: customerData,
         });
       }
@@ -5281,6 +5284,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // ── Store orderNumber for idempotency (refresh won't create duplicate) ──
       record.confirmedOrderNumber = serializedOrder.orderNumber;
+      record.confirmedOrderId = String(serializedOrder.id || serializedOrder._id || "");
       await record.save();
 
       // ── Cache invalidation + WebSocket broadcast ────────────────────────
@@ -5323,21 +5327,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/payments/order-status/:orderNumber", async (req, res) => {
     try {
       const { orderNumber } = req.params;
-      // Search by orderNumber only (no tenantId) — customer polling has no server session
-      const order = await OrderModel.findOne({ orderNumber }).lean() as any;
-      if (!order) {
-        // Fallback: try with tenantId for safety
-        const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
-        const orderByTenant = await OrderModel.findOne({ tenantId, orderNumber }).lean() as any;
-        if (!orderByTenant) return res.json({ found: false, paid: false });
-        const paid2 = orderByTenant.paymentStatus === 'paid' || orderByTenant.status === 'payment_confirmed';
-        return res.json({ found: true, paid: paid2, status: orderByTenant.status, paymentStatus: orderByTenant.paymentStatus });
-      }
-      const tenantId = (order as any).tenantId;
+      const tenantId = String(getTenantIdFromRequest(req) || await getDefaultTenantId());
+      const { order, ambiguous } = await findOrderForTracking(orderNumber, tenantId);
+      if (!order || ambiguous) return res.json({ found: false, paid: false });
 
       const alreadyPaid = order.paymentStatus === 'paid' || order.status === 'payment_confirmed';
       if (alreadyPaid) {
-        return res.json({ found: true, paid: true, status: order.status, paymentStatus: order.paymentStatus });
+        return res.json({ found: true, paid: true, status: order.status, paymentStatus: order.paymentStatus, orderId: String(order._id) });
       }
 
       // Not yet marked as paid — verify the stored intention with PayMob SA.
@@ -5393,7 +5389,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const paymentUpdate: any = { paymentStatus: 'paid', status: 'pending' };
                 if (txId) paymentUpdate.paymentTransactionId = txId;
                 const updatedOrder = await OrderModel.findOneAndUpdate(
-                  { orderNumber, tenantId },
+                  { _id: order._id, tenantId },
                   { $set: paymentUpdate },
                   { new: true }
                 ).lean().catch(() => null);
@@ -5402,7 +5398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   cache.invalidate('live-orders:');
                   wsManager.broadcastNewOrder(serializeDoc(updatedOrder));
                 }
-                return res.json({ found: true, paid: true, status: 'pending', paymentStatus: 'paid' });
+                return res.json({ found: true, paid: true, status: 'pending', paymentStatus: 'paid', orderId: String(order._id) });
               }
             }
           }
@@ -5411,7 +5407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      return res.json({ found: true, paid: false, status: order.status, paymentStatus: order.paymentStatus });
+      return res.json({ found: true, paid: false, status: order.status, paymentStatus: order.paymentStatus, orderId: String(order._id) });
     } catch (err) {
       return res.json({ found: false, paid: false });
     }
@@ -10333,9 +10329,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get order by number
-      const order = await storage.getOrderByNumber(orderNumber);
+      const tenantId = String(employee.tenantId || "");
+      if (!tenantId) return res.status(403).json({ error: "لا توجد منشأة مرتبطة بهذا الحساب" });
+      const { order, ambiguous } = await findOrderForTracking(orderNumber, tenantId);
       if (!order) {
-        return res.status(404).json({ error: "الطلب غير موجود" });
+        return res.status(ambiguous ? 409 : 404).json({
+          error: ambiguous ? "رقم الطلب غير فريد؛ استخدم معرّف الطلب" : "الطلب غير موجود",
+        });
       }
 
       const serializedOrder = serializeDoc(order);
@@ -10419,9 +10419,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/orders/number/:orderNumber", async (req, res) => {
     try {
       const { orderNumber } = req.params;
-      const order = await storage.getOrderByNumber(orderNumber);
+      const tenantId = getTenantIdFromRequest(req) || await getDefaultTenantId();
+      const { order, ambiguous } = await findOrderForTracking(orderNumber, String(tenantId));
 
       if (!order) {
+        if (ambiguous) {
+          return res.status(409).json({ error: "رقم الطلب غير كافٍ للتتبع؛ افتح رابط التتبع المرسل مع طلبك" });
+        }
         return res.status(404).json({ error: "الطلب غير موجود" });
       }
 

@@ -109,7 +109,8 @@ export async function sendOrderWhatsAppNotifications(
   const orderNumber = String(order.orderNumber || order.id || "غير معروف");
   const branchName = branchNameValue || order.branchNameAr || order.branchId || "غير محدد";
   const baseUrl = publicBaseUrl.replace(/\/+$/, "");
-  const trackingUrl = `${baseUrl}/track/${encodeURIComponent(orderNumber)}`;
+  const trackingId = String(order.id || order._id || orderNumber);
+  const trackingUrl = `${baseUrl}/track/${encodeURIComponent(trackingId)}`;
   const customerName = order.customerName || order.customerInfo?.customerName || order.customerInfo?.name || "عميل";
   const customerPhone = normalizeWhatsAppPhone(
     order.customerPhone || order.customerInfo?.customerPhone || order.customerInfo?.phoneNumber || order.customerInfo?.phone,

@@ -219,13 +219,26 @@ export default function MenuPage() {
     queryFn: async () => {
       if (!activeOrderNum) return null;
       const res = await fetch(`/api/orders/number/${encodeURIComponent(activeOrderNum)}`);
-      if (!res.ok) { localStorage.removeItem("br-active-order"); return null; }
+      if (!res.ok) {
+        localStorage.removeItem("br-active-order");
+        setActiveOrderNum(null);
+        return null;
+      }
       return res.json();
     },
     enabled: !!activeOrderNum && !bannerDismissed,
     refetchInterval: 20000,
     retry: false,
   });
+
+  useEffect(() => {
+    const id = activeOrder?.id || activeOrder?._id;
+    if (id && String(id) !== activeOrderNum) {
+      const stableId = String(id);
+      localStorage.setItem("br-active-order", stableId);
+      setActiveOrderNum(stableId);
+    }
+  }, [activeOrder?.id, activeOrder?._id, activeOrderNum]);
 
   // Clear banner once order is completed or cancelled
   useEffect(() => {
@@ -833,7 +846,7 @@ export default function MenuPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-black text-sm text-gray-900 dark:text-gray-100">لديك طلب قائم</span>
                         <span className="font-mono font-bold text-sm bg-black text-white dark:bg-white dark:text-black px-2 py-0.5 rounded-lg">
-                          #{String(activeOrderNum).padStart(4, '0')}
+                          #{String(activeOrder.orderNumber || activeOrder.dailyNumber || activeOrderNum).replace(/\D/g, '').padStart(4, '0')}
                         </span>
                       </div>
                       <div className={`text-xs font-bold mt-0.5 ${
@@ -847,7 +860,7 @@ export default function MenuPage() {
                     {/* Actions */}
                     <div className="flex flex-col gap-1.5 flex-shrink-0 items-center ml-6">
                       <button
-                        onClick={() => setLocation(`/track/${activeOrderNum}`)}
+                        onClick={() => setLocation(`/track/${encodeURIComponent(String(activeOrder.id || activeOrder._id || activeOrderNum))}`)}
                         className={`text-xs font-bold px-3 py-1.5 rounded-xl text-white flex items-center gap-1 whitespace-nowrap ${
                           activeOrder.status === 'ready' ? 'bg-green-600 hover:bg-green-700' :
                           activeOrder.status === 'in_progress' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-600 hover:bg-amber-700'
