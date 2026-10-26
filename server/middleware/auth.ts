@@ -43,11 +43,12 @@ export function requirePermission(permission: Permission) {
 async function tryRestoreFromHeaders(req: AuthRequest, res?: any): Promise<boolean> {
   const employeeId = req.get("x-employee-id");
   const restoreKey = req.get("x-restore-key");
+  const isMongoObjectId = typeof employeeId === "string" && /^[a-f\d]{24}$/i.test(employeeId);
   
   if (
     !employeeId ||
     !restoreKey ||
-    !/^[a-f\d]{24}$/i.test(employeeId) ||
+    !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(employeeId) ||
     !/^[a-f\d]{64}$/i.test(restoreKey)
   ) {
     return false;
@@ -55,9 +56,15 @@ async function tryRestoreFromHeaders(req: AuthRequest, res?: any): Promise<boole
   
   try {
     const EmployeeCollection = mongoose.connection.collection('employees');
-    const employee = await EmployeeCollection.findOne({
-      _id: new mongoose.Types.ObjectId(employeeId),
-    });
+    const employeeQuery = isMongoObjectId
+      ? {
+          $or: [
+            { _id: new mongoose.Types.ObjectId(employeeId) },
+            { id: employeeId },
+          ],
+        }
+      : { id: employeeId };
+    const employee = await EmployeeCollection.findOne(employeeQuery);
     
     if (!employee || !isEmployeeActive(employee)) return false;
     

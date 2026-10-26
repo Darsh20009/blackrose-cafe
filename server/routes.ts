@@ -7037,16 +7037,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/employees/restore-session", async (req, res) => {
     try {
       const { employeeId, restoreKey } = req.body ?? {};
+      const isMongoObjectId = typeof employeeId === "string" && /^[a-f\d]{24}$/i.test(employeeId);
       if (
         typeof employeeId !== "string" ||
-        !/^[a-f\d]{24}$/i.test(employeeId) ||
+        !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(employeeId) ||
         typeof restoreKey !== "string" ||
         !/^[a-f\d]{64}$/i.test(restoreKey)
       ) {
         return res.status(400).json({ error: "Employee ID and restore key required" });
       }
       
-      const employee = await EmployeeModel.findById(employeeId).lean() as any;
+      const employeeQuery = isMongoObjectId
+        ? {
+            $or: [
+              { _id: new mongoose.Types.ObjectId(employeeId) },
+              { id: employeeId },
+            ],
+          }
+        : { id: employeeId };
+      const employee = await EmployeeModel.findOne(employeeQuery).lean() as any;
       if (!isEmployeeActive(employee)) {
         return res.status(404).json({ error: "Employee not found or inactive" });
       }
