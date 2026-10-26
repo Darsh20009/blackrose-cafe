@@ -893,6 +893,33 @@ app.use((req, res, next) => {
         return;
       }
 
+      // Read-only Saudi API probe: verifies the production secret without creating
+      // an intention, payment session, or charge.
+      try {
+        const probeController = new AbortController();
+        const probeTimeout = setTimeout(() => probeController.abort(), 8_000);
+        const probeResponse = await fetch(
+          'https://ksa.paymob.com/v1/intention/0/',
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Token ${PAYMOB_SECRET_KEY}`,
+              'Accept': 'application/json',
+            },
+            signal: probeController.signal,
+          },
+        ).finally(() => clearTimeout(probeTimeout));
+        const probeData = await probeResponse.json().catch(() => ({})) as any;
+        if (probeResponse.ok || probeResponse.status === 404) {
+          console.log('✅ PayMob Saudi read-only credential check passed; no payment was created');
+        } else {
+          const detail = String(probeData?.detail || probeData?.message || '').slice(0, 180);
+          console.error(`[PayMob Saudi] Read-only credential check failed (HTTP ${probeResponse.status})${detail ? `: ${detail}` : ''}`);
+        }
+      } catch (probeError: any) {
+        console.error(`[PayMob Saudi] Read-only credential check could not reach the API: ${probeError?.name || 'Error'}`);
+      }
+
       const config = await BusinessConfigModel.findOne({ tenantId: 'demo-tenant' });
       if (config) {
         const pg = config.paymentGateway;

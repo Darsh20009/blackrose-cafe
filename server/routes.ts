@@ -5649,9 +5649,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           try {
-            const probeReference = `replit-paymob-check-${crypto.randomUUID()}`;
             const testResponse = await fetch(
-              `${baseUrl}/v1/intention/?special_reference=${encodeURIComponent(probeReference)}`,
+              `${baseUrl}/v1/intention/0/`,
               {
                 method: 'GET',
                 headers: {
@@ -5661,7 +5660,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               },
             );
 
-            if (testResponse.ok) {
+            if (testResponse.ok || testResponse.status === 404) {
               return res.json({
                 success: true,
                 message: "اتصال Paymob السعودية ومصادقة المفتاح ناجحان. لم يتم إنشاء دفعة.",
