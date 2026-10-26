@@ -218,6 +218,19 @@ export function requireKitchenAccess(req: AuthRequest, res: Response, next: Next
   next();
 }
 
+export function requireRefundAccess(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.employee) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const refundRoles = ["cashier", "barista", "cook", "waiter", "manager", "branch_manager", "supervisor", "admin", "owner"];
+  if (!refundRoles.includes(String(req.employee.role || "").toLowerCase())) {
+    return res.status(403).json({ error: "Forbidden - Refund access required" });
+  }
+
+  next();
+}
+
 export function requireCashierAccess(req: AuthRequest, res: Response, next: NextFunction) {
   if (!req.employee) {
     return res.status(401).json({ error: "Unauthorized" });

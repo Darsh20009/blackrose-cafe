@@ -1408,6 +1408,8 @@ export interface IOrder extends Document {
   paymentMethod: string;
   paymentDetails?: string;
   paymentReceiptUrl?: string;
+  paymentTransactionId?: string;
+  paymobIntentionId?: string;
   paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
   status: string; // 'pending', 'payment_confirmed', 'completed', 'cancelled', 'open'
   tableStatus?: 'pending' | 'payment_confirmed' | 'preparing' | 'delivering_to_table' | 'delivered' | 'cancelled' | 'open';
@@ -1555,6 +1557,8 @@ const OrderSchema = new Schema<IOrder>({
   paymentMethod: { type: String, enum: ["cash", "pos", "apple_pay", "pos-network", "alinma", "rajhi", "ur", "barq", "qahwa-card", "stc-pay", "mada", "geidea", "neoleap", "neoleap-apple-pay", "bank_card", "paymob-card", "paymob-wallet", "paymob-apple-pay", "loyalty-card", "split", "card", "network", "credit_card", "bank_transfer", "other"], required: true },
   paymentDetails: { type: String },
   paymentReceiptUrl: { type: String },
+  paymentTransactionId: { type: String },
+  paymobIntentionId: { type: String },
   paymentStatus: { type: String, enum: ['pending', 'paid', 'failed', 'refunded'], default: 'pending' },
   isOpenTab: { type: Boolean, default: false },
   status: { type: String, default: "pending", required: true },

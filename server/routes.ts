@@ -74,7 +74,7 @@ import {
   DELIVERY_FEE_SAR,
   DELIVERY_RADIUS_KM,
 } from "@shared/delivery-policy";
-import { requireAuth, requireManager, requireAdmin, filterByBranch, requireKitchenAccess, requireCashierAccess, requireDeliveryAccess, requirePermission, requireCustomerAuth, isEmployeeActive, type AuthRequest, type CustomerAuthRequest } from "./middleware/auth";
+import { requireAuth, requireManager, requireAdmin, filterByBranch, requireKitchenAccess, requireCashierAccess, requireDeliveryAccess, requireRefundAccess, requirePermission, requireCustomerAuth, isEmployeeActive, type AuthRequest, type CustomerAuthRequest } from "./middleware/auth";
 import { logFromRequest, logAudit } from "./audit-logger";
 import { PermissionsEngine, PERMISSIONS } from "./permissions-engine";
 import { registerPhoneOtpAuthRoutes } from "./phone-otp-auth";
@@ -91,6 +91,42 @@ import fs from "fs";
 import { Types } from "mongoose";
 import { nanoid } from "nanoid";
 const isValidObjectId = (id: string) => Types.ObjectId.isValid(id);
+
+async function resolveRefundBranchScope(employee: any, tenantId: string): Promise<string | undefined | null> {
+  const role = String(employee?.role || "").toLowerCase();
+  if (["admin", "owner", "cook", "barista"].includes(role)) return undefined;
+  if (employee?.branchId) return String(employee.branchId);
+
+  const branch = await BranchModel.findOne({ tenantId, isActive: 1 }).select("id _id").lean() as any;
+  const branchId = branch?.id || branch?._id;
+  return branchId ? String(branchId) : null;
+}
+
+async function findOrderForTracking(reference: string, tenantId: string): Promise<{ order: any | null; ambiguous: boolean }> {
+  let decoded = reference.trim();
+  try { decoded = decodeURIComponent(decoded); } catch {}
+
+  if (isValidObjectId(decoded)) {
+    const order = await OrderModel.findOne({ _id: decoded, tenantId }).lean();
+    return { order, ambiguous: false };
+  }
+
+  const alternatives: any[] = [{ orderNumber: decoded }];
+  const digits = decoded.replace(/\D/g, "");
+  if (/^\d+$/.test(digits)) {
+    const dailyNumber = Number(digits);
+    if (Number.isSafeInteger(dailyNumber)) {
+      alternatives.push({ dailyNumber });
+      alternatives.push({ orderNumber: `ORD#${String(dailyNumber).padStart(4, "0")}` });
+    }
+  }
+
+  const matches = await OrderModel.find({ tenantId, $or: alternatives }).limit(2).lean();
+  return {
+    order: matches.length === 1 ? matches[0] : null,
+    ambiguous: matches.length > 1,
+  };
+}
 
 function normalizeLoyaltyPhone(value: unknown) {
   let input = String(value ?? "")
@@ -4238,11 +4274,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             checkoutUrl.searchParams.set("publicKey", publicKey);
             checkoutUrl.searchParams.set("clientSecret", clientSecret);
 
-            // Store clientSecret + intentionId on the order for later server-side verification
+            // Store only the intention ID; never persist the checkout client secret on an order.
             if (orderId) {
               await OrderModel.findOneAndUpdate(
                 { $or: [{ orderNumber: orderId }, { _id: isValidObjectId(orderId) ? orderId : null }], tenantId },
-                { $set: { paymobClientSecret: clientSecret, paymobIntentionId: String(intentionId || '') } }
+                { $set: { paymobIntentionId: String(intentionId || '') } }
               ).catch(() => {});
             }
 
@@ -5216,7 +5252,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentStatus: "paid",
         status: "pending",
         paymentMethod: record.orderData?.paymentMethod || "paymob-card",
-        ...(paymobTxId ? { paymentTransactionId: paymobTxId } : {}),
+        ...(paymobTxId && /^\d+$/.test(String(paymobTxId)) ? { paymentTransactionId: String(paymobTxId) } : {}),
         customerInfo: record.orderData?.customerInfo || {
           customerName: record.customerName || record.orderData?.customerName,
           customerPhone: record.customerPhone || record.orderData?.customerPhone,
@@ -5304,9 +5340,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ found: true, paid: true, status: order.status, paymentStatus: order.paymentStatus });
       }
 
-      // Not yet marked as paid — try direct PayMob SA API verification if we have clientSecret
-      const clientSecret = order.paymobClientSecret;
-      if (clientSecret) {
+      // Not yet marked as paid — verify the stored intention with PayMob SA.
+      if (order.paymobIntentionId) {
         try {
           const config = await BusinessConfigModel.findOne({ tenantId });
           const pg = config?.paymentGateway;
@@ -5346,13 +5381,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
               // Also check nested transactions inside the intention
               const transactions: any[] = intentData?.transactions || intentData?.intention_detail?.transactions || [];
-              const hasSuccessfulTx = transactions.some((tx: any) => tx?.success === true && tx?.pending === false);
+              const successfulTransaction = transactions.find((tx: any) =>
+                tx?.success === true && tx?.pending === false && tx?.id != null
+              );
+              const hasSuccessfulTx = Boolean(successfulTransaction);
 
               if (isPaid || hasSuccessfulTx) {
-                const txId = String(transactions.find((t: any) => t?.success)?.id || intentData?.id || intentionId || '');
+                const txId = successfulTransaction?.id != null && /^\d+$/.test(String(successfulTransaction.id))
+                  ? String(successfulTransaction.id)
+                  : undefined;
+                const paymentUpdate: any = { paymentStatus: 'paid', status: 'pending' };
+                if (txId) paymentUpdate.paymentTransactionId = txId;
                 const updatedOrder = await OrderModel.findOneAndUpdate(
                   { orderNumber, tenantId },
-                  { $set: { paymentStatus: 'paid', status: 'pending', paymentTransactionId: txId } },
+                  { $set: paymentUpdate },
                   { new: true }
                 ).lean().catch(() => null);
                 // Notify employees now that payment is confirmed
@@ -10402,27 +10444,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─── Refund / Return Orders ────────────────────────────────────────────────
 
   // Search order for refund (by order number or phone)
-  app.get("/api/refunds/search-order", async (req: any, res) => {
+  app.get("/api/refunds/search-order", requireAuth, requireRefundAccess, async (req: AuthRequest, res) => {
     try {
-      const { q } = req.query as { q?: string };
+      const q = String(req.query.q || "").trim();
       if (!q) return res.status(400).json({ error: "يرجى إدخال رقم الطلب أو رقم الجوال" });
 
-      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const tenantId = String(req.employee?.tenantId || "");
+      if (!tenantId) return res.status(403).json({ error: "لا توجد منشأة مرتبطة بهذا الحساب" });
+      const branchId = await resolveRefundBranchScope(req.employee, tenantId);
+      if (branchId === null) return res.status(403).json({ error: "لا يوجد فرع مخصص لهذا الحساب" });
       const { OrderModel } = await import('@shared/schema');
+      const scope: any = { tenantId, ...(branchId ? { branchId } : {}) };
 
       let order: any = null;
-      const isPhone = /^\d{7,12}$/.test(q.replace(/\D/g, ""));
+      const digits = q.replace(/\D/g, "");
+      const isPhone = /^\d{7,12}$/.test(digits);
 
       if (isPhone) {
-        const phone = q.replace(/\D/g, "");
+        const phone = digits;
         const normalizedPhone = phone.startsWith('0') ? phone.slice(1) : phone;
         order = await OrderModel.findOne({
+          ...scope,
           $or: [{ 'customerInfo.phone': phone }, { 'customerInfo.phone': normalizedPhone }, { customerPhone: phone }, { customerPhone: normalizedPhone }],
         }).sort({ createdAt: -1 });
       } else {
         const num = q.replace(/^#/, "");
-        const numAsNumber = parseInt(num, 10);
+        const numAsNumber = /^\d+$/.test(num) ? Number.parseInt(num, 10) : NaN;
         order = await OrderModel.findOne({
+          ...scope,
           $or: [
             { orderNumber: num },
             ...(isNaN(numAsNumber) ? [] : [{ orderNumber: numAsNumber }, { dailyNumber: numAsNumber }]),
@@ -10444,14 +10493,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // List all refunds (manager/admin)
-  app.get("/api/refunds", requireAuth, async (req: any, res) => {
+  app.get("/api/refunds", requireAuth, requireRefundAccess, async (req: AuthRequest, res) => {
     try {
       const { RefundOrderModel } = await import('@shared/schema');
-      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const tenantId = String(req.employee?.tenantId || "");
+      if (!tenantId) return res.status(403).json({ error: "لا توجد منشأة مرتبطة بهذا الحساب" });
       const { period, branchId, page = '1', limit: limitStr = '50' } = req.query as Record<string, string>;
+      const branchScope = await resolveRefundBranchScope(req.employee, tenantId);
+      if (branchScope === null) return res.status(403).json({ error: "لا يوجد فرع مخصص لهذا الحساب" });
 
       const query: any = { tenantId };
-      if (branchId) query.branchId = branchId;
+      if (branchScope) {
+        query.branchId = branchScope;
+      } else if (branchId) {
+        const branchExists = await BranchModel.exists({ tenantId, id: branchId });
+        if (!branchExists) return res.status(404).json({ error: "الفرع غير موجود" });
+        query.branchId = branchId;
+      }
       if (period) {
         const now = new Date();
         let startDate = new Date();
@@ -10487,14 +10545,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a new refund
-  app.post("/api/refunds", requireAuth, async (req: any, res) => {
+  app.post("/api/refunds", requireAuth, requireRefundAccess, async (req: AuthRequest, res) => {
     try {
       const { RefundOrderModel } = await import('@shared/schema');
       const { nanoid } = await import('nanoid');
-      const tenantId = getTenantIdFromRequest(req) || 'demo-tenant';
+      const tenantId = String(req.employee?.tenantId || "");
+      if (!tenantId) return res.status(403).json({ error: "لا توجد منشأة مرتبطة بهذا الحساب" });
 
       const {
-        originalOrderId, originalOrderNumber, branchId, employeeId, employeeName,
+        originalOrderId, originalOrderNumber,
         items, refundAmount, paymentMethod, cashAmount, cardAmount,
         reason, notes,
       } = req.body;
@@ -10523,18 +10582,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         orderLookup.push({ orderNumber: String(originalOrderNumber) });
       }
 
-      let originalOrder: any = null;
-      if (orderLookup.length) {
-        originalOrder = await OrderModel.findOne({ tenantId, $or: orderLookup }).lean().catch(() => null);
-        if (!originalOrder) {
-          return res.status(404).json({ error: "الطلب الأصلي غير موجود في هذا الفرع/المنشأة" });
-        }
+      if (!orderLookup.length) {
+        return res.status(400).json({ error: "رقم الطلب الأصلي مطلوب لتنفيذ الاسترجاع" });
       }
 
-      const isPaymobOrder = Boolean(originalOrder && (
-        String(originalOrder.paymentMethod || '').startsWith('paymob-') ||
+      const originalOrder = await OrderModel.findOne({ tenantId, $or: orderLookup }).lean().catch(() => null) as any;
+      if (!originalOrder) {
+        return res.status(404).json({ error: "الطلب الأصلي غير موجود في هذه المنشأة" });
+      }
+      const branchScope = await resolveRefundBranchScope(req.employee, tenantId);
+      if (branchScope === null) return res.status(403).json({ error: "لا يوجد فرع مخصص لهذا الحساب" });
+      if (branchScope && String(originalOrder.branchId || "") !== branchScope) {
+        return res.status(404).json({ error: "الطلب الأصلي غير موجود في فرعك" });
+      }
+
+      const itemSubtotal = items.reduce((sum: number, item: any) => sum + (Number(item.subtotal) || 0), 0);
+      if (Math.abs(itemSubtotal - amountToRefund) > 0.01) {
+        return res.status(400).json({ error: "مجموع أصناف الاسترجاع لا يطابق مبلغ الاسترجاع" });
+      }
+
+      const isPaymobOrder = Boolean(
+        String(originalOrder.paymentMethod || '').toLowerCase() === 'paymob' ||
+        String(originalOrder.paymentMethod || '').toLowerCase().startsWith('paymob-') ||
         originalOrder.paymobIntentionId
-      ));
+      );
       let refundStatus: 'pending' | 'completed' = 'completed';
       let refundDoc: any;
       let providerRefundId: string | undefined;
@@ -10566,11 +10637,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(409).json({ error: "يوجد استرداد Paymob قيد المعالجة لهذا الطلب؛ تحقق من حالته قبل إعادة المحاولة" });
         }
 
-        const transactionId = Number(originalOrder.paymentTransactionId);
-        if (!Number.isSafeInteger(transactionId) || transactionId <= 0) {
-          return res.status(409).json({ error: "معرّف معاملة Paymob غير متوفر لهذا الطلب؛ لم يتم تسجيل استرداد محلي" });
-        }
-
         const config = await BusinessConfigModel.findOne({ tenantId }).lean() as any;
         const paymob = config?.paymentGateway?.paymob;
         const secretKey = process.env.PAYMOB_SECRET_KEY || paymob?.secretKey;
@@ -10579,15 +10645,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(503).json({ error: "مفتاح Paymob السري غير مهيأ؛ لم يتم تسجيل الاسترداد" });
         }
 
+        let transactionId = Number(originalOrder.paymentTransactionId);
+        if (!Number.isSafeInteger(transactionId) || transactionId <= 0) {
+          const loggedPayment = await PaymentLogModel.findOne({
+            tenantId,
+            provider: 'paymob',
+            event: 'webhook',
+            status: 'success',
+            orderId: String(originalOrder.orderNumber),
+          }).sort({ createdAt: -1 }).lean() as any;
+          transactionId = Number(loggedPayment?.externalId || loggedPayment?.rawData?.transactionId);
+        }
+
+        if ((!Number.isSafeInteger(transactionId) || transactionId <= 0) && (originalOrder.paymobIntentionId || originalOrder.orderNumber)) {
+          try {
+            const intentionUrl = originalOrder.paymobIntentionId
+              ? `${baseUrl}/v1/intention/${encodeURIComponent(String(originalOrder.paymobIntentionId))}/`
+              : `${baseUrl}/v1/intention/?special_reference=${encodeURIComponent(String(originalOrder.orderNumber))}`;
+            const intentionResponse = await fetch(intentionUrl, {
+              headers: { Authorization: `Token ${secretKey}` },
+            });
+            if (intentionResponse.ok) {
+              const intentionResult = await intentionResponse.json() as any;
+              const intention = Array.isArray(intentionResult?.results)
+                ? intentionResult.results.find((entry: any) => String(entry?.special_reference || "") === String(originalOrder.orderNumber)) || intentionResult.results[0]
+                : intentionResult;
+              const transactions: any[] = intention?.transactions || intention?.intention_detail?.transactions || [];
+              const successfulTransaction = transactions.find((transaction: any) =>
+                transaction?.success === true && transaction?.pending === false && transaction?.id != null
+              );
+              transactionId = Number(successfulTransaction?.id);
+            }
+          } catch (lookupError: any) {
+            console.warn("[Refund] Paymob transaction lookup failed:", lookupError?.message);
+          }
+        }
+
+        if (!Number.isSafeInteger(transactionId) || transactionId <= 0) {
+          return res.status(409).json({
+            error: "لا يوجد رقم معاملة Paymob ناجح مرتبط بهذا الطلب؛ لم يُرسل أي طلب استرداد ولم يُخصم أي مبلغ",
+          });
+        }
+
+        await OrderModel.updateOne(
+          { _id: originalOrder._id, tenantId },
+          { $set: { paymentTransactionId: String(transactionId) } }
+        ).catch(() => {});
+
         providerTransactionId = String(transactionId);
         refundDoc = new RefundOrderModel({
           id: nanoid(),
           tenantId,
-          originalOrderId: String(originalOrderId || originalOrder.id || originalOrder._id),
-          originalOrderNumber: originalOrderNumber || originalOrder.orderNumber,
-          branchId: branchId || originalOrder.branchId || undefined,
-          employeeId: employeeId || undefined,
-          employeeName: employeeName || undefined,
+          originalOrderId: String(originalOrder.id || originalOrder._id),
+          originalOrderNumber: originalOrder.orderNumber,
+          branchId: originalOrder.branchId || undefined,
+          employeeId: req.employee?.id || undefined,
+          employeeName: req.employee?.fullName || undefined,
           items: items.map((item: any) => ({
             coffeeItemId: item.coffeeItemId || '',
             nameAr: item.nameAr || 'صنف',
@@ -10671,8 +10784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(providerResponse.status >= 500 ? 202 : 502).json({
             error: providerResponse.status >= 500
               ? "Paymob لم يؤكد نتيجة الاسترداد؛ بقي الطلب قيد المعالجة. تحقق من لوحة Paymob قبل إعادة المحاولة."
-              : "رفض Paymob طلب الاسترداد",
-            details: String(providerMessage).slice(0, 240),
+              : `رفض Paymob طلب الاسترداد: ${String(providerMessage).replaceAll(String(secretKey), "[مخفي]").slice(0, 200)}`,
             refundId: refundDoc.id,
             status: providerResponse.status >= 500 ? 'pending' : 'cancelled',
           });
@@ -10702,11 +10814,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         refundDoc = new RefundOrderModel({
           id: nanoid(),
           tenantId,
-          originalOrderId: originalOrderId || undefined,
-          originalOrderNumber: originalOrderNumber || undefined,
-          branchId: branchId || undefined,
-          employeeId: employeeId || undefined,
-          employeeName: employeeName || undefined,
+          originalOrderId: String(originalOrder.id || originalOrder._id),
+          originalOrderNumber: originalOrder.orderNumber,
+          branchId: originalOrder.branchId || undefined,
+          employeeId: req.employee?.id || undefined,
+          employeeName: req.employee?.fullName || undefined,
           items: items.map((item: any) => ({
             coffeeItemId: item.coffeeItemId || '',
             nameAr: item.nameAr || 'صنف',
@@ -10750,11 +10862,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // ── Update active cashier shift totalRefunds ──────────────────────────────
-      if (employeeId && refundDoc.status === 'completed') {
+      if (req.employee?.id && refundDoc.status === 'completed') {
         try {
           const { CashierShiftModel } = await import('@shared/schema');
           await CashierShiftModel.updateOne(
-            { employeeId, status: 'open' },
+            { employeeId: req.employee.id, status: 'open' },
             { $inc: { totalRefunds: amountToRefund }, $set: { updatedAt: new Date() } }
           );
         } catch (err) {
@@ -10770,11 +10882,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get single refund
-  app.get("/api/refunds/:id", requireAuth, async (req: any, res) => {
+  app.get("/api/refunds/:id", requireAuth, requireRefundAccess, async (req: AuthRequest, res) => {
     try {
       const { RefundOrderModel } = await import('@shared/schema');
       const { id } = req.params;
-      const refund = await RefundOrderModel.findOne({ id });
+      const tenantId = String(req.employee?.tenantId || "");
+      if (!tenantId) return res.status(403).json({ error: "لا توجد منشأة مرتبطة بهذا الحساب" });
+      const branchScope = await resolveRefundBranchScope(req.employee, tenantId);
+      if (branchScope === null) return res.status(403).json({ error: "لا يوجد فرع مخصص لهذا الحساب" });
+      const refund = await RefundOrderModel.findOne({
+        id,
+        tenantId,
+        ...(branchScope ? { branchId: branchScope } : {}),
+      });
       if (!refund) return res.status(404).json({ error: "الاسترجاع غير موجود" });
       res.json(serializeDoc(refund));
     } catch (error) {

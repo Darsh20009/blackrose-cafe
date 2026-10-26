@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import SarIcon from "@/components/sar-icon";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { printRefundThermal } from "@/lib/print-utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -40,6 +40,10 @@ interface RefundDialogProps {
 
 type RefundPayMethod = "cash" | "card" | "split";
 
+function isPaymobPayment(order: any): boolean {
+  const method = String(order?.paymentMethod || "").toLowerCase();
+  return method === "paymob" || method.startsWith("paymob-") || Boolean(order?.paymobIntentionId);
+}
 
 export default function RefundDialog({ open, onOpenChange, branchId, employeeId, employeeName, tenantId }: RefundDialogProps) {
   const { toast } = useToast();
@@ -86,30 +90,13 @@ export default function RefundDialog({ open, onOpenChange, branchId, employeeId,
     setSearchError("");
     setFoundOrder(null);
     try {
-      let order: any = null;
-      const isPhone = /^\d{9,11}$/.test(q.replace(/\D/g, ""));
-      if (isPhone) {
-        const res = await fetch(`/api/orders/customer/${q}?limit=5`, { credentials: "include" });
-        if (res.ok) {
-          const data = await res.json();
-          const orders = Array.isArray(data) ? data : (data.orders || []);
-          order = orders[0] || null;
-        }
-      } else {
-        const num = q.replace(/^#/, "");
-        const res = await fetch(`/api/orders/number/${num}`, { credentials: "include" });
-        if (res.ok) {
-          order = await res.json();
-        }
-      }
-      if (!order) {
-        setSearchError(tc("لم يتم العثور على الطلب — تحقق من الرقم أو الجوال", "Order not found — check the number or phone"));
-      } else {
+      const res = await apiRequest("GET", `/api/refunds/search-order?q=${encodeURIComponent(q)}`);
+      const order = await res.json();
+      if (order) {
         const items = typeof order.items === "string" ? JSON.parse(order.items) : (order.items || []);
         order.items = items;
         setFoundOrder(order);
-        const isPaymobOrder = String(order.paymentMethod || "").startsWith("paymob-") || Boolean(order.paymobIntentionId);
-        setPayMethod(isPaymobOrder ? "card" : "cash");
+        setPayMethod(isPaymobPayment(order) ? "card" : "cash");
         setCashAmount("");
         setCardAmount("");
         const initSel: Record<string, boolean> = {};
@@ -123,7 +110,7 @@ export default function RefundDialog({ open, onOpenChange, branchId, employeeId,
         setRefundQtys(initQty);
       }
     } catch {
-      setSearchError(tc("حدث خطأ أثناء البحث", "An error occurred while searching"));
+      setSearchError(tc("تعذر العثور على الطلب أو لا تملك صلاحية الوصول إليه", "Order not found or you don't have permission to access it"));
     } finally {
       setIsSearching(false);
     }
@@ -171,6 +158,8 @@ export default function RefundDialog({ open, onOpenChange, branchId, employeeId,
     },
     onSuccess: (data) => {
       const pending = data.status === "pending";
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/kitchen"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/refunds"] });
       toast({
         title: pending
           ? tc("طلب الاسترداد قيد المعالجة", "Refund request is processing")
@@ -243,9 +232,7 @@ export default function RefundDialog({ open, onOpenChange, branchId, employeeId,
 
   const refundTotal = calcRefundTotal();
   const orderItems = getOrderItems();
-  const isPaymobOrder = Boolean(foundOrder && (
-    String(foundOrder.paymentMethod || "").startsWith("paymob-") || foundOrder.paymobIntentionId
-  ));
+  const isPaymobOrder = isPaymobPayment(foundOrder);
   const payMethodLabel: Record<RefundPayMethod, string> = {
     cash: tc("نقدي", "Cash"),
     card: tc("شبكة / بطاقة", "Card"),

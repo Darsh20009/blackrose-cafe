@@ -41,6 +41,7 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { cn } from "@/lib/utils";
 import { QuickSidebar } from "@/components/quick-sidebar";
 import { ReceiptInvoice } from "@/components/receipt-invoice";
+import RefundDialog from "@/components/refund-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface OrderItem {
@@ -161,6 +162,7 @@ export default function KitchenDisplay() {
   const [autoRefresh, setAutoRefresh]       = useState(true);
   const [soundEnabled, setSoundEnabled]     = useState(() => getSoundEnabled("kitchen"));
   const [selectedBranchId, setSelectedBranchId] = useState("all");
+  const [showRefundDialog, setShowRefundDialog] = useState(false);
   const [employeeContext] = useState<any>(() => {
     const stored = localStorage.getItem('currentEmployee') || localStorage.getItem('employee');
     if (!stored) return null;
@@ -534,6 +536,16 @@ export default function KitchenDisplay() {
 
             {/* Right: controls */}
             <div className="flex items-center gap-1.5 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => setShowRefundDialog(true)}
+                data-testid="button-kitchen-refund"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                {tc('استرجاع', 'Refund')}
+              </Button>
               {canSelectAllBranches && (
                 <select
                   aria-label={tc('تصفية حسب الفرع', 'Filter by branch')}
@@ -820,6 +832,15 @@ export default function KitchenDisplay() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <RefundDialog
+        open={showRefundDialog}
+        onOpenChange={setShowRefundDialog}
+        branchId={employeeContext?.branchId ? String(employeeContext.branchId) : undefined}
+        employeeId={employeeContext?.id ? String(employeeContext.id) : undefined}
+        employeeName={employeeContext?.fullName || employeeContext?.name}
+        tenantId={employeeContext?.tenantId ? String(employeeContext.tenantId) : undefined}
+      />
 
       <MobileBottomNav />
     </div>

@@ -262,7 +262,7 @@ export default function PaymobCheckout({
                     ...orderData,
                     paymentStatus: 'paid',
                     status: 'payment_confirmed',
-                    paymentTransactionId: verifyData.transactionId || orderNumber,
+                    ...(verifyData.transactionId ? { paymentTransactionId: String(verifyData.transactionId) } : {}),
                     paymentReference: `PAYMOB-${verifyData.transactionId || orderNumber}`,
                   }),
                   credentials: 'include',
