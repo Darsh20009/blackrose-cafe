@@ -5636,10 +5636,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (pg.provider === 'paymob') {
+        const secretKey = process.env.PAYMOB_SECRET_KEY || pg.paymob?.secretKey;
+        const publicKey = process.env.PAYMOB_PUBLIC_KEY || pg.paymob?.publicKey;
+        const baseUrl = String(pg.paymob?.baseUrl || 'https://ksa.paymob.com').replace(/\/+$/, '');
+
+        if (secretKey && publicKey) {
+          const integrationIds = Array.isArray(pg.paymob?.integrationIds)
+            ? pg.paymob.integrationIds.map(Number).filter((id: number) => Number.isSafeInteger(id) && id > 0)
+            : [];
+          if (integrationIds.length === 0) {
+            return res.json({ success: false, message: "مفتاحا Paymob موجودان لكن معرّف تكامل البطاقة غير مهيأ" });
+          }
+
+          try {
+            const probeReference = `replit-paymob-check-${crypto.randomUUID()}`;
+            const testResponse = await fetch(
+              `${baseUrl}/v1/intention/?special_reference=${encodeURIComponent(probeReference)}`,
+              {
+                method: 'GET',
+                headers: {
+                  'Authorization': `Token ${secretKey}`,
+                  'Accept': 'application/json',
+                },
+              },
+            );
+
+            if (testResponse.ok) {
+              return res.json({
+                success: true,
+                message: "اتصال Paymob السعودية ومصادقة المفتاح ناجحان. لم يتم إنشاء دفعة.",
+                provider: 'paymob',
+                flow: 'sa-unified',
+              });
+            }
+
+            const errorData = await testResponse.json().catch(() => ({})) as any;
+            const detail = String(errorData?.detail || errorData?.message || `HTTP ${testResponse.status}`).slice(0, 200);
+            return res.json({
+              success: false,
+              message: testResponse.status === 401 || testResponse.status === 403
+                ? "Paymob السعودية رفض بيانات المصادقة؛ راجع Secret Key لحساب الإنتاج."
+                : "تعذر التحقق من اتصال Paymob السعودية.",
+              details: detail,
+              provider: 'paymob',
+              httpStatus: testResponse.status,
+            });
+          } catch (err: any) {
+            return res.json({ success: false, message: `خطأ في الاتصال بـ Paymob السعودية: ${err.message}` });
+          }
+        }
+
         const apiKey = pg.paymob?.apiKey;
         if (!apiKey) {
-          return res.json({ success: false, message: "مفتاح API لـ Paymob غير مكوّن" });
+          return res.json({ success: false, message: "مفاتيح Paymob السعودية غير مكتملة: Secret Key وPublic Key مطلوبان" });
         }
+
         try {
           const authRes = await fetch('https://accept.paymob.com/api/auth/tokens', {
             method: 'POST',
