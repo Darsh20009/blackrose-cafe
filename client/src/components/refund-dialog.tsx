@@ -163,8 +163,12 @@ export default function RefundDialog({ open, onOpenChange, branchId, employeeId,
       toast({
         title: pending
           ? tc("طلب الاسترداد قيد المعالجة", "Refund request is processing")
-          : tc("✅ تم الاسترجاع بنجاح", "✅ Refund successful"),
-        description: `${tc("إجمالي المسترجع:", "Total refunded:")} ${data.refundAmount?.toFixed(2)} ${tc("ريال", "SAR")}`,
+          : data.provider === "paymob"
+            ? tc("أُرسل الاسترداد إلى Paymob", "Refund sent to Paymob")
+            : tc("✅ تم الاسترجاع بنجاح", "✅ Refund successful"),
+        description: data.provider === "paymob"
+          ? `${tc("المبلغ:", "Amount:")} ${data.refundAmount?.toFixed(2)} ${tc("ريال. قد يستغرق ظهوره في البطاقة عدة أيام حسب البنك.", "SAR. It may take several days to appear, depending on the card issuer.")}`
+          : `${tc("إجمالي المسترجع:", "Total refunded:")} ${data.refundAmount?.toFixed(2)} ${tc("ريال", "SAR")}`,
       });
       if (!pending) {
         setTimeout(() => {

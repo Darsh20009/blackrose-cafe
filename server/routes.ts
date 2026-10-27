@@ -10473,23 +10473,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const digits = q.replace(/\D/g, "");
       const isPhone = /^\d{7,12}$/.test(digits);
 
-      if (isPhone) {
+      // Prefer an exact order-number match. Long numeric order numbers can also
+      // look like phone numbers, so treating them as phones first hides orders.
+      const num = q.replace(/^#/, "");
+      const numAsNumber = /^\d+$/.test(num) ? Number.parseInt(num, 10) : NaN;
+      order = await OrderModel.findOne({
+        ...scope,
+        $or: [
+          { orderNumber: num },
+          ...(Number.isSafeInteger(numAsNumber) ? [{ orderNumber: numAsNumber }, { dailyNumber: numAsNumber }] : []),
+        ],
+      }).sort({ createdAt: -1 });
+
+      if (!order && isPhone) {
         const phone = digits;
         const normalizedPhone = phone.startsWith('0') ? phone.slice(1) : phone;
         order = await OrderModel.findOne({
           ...scope,
           $or: [{ 'customerInfo.phone': phone }, { 'customerInfo.phone': normalizedPhone }, { customerPhone: phone }, { customerPhone: normalizedPhone }],
         }).sort({ createdAt: -1 });
-      } else {
-        const num = q.replace(/^#/, "");
-        const numAsNumber = /^\d+$/.test(num) ? Number.parseInt(num, 10) : NaN;
-        order = await OrderModel.findOne({
-          ...scope,
-          $or: [
-            { orderNumber: num },
-            ...(isNaN(numAsNumber) ? [] : [{ orderNumber: numAsNumber }, { dailyNumber: numAsNumber }]),
-          ],
-        });
       }
 
       if (!order) return res.status(404).json({ error: "لم يتم العثور على الطلب" });
